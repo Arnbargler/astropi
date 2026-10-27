@@ -153,8 +153,9 @@ incorrectly assumed `Z` was at one fixed position, displaying the
 mode as unknown. Code now recognizes known optional flags by presence
 before the `M` suffix; this parser correction awaits Pi redeployment.
 
-Next safe on-Pi check: click **Disconnect**, confirm coordinates clear
-and the serial port closes, then **Connect Mount** again. The mount
-must remain stationary throughout; do not send movement/Home commands.
-Neither disconnect/reconnect nor simulated cable loss has yet been
-observed working on the actual mount through this browser.
+**Pi hardware test passed:** screenshots show Connect (AM3N 1.8.8, live
+Alt/Az and reported RA/Dec, `nNZM...` decoded Alt/Az), Disconnect
+(position and timestamp cleared), and Connect again (position restored).
+The mount remained in the stationary zero-altitude/azimuth reported state.
+This proves intentional browser connection lifecycle; it does NOT verify
+forced USB-loss safety or any motion controls. Those remain separate gates.
