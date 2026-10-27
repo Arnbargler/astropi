@@ -216,7 +216,7 @@ class MountWorker:
         self._stop_reason = reason
         self._state.update(
             motion_armed=False, motion_phase="stopping",
-            last_stop_reason=reason, stop_stable=False
+            last_stop_reason=reason, stop_stable=False, motion_warning=None
         )
 
     def emergency_stop(self, reason="Emergency Stop requested"):
@@ -234,7 +234,11 @@ class MountWorker:
         port.flush()
 
     def _service_motion(self, port):
-        """Serial-owner only; no Flask thread may call serial.write()."""
+        """Serial-owner only. Hold the state lock across a jog command.
+
+        This prevents an HTTP Stop from racing between selecting a direction
+        and actually sending :M?#. Stop cannot be overtaken by a stale start.
+        """
         now = self._clock()
         with self._lock:
             if self._state["motion_phase"] in ("starting", "moving"):
@@ -242,34 +246,27 @@ class MountWorker:
                     self._queue_stop_locked("Maximum jog duration reached")
                 elif now >= self._motion_deadline:
                     self._queue_stop_locked("Deadman heartbeat expired")
-            stop = self._stop_pending
-            if stop:
+            if self._stop_pending:
                 self._stop_pending = False
                 self._pending_direction = None
                 self._direction = None
                 self._armed = False
                 self._state.update(motion_armed=False, motion_direction=None)
-            direction = None
-            if not stop and self._pending_direction is not None:
-                direction = self._pending_direction
-                self._pending_direction = None
-                self._direction = direction
-                self._ever_moved = True  # arm the finally-block safety Stop
-        if stop:
-            self._write_motion(port, STOP_COMMAND)
-            with self._lock:
+                # If this write fails, the finally-block retries a Stop.
+                self._write_motion(port, STOP_COMMAND)
                 self._stop_sent_at = self._clock()
                 self._last_axes = None
                 self._stable_count = 0
                 self._stop_attempts += 1
                 self._state["last_stop_sent_utc"] = datetime.now(timezone.utc).isoformat()
                 self._state["motion_phase"] = "stopping"
-        elif direction:
-            # A new jog is accepted only while still within its deadline.
-            # _service_motion checked the watchdog under the same lock.
-            self._write_motion(port, JOG_RATE)
-            self._write_motion(port, JOG_COMMANDS[direction])
-            with self._lock:
+            elif self._pending_direction is not None:
+                direction = self._pending_direction
+                self._pending_direction = None
+                self._direction = direction
+                self._ever_moved = True  # ensure a finally-block Stop attempt
+                self._write_motion(port, JOG_RATE)
+                self._write_motion(port, JOG_COMMANDS[direction])
                 self._state["motion_phase"] = "moving"
 
     def _check_stopped(self, altitude, azimuth):
