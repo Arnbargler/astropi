@@ -57,6 +57,12 @@ def create_app(settings: Settings | None = None, camera=None, lease=None, mount=
     def release():
         if not control.release(request.headers.get("X-AstroPi-Control", "")):
             return jsonify(error="Not the current operator"), 403
+        # A release can never leave an active manual movement authorized.
+        try:
+            if mount_worker.status().get("motion_phase") in ("starting", "moving"):
+                mount_worker.emergency_stop("Operator released control")
+        except RuntimeError:
+            pass
         return jsonify(ok=True)
 
     @app.post("/api/mount/connect")
@@ -72,6 +78,47 @@ def create_app(settings: Settings | None = None, camera=None, lease=None, mount=
         if not mount_worker.disconnect():
             return jsonify(error="Mount connection worker is not active"), 409
         return jsonify(ok=True), 202
+
+    @app.post("/api/mount/arm")
+    def mount_arm():
+        require_operator()
+        try:
+            mount_worker.arm()
+        except RuntimeError as exc:
+            return jsonify(error=str(exc)), 409
+        return jsonify(ok=True), 200
+
+    @app.post("/api/mount/jog")
+    def mount_jog():
+        require_operator()
+        payload = request.get_json(silent=True) or {}
+        try:
+            direction = mount_worker.jog(payload.get("direction"))
+        except ValueError as exc:
+            return jsonify(error=str(exc)), 400
+        except RuntimeError as exc:
+            return jsonify(error=str(exc)), 409
+        return jsonify(ok=True, direction=direction), 202
+
+    @app.post("/api/mount/jog-heartbeat")
+    def mount_jog_heartbeat():
+        require_operator()
+        payload = request.get_json(silent=True) or {}
+        try:
+            mount_worker.heartbeat(payload.get("direction"))
+        except RuntimeError as exc:
+            return jsonify(error=str(exc)), 409
+        return jsonify(ok=True)
+
+    @app.post("/api/mount/stop")
+    def mount_emergency_stop():
+        # Safety action intentionally does NOT require operator ownership.
+        # A viewer may request Stop, but can never start a manual slew.
+        try:
+            mount_worker.emergency_stop()
+        except RuntimeError as exc:
+            return jsonify(error=str(exc)), 409
+        return jsonify(ok=True, state="stop_requested"), 202
 
     @app.get("/api/mount/status")
     def mount_status():
