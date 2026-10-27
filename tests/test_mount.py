@@ -85,7 +85,7 @@ def test_parser_and_verified_status_only():
         "tracking": False, "slewing": False, "at_home": True,
         "altaz_mode": True,
     }
-    assert known_flags("?XYZ") == {
+    assert known_flags("?XY?") == {
         "tracking": None, "slewing": None, "at_home": None,
         "altaz_mode": None,
     }
