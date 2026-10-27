@@ -410,6 +410,14 @@ The user wrote a persistent **16 MiB random file** to the mounted `/media/astrop
 - **Conclusion:** Basic USB acquisition storage setup, automatic mount, 512 MiB benchmark/checksum and reboot persistence **PASS**. The benchmark's 146.5 MiB/s read result might include page caching. Further tests still required for **long-duration mixed camera/USB load, actual end-to-end SDK camera captures to this drive, and offline network/time recovery**.
 - The 16 MiB `.reboot-test.bin` file was not reported removed; can be deleted after the confirmation if desired, after verifying the correct mounted filesystem.
 
+### SV705C post-reboot ten-frame capture attempt — camera open failed (2026-10-27)
+
+After USB drive persisted across reboot, the user verified `SVBGetNumOfConnectedCameras()` returned **1**. They then ran an attempted 10-frame 200 ms RAW16 acquisition to `/media/astropi-data`: the script checked the **correct mounted filesystem UUID**, confirmed available capacity, created empty output directory `camera-test-20261027-110113`, and printed expected frame size **16,812,160 bytes**. Before configuring exposure or starting any capture, it failed at `SVBOpenCamera(1)` with **SDK error code 2**. **No camera frames were acquired or saved.**
+
+**Likely implementation error to test, not yet confirmed:** This Python code hard-coded `CAM = 1` without calling `SVBGetCameraInfo(..., index=0)` to read the **current** `CameraID`; the previous successful SDK probe enumerated camera info prior to opening the device. SVBONY SDK docs specify that `CameraID` from `SVB_CAMERA_INFO` is the handle for `SVBOpenCamera`. Use the real current `CameraID` instead of assuming it is always 1, and validate enumerate → info → open → close with a short probe before repeating long capture script. Source: `https://docs.rs/svbony-sys/latest/svbony_sys/struct.SVB_CAMERA_INFO.html`. The visible garbled paste after the function definition did not prevent Python from reaching the Open Camera operation.
+
+**Status:** Previously achieved single-frame RAW16 still stands; 10-frame end-to-end storage capture **NOT YET VERIFIED**. Do not attribute error to the flash drive or power without evidence.
+
 ## Pre-development integrated hardware acceptance checklist (planned 2026-10-27)
 
 The core camera and mount interfaces have passed their **individual** smoke tests. Before substantial application coding, test the complete field configuration in the following order. Statuses below distinguish **known**, **planned**, and **not yet verified**.
