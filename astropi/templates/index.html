@@ -149,7 +149,7 @@
     </section>
     <section class="cards" aria-label="System status">
       <article class="card mount-card">
-        <h3>ZWO AM3N · Read-only</h3>
+        <h3>ZWO AM3N · Manual safety test</h3>
         <div class="metric" id="mount-usb">Checking…</div>
         <p id="mount-serial">Checking serial alias…</p>
         <div class="button-row">
@@ -164,11 +164,26 @@
           <div><span>RA (reported)</span><strong id="mount-ra">—</strong></div>
           <div><span>Dec (reported)</span><strong id="mount-dec">—</strong></div>
         </div>
+        <div class="mount-jog-panel">
+          <button id="mount-stop" class="mount-stop" disabled>STOP MOUNT</button>
+          <p class="mount-caution">Emergency Stop is available to every viewer. It requests a motor stop; it is not proof of a completed halt. Keep the physical Cancel/power cutoff accessible.</p>
+          <button id="mount-arm" disabled>Enable one low-speed jog</button>
+          <div class="mount-directions" role="group" aria-label="Press and hold to jog mount">
+            <button type="button" id="mount-north" disabled aria-label="Hold to move altitude north">N ↑</button>
+            <button type="button" id="mount-west" disabled aria-label="Hold to move azimuth west">W ←</button>
+            <span class="mount-center">Hold to move</span>
+            <button type="button" id="mount-east" disabled aria-label="Hold to move azimuth east">E →</button>
+            <button type="button" id="mount-south" disabled aria-label="Hold to move altitude south">S ↓</button>
+          </div>
+          <p id="mount-motion" role="status" aria-live="polite">Movement disabled</p>
+          <p id="mount-motion-warning" role="alert" class="mount-error"></p>
+          <p class="mount-small">Low speed only (AM3N rate R5, roughly 8× sidereal). Hold one direction; release, leave the button, switch tabs or lose contact to request Stop. Each jog requires re-enabling movement.</p>
+        </div>
         <p id="mount-flags">Status flags: —</p>
         <p id="mount-raw-status" class="mount-small">Raw :GU#: —</p>
         <p id="mount-update" class="mount-small">Last telemetry: —</p>
         <p id="mount-error" role="alert" class="mount-error"></p>
-        <p class="mount-caution">Coordinates are reported by the mount, not proof of alignment. No Home, GoTo, tracking or movement commands are sent.</p>
+        <p class="mount-caution">Coordinates are reported by the mount, not proof of alignment. No Home, GoTo, Park, sky tracking or time/site setters. Manual movement must be explicitly armed and is bounded by a server-side deadman; physical safety remains essential.</p>
       </article>
       <article class="card"><h3>Recording drive</h3><div class="metric" id="storage-state">Checking…</div>
         <p id="storage-free">Checking free space…</p><p>All captures require the correct mounted USB UUID. Never writes to microSD.</p></article>

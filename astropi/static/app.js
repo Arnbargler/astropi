@@ -20,6 +20,11 @@ let captureRequestPending = false;
 let sequenceActive = false;
 let mountPhase = "disconnected";
 let mountRequestPending = false;
+let mountMotionPhase = "idle";
+let mountArmed = false;
+let heldMountDirection = null;
+let mountStopPending = false;
+let mountHeartbeatBusy = false;
 const saveFormats = ["fits", "raw", "jpg", "png"];
 const $ = id => document.getElementById(id);
 const write = (id, value) => { $(id).textContent = value; };
@@ -55,6 +60,13 @@ function updateButtons() {
     !["disconnected", "error"].includes(mountPhase);
   $("mount-disconnect").disabled = !owner || mountRequestPending ||
     !["connecting", "connected"].includes(mountPhase);
+  $("mount-stop").disabled = mountPhase !== "connected" || mountStopPending;
+  $("mount-arm").disabled = !owner || mountPhase !== "connected" ||
+    mountMotionPhase !== "idle" || mountArmed || mountRequestPending;
+  for (const direction of ["north", "south", "east", "west"]) {
+    $("mount-" + direction).disabled = !owner || mountPhase !== "connected" ||
+      !mountArmed || mountMotionPhase !== "idle" || mountRequestPending;
+  }
   const saveReady = owner && currentPhase === "running" &&
     storageReady && !captureBusy && !captureRequestPending &&
     saveFormats.some(fmt => $("capture-" + fmt).checked);
@@ -176,6 +188,92 @@ $("release-control").addEventListener("click", async () => {
   } catch (error) { write("camera-error", error.message); }
   updateButtons();
 });
+// Pointer holds have no click-to-latch behaviour. The *Pi* enforces the 600ms
+// deadline; browser events are an additional first line of defence.
+async function stopMount() {
+  heldMountDirection = null;
+  if (mountStopPending || mountPhase !== "connected") return;
+  mountStopPending = true;
+  mountArmed = false;
+  updateButtons();
+  try {
+    await post("/api/mount/stop");
+    write("mount-motion", "Stop requested · checking axes for stability…");
+    write("mount-error", "");
+  } catch(error) {
+    write("mount-error", "Stop request failed: " + error.message +
+      " · USE PHYSICAL CANCEL/POWER!");
+  } finally {
+    mountStopPending = false;
+    updateButtons();
+  }
+}
+$("mount-stop").addEventListener("click", stopMount);
+$("mount-arm").addEventListener("click", async () => {
+  if (!token || mountPhase !== "connected") return;
+  try {
+    await post("/api/mount/arm");
+    mountArmed = true;
+    write("mount-motion", "One jog enabled · press and hold a direction");
+    write("mount-error", "");
+    updateButtons();
+  } catch(error) {
+    write("mount-error", error.message);
+    await refreshMount();
+  }
+});
+async function beginMountHold(direction) {
+  if (heldMountDirection || !mountArmed || !token) return;
+  heldMountDirection = direction;
+  updateButtons();
+  try {
+    await post("/api/mount/jog", {direction});
+    if (heldMountDirection !== direction) return; // Release already requested
+    write("mount-motion", "Jog " + direction + " requested · hold button");
+    write("mount-error", "");
+  } catch(error) {
+    heldMountDirection = null;
+    write("mount-error", error.message);
+    await stopMount();
+  }
+}
+for (const direction of ["north", "south", "east", "west"]) {
+  const button = $("mount-" + direction);
+  button.addEventListener("pointerdown", () => beginMountHold(direction));
+  for (const kind of ["pointerup", "pointercancel", "pointerleave"]) {
+    button.addEventListener(kind, () => {
+      if (heldMountDirection === direction) stopMount();
+    });
+  }
+}
+document.addEventListener("pointerup", () => {
+  if (heldMountDirection) stopMount();
+});
+document.addEventListener("pointercancel", () => {
+  if (heldMountDirection) stopMount();
+});
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden && heldMountDirection) stopMount();
+});
+window.addEventListener("blur", () => {
+  if (heldMountDirection) stopMount();
+});
+window.addEventListener("pagehide", () => {
+  if (heldMountDirection) stopMount();
+});
+async function mountHoldHeartbeat() {
+  const direction = heldMountDirection;
+  if (!direction || mountHeartbeatBusy) return;
+  mountHeartbeatBusy = true;
+  try {
+    await post("/api/mount/jog-heartbeat", {direction});
+  } catch(error) {
+    write("mount-error", "Jog heartbeat failed: " + error.message);
+    await stopMount();
+  } finally {
+    mountHeartbeatBusy = false;
+  }
+}
 $("mount-connect").addEventListener("click", () => mountAction("/api/mount/connect"));
 $("mount-disconnect").addEventListener("click", () => mountAction("/api/mount/disconnect"));
 async function mountAction(url) {
@@ -199,7 +297,21 @@ function describeFlag(v, whenTrue, whenFalse) {
 function showMount(data) {
   if (!data) return;
   mountPhase = data.phase || "disconnected";
+  mountMotionPhase = data.motion_phase || "idle";
+  mountArmed = Boolean(data.motion_armed);
+  if (mountPhase !== "connected") heldMountDirection = null;
   write("mount-phase", "Connection: " + mountPhase);
+  const motionDescription = {
+    idle: data.stop_stable ? "Reported axes stable after Stop · movement disabled" :
+      (mountArmed ? "One jog enabled · hold a direction" : "Movement disabled"),
+    starting: "Starting manual jog · hold button",
+    moving: "Jog in progress · release for Stop",
+    stopping: "Stop requested · checking position stability…",
+    uncertain: "STOP NOT CONFIRMED — use physical Cancel/power!",
+    disconnecting: "Disconnecting (Stop attempted if necessary)"
+  };
+  write("mount-motion", motionDescription[mountMotionPhase] || mountMotionPhase);
+  write("mount-motion-warning", data.motion_warning || "");
   write("mount-model", data.model ?
     "Model: " + data.model + " · firmware " + (data.firmware || "—") :
     "Model / firmware: —");
@@ -219,6 +331,8 @@ function showMount(data) {
   write("mount-update", "Last telemetry: " +
     (active && data.updated_utc ? new Date(data.updated_utc).toLocaleTimeString() : "—"));
   write("mount-error", data.last_error || "");
+  if (mountMotionPhase === "uncertain")
+    write("mount-error", "Mount not confirmed stopped. USE PHYSICAL CANCEL/POWER.");
   updateButtons();
 }
 async function refreshMount() {
@@ -445,6 +559,7 @@ async function heartbeat() {
 }
 refresh();
 setInterval(refresh, 3000);
-setInterval(refreshMount, 2500);
+setInterval(refreshMount, 1000);
+setInterval(mountHoldHeartbeat, 150);
 setInterval(pollPreview, 50);
 setInterval(heartbeat, 5000);

@@ -100,3 +100,21 @@ button:hover:not(:disabled){background:#2a5669}button:disabled{opacity:.38;curso
 .mount-card .mount-small{font-size:11px;color:#9bb0bc}
 .mount-card .mount-error{font-size:12px;color:#efaaa3;overflow-wrap:anywhere}
 .mount-card .mount-caution{font-size:11px;color:#a8b9c4;border-top:1px solid #344658;padding-top:10px;margin-top:4px}
+
+
+/* AM3N short-duration, low-speed directional holds */
+.mount-jog-panel{display:flex;flex-direction:column;gap:9px;margin:12px 0 8px;
+  padding:12px;border-radius:8px;border:1px solid #486373;background:#0b1620}
+.mount-stop{min-height:49px;background:#782f34!important;color:#fff!important;
+  border:2px solid #df8380!important;font-size:17px!important;letter-spacing:.045em;font-weight:800}
+.mount-stop:not(:disabled):hover{background:#a43e43!important}
+.mount-directions{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;align-items:center}
+.mount-directions button{min-height:50px;touch-action:none;user-select:none;-webkit-user-select:none;font-size:14px;font-weight:700}
+#mount-north{grid-column:2;grid-row:1}
+#mount-west{grid-column:1;grid-row:2}
+.mount-center{grid-column:2;grid-row:2;font-size:10px;text-align:center;color:#96adb8}
+#mount-east{grid-column:3;grid-row:2}
+#mount-south{grid-column:2;grid-row:3}
+#mount-motion{font-weight:600;color:#b1d7cf;font-size:13px}
+#mount-arm{min-height:37px}
+.mount-jog-panel .mount-caution{border-top:0;margin:0;padding:0}
