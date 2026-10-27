@@ -1,8 +1,8 @@
 # AstroPi — project handoff
 
-**Status (2026-10-27): Hardware integration proven; read-only browser status service committed, camera and mount drivers not yet integrated.** AstroPi is a Raspberry Pi 4-hosted, browser-operated deep-sky camera and telescope controller for one SVBONY SV705C and one ZWO AM3N mount, operating in **Alt/Az only**.
+**Status (2026-10-27): Hardware integration proven; v0.1 browser status verified on Pi. Experimental v0.2 SDK colour-preview code committed but not yet Pi-tested; mount control remains unimplemented.** AstroPi is a Raspberry Pi 4-hosted, browser-operated deep-sky camera and telescope controller for one SVBONY SV705C and one ZWO AM3N mount, operating in **Alt/Az only**.
 
-This private GitHub repository is the durable handoff for a **new AI assistant or development session**. Do not infer that a tested terminal script is a committed application: **the source in this repo is only a read-only status service, not a working camera/mount application**.
+This private GitHub repository is the durable handoff for a **new AI assistant or development session**. Do not infer that a tested terminal script is a committed application: **the status service is Pi-tested; the newer camera preview driver is experimental until the next on-Pi test, and mount control is not implemented**.
 
 ## Read in this order
 
@@ -24,7 +24,7 @@ The extensive **original chronological hardware probe log** is preserved in [Git
 
 ## The next development step
 
-Validate the **read-only status service** using [SETUP.md](SETUP.md), then implement SDK camera ownership, preview and capture/storage validation; next mount control, safe movement and offline atlas integration. Review the full scope in [REQUIREMENTS.md](REQUIREMENTS.md) before selecting frameworks.
+Validate the **experimental SV705C colour preview** using [SETUP.md](SETUP.md), then implement optional full-quality RAW/FITS capture and safe USB storage; after that mount control, safe movement and offline atlas integration. Review the full scope in [REQUIREMENTS.md](REQUIREMENTS.md) before selecting frameworks.
 
 **Don't repeat completed hardware probes by default.** Don't claim more than was tested. In particular, Home ≠ alignment, RAW16 ≠ FITS, successful SDK exposure *readback* ≠ precise exposure calibration, and the offline/no-RTC time problem is still open.
 

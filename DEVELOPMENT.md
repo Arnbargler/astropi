@@ -1,10 +1,10 @@
 # AstroPi development guide (read-only browser skeleton present)
 
-**Status: first read-only browser service added 2026-10-27, not yet hardware-tested on the Pi.** Read [REQUIREMENTS.md](REQUIREMENTS.md) for authoritative scope and [HARDWARE.md](HARDWARE.md) for **actually verified** devices and quirks. This file is a recommended route to implementation, **not a claim that the proposed hardware-control modules or system services already exist**. Keep implementation modular and modest; avoid one enormous `app.py`.
+**Status: read-only service verified on Pi (2026-10-27); experimental single-owner camera SDK preview, colour JPEG and lease control are implemented but untested on the Pi.** Read [REQUIREMENTS.md](REQUIREMENTS.md) for authoritative scope and [HARDWARE.md](HARDWARE.md) for **actually verified** devices and quirks. This file is a recommended route to implementation, **not a claim that the proposed hardware-control modules or system services already exist**. Keep implementation modular and modest; avoid one enormous `app.py`.
 
 ## First working milestone
 
-Build a small **Pi-hosted Python backend** with a browser UI that can connect to the one SV705C, produce live colour previews, set exposure/gain, save individual full-resolution RAW/FITS captures to the UUID-verified USB data drive, and show clear errors. It must not require the N100 desktop to operate. The status UI uses **Flask**; camera, capture, mount and systemd integration remain unimplemented.
+Build a small **Pi-hosted Python backend** with a browser UI that can connect to the one SV705C, produce live colour previews, set exposure/gain, save individual full-resolution RAW/FITS captures to the UUID-verified USB data drive, and show clear errors. It must not require the N100 desktop to operate. The UI uses **Flask**; experimental camera preview is committed, but hardware camera integration still needs Pi testing. Full-quality capture, mount control and systemd integration remain unimplemented.
 
 Do not build a general camera-agnostic driver system or implement unselected features. Run on trusted local Wi-Fi/LAN; Internet access must not be necessary for operation except optional NTP syncing.
 
@@ -52,7 +52,7 @@ The split is conceptual; exact filenames and language for frontend are not yet d
 
 ## Implementation order and verification gates
 
-1. **Project skeleton:** tracked Flask status page, local setup instructions, UUID checks, initial tests and read-only error handling now committed. **Verify on Pi**; add logging and systemd later. No Home/GoTo on startup.
+1. **Project skeleton:** tracked Flask status page, UUID checks and Pi browser smoke test verified 2026-10-27. Camera SDK preview work is the current Pi-test gate; add persistent logging and systemd later. No Home/GoTo on startup.
 2. **Camera live preview:** single SDK owner, control readbacks, image byte handling, GRBG 8-bit preview, lightweight streaming to several browsers. Measure CPU/RAM/latency instead of assuming the probe PNG algorithm is sufficiently fast.
 3. **Recording:** single RAW/FITS saved exposure, then sequences, USB-UUID checks, checksums/atomic writes, optional saving, uninterrupted capture after browser refresh.
 4. **Mount basics:** USB connect/reconnect, time/site verification, status/coordinates, manual jog with deadman Stop, lease enforcement, cautious Home/Park testing.

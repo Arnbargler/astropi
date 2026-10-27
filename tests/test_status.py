@@ -33,7 +33,7 @@ def test_status_endpoint_does_not_initialize_camera_or_mount(tmp_path):
     r = client.get("/api/status")
     assert r.status_code == 200
     data = r.get_json()
-    assert data["mode"] == "read_only_skeleton"
+    assert data["mode"] == "camera_preview_development"
     assert not data["camera"]["sdk_connected"]
     assert not data["mount"]["connected"]
     assert not data["storage"]["ready"]

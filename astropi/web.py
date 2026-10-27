@@ -1,11 +1,21 @@
-"""Read-only routes; never performs hardware operations."""
-from flask import Flask, jsonify, render_template
+"""Flask API. Requests never call the camera SDK directly."""
+from queue import Full
+from flask import Flask, abort, jsonify, make_response, render_template, request
+from .camera.worker import CameraWorker
 from .config import Settings
+from .control import ControlLease
 from .status import snapshot
 
-def create_app(settings: Settings | None = None) -> Flask:
+
+def create_app(settings: Settings | None = None, camera=None, lease=None) -> Flask:
     app = Flask(__name__)
     config = settings if settings is not None else Settings.from_environment()
+    worker = camera if camera is not None else CameraWorker()
+    control = lease if lease is not None else ControlLease()
+
+    def require_operator():
+        if not control.owns(request.headers.get("X-AstroPi-Control", "")):
+            abort(403, description="Use Take Control to change camera settings")
 
     @app.get("/")
     def index():
@@ -13,6 +23,68 @@ def create_app(settings: Settings | None = None) -> Flask:
 
     @app.get("/api/status")
     def status():
-        return jsonify(snapshot(config))
+        data = snapshot(config)
+        data["mode"] = "camera_preview_development"
+        data["camera"].update(worker.status())
+        data["controller_held"] = control.held()
+        return jsonify(data)
+
+    @app.post("/api/control/take")
+    def take():
+        token = control.take()
+        if token is None:
+            return jsonify(error="Another browser currently controls AstroPi"), 423
+        return jsonify(token=token)
+
+    @app.post("/api/control/heartbeat")
+    def heartbeat():
+        if not control.renew(request.headers.get("X-AstroPi-Control", "")):
+            return jsonify(error="Operator lease expired"), 403
+        return jsonify(ok=True)
+
+    @app.post("/api/control/release")
+    def release():
+        if not control.release(request.headers.get("X-AstroPi-Control", "")):
+            return jsonify(error="Not the current operator"), 403
+        return jsonify(ok=True)
+
+    @app.post("/api/camera/start")
+    def start_camera():
+        require_operator()
+        if not worker.start():
+            return jsonify(error="Camera worker already active"), 409
+        return jsonify(ok=True), 202
+
+    @app.post("/api/camera/stop")
+    def stop_camera():
+        require_operator()
+        if not worker.stop():
+            return jsonify(error="Camera worker not running"), 409
+        return jsonify(ok=True), 202
+
+    @app.post("/api/camera/settings")
+    def set_settings():
+        require_operator()
+        payload = request.get_json(silent=True) or {}
+        try:
+            worker.configure(payload.get("gain"), payload.get("exposure_us"))
+        except ValueError as exc:
+            return jsonify(error=str(exc)), 400
+        except RuntimeError as exc:
+            return jsonify(error=str(exc)), 409
+        except Full:
+            return jsonify(error="Camera command queue is full"), 429
+        return jsonify(ok=True), 202
+
+    @app.get("/api/camera/frame.jpg")
+    def frame():
+        jpeg, number = worker.frame()
+        if jpeg is None:
+            return jsonify(error="No camera preview frame yet"), 503
+        response = make_response(jpeg)
+        response.headers["Content-Type"] = "image/jpeg"
+        response.headers["Cache-Control"] = "no-store"
+        response.headers["X-Frame-Number"] = str(number)
+        return response
 
     return app

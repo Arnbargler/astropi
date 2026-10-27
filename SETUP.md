@@ -1,20 +1,23 @@
-# AstroPi v0.1 — read-only status page
+# AstroPi — v0.2 experimental SV705C browser preview
 
-This first build only inspects USB enumeration, the mounted acquisition-drive UUID and Pi health. It cannot expose, capture, move, Home, Park or track the telescope.
+Hardware v0.1 read-only status checks passed in the browser on 2026-10-27. This update integrates the existing SVBONY SDK into a single-thread worker to show a browser JPEG preview and set exposure/gain. **SDK camera integration has not yet been verified on the Pi**. No RAW/FITS saving, mount movement or telescope tracking is implemented.
 
-Run on the Raspberry Pi (already cloned as ~/astropi):
+Run on AstroPi (while physically present or able to monitor its terminal):
 
-    sudo apt install -y python3-venv
     cd ~/astropi
+    # Stop the old Flask service first (Ctrl+C in its terminal).
     git pull --ff-only
-    python3 -m venv .venv
     source .venv/bin/activate
     python -m pip install -r requirements-dev.txt
     python -m pytest -q
     python run.py --host 0.0.0.0 --port 8080
 
-From another device on the trusted LAN open http://astropi.local:8080/ (or use the Pi's LAN IP if mDNS fails). Stop with Ctrl+C.
+From the trusted LAN, open http://192.168.0.29:8080/ or http://astropi.local:8080/. Select **Take Control**, then **Start preview**. The camera worker opens the SV705C once, uses full 3856x2180 RAW16 frames from the SDK and sends a reduced ~964x545 8-bit colour JPEG to the page. It never saves those buffers. Change gain and exposure in the browser, then use **Apply settings**. Multiple browsers can see the same preview, but only one control lease can change settings.
 
-This runs Flask's development server, not a configured systemd service. It has no authentication; do not expose the port to the Internet. Port already in use? Choose --port 8081 and change the browser URL. To run again use: cd ~/astropi && source .venv/bin/activate && python run.py
+Use **Stop** before Ctrl+C or before changing devices. Normal Stop may finish an in-progress exposure before closing the SDK. If restart fails, report the on-screen SDK error and Pi terminal output; previous hardware probes observed SDK error 11 on some stream restarts. This release does not attempt blind automatic resets. The Flask server is still a temporary development server without auto-start; do not forward the port to the Internet.
 
-The camera and mount labels indicate USB presence only, NOT an SDK/serial connection. Recording-drive ready requires the exact verified filesystem UUID on its expected mount. When the drive is missing, the status service never writes to the underlying microSD directory. Re-check the drive before every actual write in the future capture implementation. All browsers are viewers until operator-lease controls are implemented.
+Preview is display-only: percentile stretch and simple 4x4 GRBG block averaging, not a calibrated demosaic. The original 12-bit-in-RAW16 data is not modified, but no science FITS output is implemented yet. Do not infer exact exposure calibration from SDK readback.
+
+When using the dark lens cap, expect a mostly dark preview. Try the previously tested Canon lens under indoor lighting, starting around **100 ms exposure, gain 0**, rather than pointing the bare sensor at bright sunlight.
+
+If tests fail, do not start the new service; copy the failing traceback. Hardware SDK bindings are based on the project's tested v1.13.4 integration notes and still need first live verification.
