@@ -18,6 +18,8 @@ let storageReady = false;
 let captureBusy = false;
 let captureRequestPending = false;
 let sequenceActive = false;
+let mountPhase = "disconnected";
+let mountRequestPending = false;
 const saveFormats = ["fits", "raw", "jpg", "png"];
 const $ = id => document.getElementById(id);
 const write = (id, value) => { $(id).textContent = value; };
@@ -49,6 +51,10 @@ function updateButtons() {
   $("release-control").hidden = !owner;
   $("start-camera").disabled = !owner || !["stopped", "error"].includes(currentPhase);
   $("stop-camera").disabled = !owner || !["running", "connecting"].includes(currentPhase);
+  $("mount-connect").disabled = !owner || mountRequestPending ||
+    !["disconnected", "error"].includes(mountPhase);
+  $("mount-disconnect").disabled = !owner || mountRequestPending ||
+    !["connecting", "connected"].includes(mountPhase);
   const saveReady = owner && currentPhase === "running" &&
     storageReady && !captureBusy && !captureRequestPending &&
     saveFormats.some(fmt => $("capture-" + fmt).checked);
@@ -170,6 +176,60 @@ $("release-control").addEventListener("click", async () => {
   } catch (error) { write("camera-error", error.message); }
   updateButtons();
 });
+$("mount-connect").addEventListener("click", () => mountAction("/api/mount/connect"));
+$("mount-disconnect").addEventListener("click", () => mountAction("/api/mount/disconnect"));
+async function mountAction(url) {
+  if (!token || mountRequestPending) return;
+  mountRequestPending = true;
+  updateButtons();
+  try {
+    await post(url);
+    write("mount-error", "");
+    await refreshMount();
+  } catch(error) {
+    write("mount-error", error.message);
+  } finally {
+    mountRequestPending = false;
+    updateButtons();
+  }
+}
+function describeFlag(v, whenTrue, whenFalse) {
+  return v === true ? whenTrue : v === false ? whenFalse : "unknown";
+}
+function showMount(data) {
+  if (!data) return;
+  mountPhase = data.phase || "disconnected";
+  write("mount-phase", "Connection: " + mountPhase);
+  write("mount-model", data.model ?
+    "Model: " + data.model + " · firmware " + (data.firmware || "—") :
+    "Model / firmware: —");
+  const active = Boolean(data.connected && mountPhase === "connected");
+  write("mount-altitude", active ? (data.altitude_text || "—") : "—");
+  write("mount-azimuth", active ? (data.azimuth_text || "—") : "—");
+  write("mount-ra", active ? (data.ra_text || "—") : "—");
+  write("mount-dec", active ? (data.dec_text || "—") : "—");
+  write("mount-flags", active ?
+    "Flags: " + [
+      describeFlag(data.tracking,"tracking","not tracking"),
+      describeFlag(data.slewing,"slewing","not slewing"),
+      describeFlag(data.at_home,"at Home","Home unknown"),
+      describeFlag(data.altaz_mode,"Alt/Az","mode unknown")
+    ].join(" · ") : "Status flags: —");
+  write("mount-raw-status", "Raw :GU#: " + (active ? data.raw_status || "—" : "—"));
+  write("mount-update", "Last telemetry: " +
+    (active && data.updated_utc ? new Date(data.updated_utc).toLocaleTimeString() : "—"));
+  write("mount-error", data.last_error || "");
+  updateButtons();
+}
+async function refreshMount() {
+  try {
+    const response = await fetch("/api/mount/status", {cache:"no-store"});
+    if (!response.ok) throw new Error("Mount status unavailable");
+    showMount(await response.json());
+  } catch(error) {
+    write("mount-error", error.message);
+  }
+}
 $("start-camera").addEventListener("click", () => action("/api/camera/start"));
 $("stop-camera").addEventListener("click", () => action("/api/camera/stop"));
 async function changeStretch(mode) {
@@ -344,6 +404,7 @@ async function refresh() {
     if (data.camera.last_error) write("camera-error", data.camera.last_error);
     write("mount-usb", data.mount.usb_detected ? "USB detected" : "USB not detected");
     write("mount-serial", data.mount.serial_present ? "Serial alias available" : "Serial alias unavailable");
+    showMount(data.mount);
     storageReady = Boolean(data.storage.ready);
     write("storage-state", data.storage.ready ? "Recording drive ready" : data.storage.state.replaceAll("_", " "));
     write("storage-free", freeSpace(data.storage.free_bytes));
@@ -384,5 +445,6 @@ async function heartbeat() {
 }
 refresh();
 setInterval(refresh, 3000);
+setInterval(refreshMount, 2500);
 setInterval(pollPreview, 50);
 setInterval(heartbeat, 5000);

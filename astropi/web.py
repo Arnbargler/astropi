@@ -6,21 +6,23 @@ from .capture.manager import CaptureManager, CaptureBusy
 from .capture.formats import validate_formats
 from .capture.storage import CaptureStorage, StorageError
 from .config import Settings
+from .mount.worker import MountWorker
 from .control import ControlLease
 from .status import snapshot
 
 
-def create_app(settings: Settings | None = None, camera=None, lease=None) -> Flask:
+def create_app(settings: Settings | None = None, camera=None, lease=None, mount=None) -> Flask:
     app = Flask(__name__)
     config = settings if settings is not None else Settings.from_environment()
     worker = camera if camera is not None else CameraWorker(
         capture=CaptureManager(CaptureStorage(config))
     )
     control = lease if lease is not None else ControlLease()
+    mount_worker = mount if mount is not None else MountWorker(config.mount_serial)
 
     def require_operator():
         if not control.owns(request.headers.get("X-AstroPi-Control", "")):
-            abort(403, description="Use Take Control to change camera settings")
+            abort(403, description="Use Take Control for camera or mount operations")
 
     @app.get("/")
     def index():
@@ -33,6 +35,7 @@ def create_app(settings: Settings | None = None, camera=None, lease=None) -> Fla
         camera_state = worker.status()
         data["camera"].update(camera_state)
         data["camera"]["sdk_connected"] = camera_state["phase"] in ("running", "stopping")
+        data["mount"].update(mount_worker.status())
         data["controller_held"] = control.held()
         data["capture"] = worker.capture_status()
         return jsonify(data)
@@ -55,6 +58,24 @@ def create_app(settings: Settings | None = None, camera=None, lease=None) -> Fla
         if not control.release(request.headers.get("X-AstroPi-Control", "")):
             return jsonify(error="Not the current operator"), 403
         return jsonify(ok=True)
+
+    @app.post("/api/mount/connect")
+    def connect_mount():
+        require_operator()
+        if not mount_worker.connect():
+            return jsonify(error="Mount connection worker already active"), 409
+        return jsonify(ok=True), 202
+
+    @app.post("/api/mount/disconnect")
+    def disconnect_mount():
+        require_operator()
+        if not mount_worker.disconnect():
+            return jsonify(error="Mount connection worker is not active"), 409
+        return jsonify(ok=True), 202
+
+    @app.get("/api/mount/status")
+    def mount_status():
+        return jsonify(mount_worker.status())
 
     @app.post("/api/camera/start")
     def start_camera():

@@ -22,7 +22,7 @@
     <section class="intro">
       <div class="eyebrow">DEVELOPMENT BUILD · CAMERA CAPTURE</div>
       <h2>Observatory</h2>
-      <p>Live SV705C preview, single-frame captures and counted exposure sequences saved to the verified USB drive. The Pi continues recording without the browser. Mount commands remain disabled.</p>
+      <p>Live SV705C preview and USB-only recording, plus read-only AM3N mount telemetry. Mount movements, tracking and position setters remain disabled.</p>
     </section>
     <section class="preview-layout">
       <article class="card preview-card">
@@ -148,8 +148,28 @@
       <div id="capture-results"></div>
     </section>
     <section class="cards" aria-label="System status">
-      <article class="card"><h3>ZWO AM3N</h3><div class="metric" id="mount-usb">Checking…</div>
-        <p id="mount-serial">Checking serial alias…</p><p>No mount commands are sent.</p></article>
+      <article class="card mount-card">
+        <h3>ZWO AM3N · Read-only</h3>
+        <div class="metric" id="mount-usb">Checking…</div>
+        <p id="mount-serial">Checking serial alias…</p>
+        <div class="button-row">
+          <button id="mount-connect" disabled>Connect Mount</button>
+          <button id="mount-disconnect" disabled>Disconnect</button>
+        </div>
+        <p id="mount-phase" role="status">Mount disconnected</p>
+        <p id="mount-model">Model / firmware: —</p>
+        <div class="mount-coordinates" aria-label="Mount reported coordinates">
+          <div><span>Altitude</span><strong id="mount-altitude">—</strong></div>
+          <div><span>Azimuth</span><strong id="mount-azimuth">—</strong></div>
+          <div><span>RA (reported)</span><strong id="mount-ra">—</strong></div>
+          <div><span>Dec (reported)</span><strong id="mount-dec">—</strong></div>
+        </div>
+        <p id="mount-flags">Status flags: —</p>
+        <p id="mount-raw-status" class="mount-small">Raw :GU#: —</p>
+        <p id="mount-update" class="mount-small">Last telemetry: —</p>
+        <p id="mount-error" role="alert" class="mount-error"></p>
+        <p class="mount-caution">Coordinates are reported by the mount, not proof of alignment. No Home, GoTo, tracking or movement commands are sent.</p>
+      </article>
       <article class="card"><h3>Recording drive</h3><div class="metric" id="storage-state">Checking…</div>
         <p id="storage-free">Checking free space…</p><p>All captures require the correct mounted USB UUID. Never writes to microSD.</p></article>
       <article class="card"><h3>Raspberry Pi</h3><div class="metric" id="pi-temp">Checking…</div>

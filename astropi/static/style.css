@@ -87,3 +87,16 @@ button:hover:not(:disabled){background:#2a5669}button:disabled{opacity:.38;curso
 .sequence-controls input:disabled{opacity:.45}
 #cancel-sequence{border-color:#8d5a5a;color:#f2bdb4;background:#3b262a}
 #sequence-progress{color:#a0d6c8;font-weight:600;font-size:13px;min-height:20px;font-variant-numeric:tabular-nums}
+
+
+/* AM3N first milestone: read-only mount connection and reported telemetry */
+.mount-card .metric{font-size:16px;margin:14px 0 6px}
+.mount-card{display:flex;flex-direction:column;gap:7px}
+.mount-card .button-row{display:flex;flex-wrap:wrap;gap:8px;margin:7px 0}
+.mount-coordinates{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px}
+.mount-coordinates>div{background:#101923;border:1px solid #344658;border-radius:7px;padding:9px;min-width:0}
+.mount-coordinates span{display:block;font-size:11px;color:#93aaba;margin-bottom:5px}
+.mount-coordinates strong{display:block;font-size:15px;font-weight:600;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.mount-card .mount-small{font-size:11px;color:#9bb0bc}
+.mount-card .mount-error{font-size:12px;color:#efaaa3;overflow-wrap:anywhere}
+.mount-card .mount-caution{font-size:11px;color:#a8b9c4;border-top:1px solid #344658;padding-top:10px;margin-top:4px}
