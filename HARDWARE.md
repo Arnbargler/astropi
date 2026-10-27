@@ -6,7 +6,7 @@ This file records the hardware we have chosen for AstroPi, how it connects, and 
 
 | Device | Purpose | Status / notes |
 | --- | --- | --- |
-| Raspberry Pi | Runs headless AstroPi, camera acquisition, mount control and browser server | Exact model, RAM and OS/kernel for the AstroPi unit: **to confirm** |
+| Raspberry Pi 4 (4 GB RAM, believed) | Runs headless AstroPi, camera acquisition, mount control and browser server | User believes AstroPi's Pi has **4 GB RAM**; verify on device. The separate **2 GB Pi** is used for the music streamer. OS/kernel still to confirm. |
 | SVBONY SV705C | Primary USB astronomical camera | Owned; planned first camera implementation using SVBONY SDK on Linux |
 | ZWO AM3 | Motorized telescope mount | Owned; **Alt/Az mode exclusively**; serial-control integration planned |
 | 12 V DC supply/distribution | Power to mount and accessories where appropriate | General power plan agreed; ratings, wiring and fused branches to document |
@@ -15,7 +15,7 @@ This file records the hardware we have chosen for AstroPi, how it connects, and 
 
 ## Configuration still to record
 
-- Raspberry Pi model / RAM / OS image and kernel.
+- Verify Raspberry Pi model and RAM (expected Pi 4, 4 GB); record OS image and kernel.
 - Telescope and focal length, including any reducer or Barlow (needed for plate solving and field-of-view predictions).
 - Exact USB and serial port topology; persistent device identification.
 - Storage device and destination for FITS/raw captures.
