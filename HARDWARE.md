@@ -70,7 +70,7 @@ Bus/device numbers and `/dev/sda`/ `/dev/ttyACM0` may change after reconnect; us
 
 ## What remains unresolved (not pre-development blockers)
 
-1. **Application code is not yet in GitHub.** All current success comes from shell/Python probe scripts run on the Pi. Design/deployment and systemd auto-start belong to development.
+1. **Read-only status service source is now in GitHub; not yet Pi-tested.** Camera/mount successes still come from separate probe scripts. Camera capture integration and systemd auto-start remain future development.
 2. **Mount:** sky-pointing alignment model, Alt/Az GoTo, tracking/stop control and Park; offline location/time recovery; abnormal link-failure safety. Home works but does not establish pointing accuracy.
 3. **Camera:** long-exposure/scientific FITS metadata, colour calibration, live-preview performance, valid ROI/binning modes beyond proven full-frame 1×, predictable recovery after capture restart or USB faults.
 4. **Physical field deployment:** actual optical tube and 12 V battery/buck wiring, cable clearance on Home/GoTo, safe physical Cancel, offline network and trusted time, sustained battery runtime. The successful test was with connected but **stationary** AM3N.
