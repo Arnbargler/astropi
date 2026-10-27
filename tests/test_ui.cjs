@@ -319,18 +319,20 @@ test("lost mount data is never shown as fresh pointing",async()=>{
   await h.el("mount-connect").dispatch("click");
   h.updateMount({phase:"error",connected:false,
     last_error:"Serial port disappeared", altitude_text:"+01*30:50"});
-  await h.intervals.get(2500)();
+  await h.intervals.get(1000)();
   assert.equal(h.el("mount-altitude").textContent,"—");
   assert.equal(h.el("mount-ra").textContent,"—");
   assert.match(h.el("mount-error").textContent,/Serial port disappeared/);
   assert.equal(h.el("mount-connect").disabled,false);
 });
 
-test("mount UI has only read-only connection actions, not motion controls",()=>{
+test("mount UI has bounded manual controls but no Home GoTo Park or tracking",()=>{
   const html=fs.readFileSync(path.join(__dirname,"../astropi/templates/index.html"),"utf8");
   assert.match(html,/id="mount-connect"/);
   assert.match(html,/id="mount-disconnect"/);
-  assert.doesNotMatch(html,/id="mount-(?:home|goto|slew|track|park|east|west|north|south)"/);
+  assert.doesNotMatch(html,/id="mount-(?:home|goto|slew|track|park)"/);
+  assert.match(html,/id="mount-stop"/);
+  assert.match(html,/id="mount-arm"/);
 });
 
 
