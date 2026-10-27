@@ -6,7 +6,7 @@ This file records the hardware we have chosen for AstroPi, how it connects, and 
 
 | Device | Purpose | Status / notes |
 | --- | --- | --- |
-| Raspberry Pi (4 GB RAM confirmed; Pi 4 model to verify) | Runs headless AstroPi, camera acquisition, mount control and browser server | `free -h` on host `astropi` showed **3.7 GiB total**, 188 MiB used, 3.5 GiB available, 2.0 GiB swap unused (2026-10-27). Separate 2 GB Pi is used for the music streamer. Exact model/OS/kernel still to verify. |
+| Raspberry Pi 4 Model B Rev 1.5 (4 GB RAM) | Runs headless AstroPi, camera acquisition, mount control and browser server | **Verified on `astropi` (2026-10-27):** Raspberry Pi 4 Model B Rev 1.5; Debian GNU/Linux **13.6 (Trixie)**; kernel **`6.18.39+rpt-rpi-v8`**; `free -h`: **3.7 GiB RAM total**, 188 MiB used, 3.5 GiB available; 2.0 GiB swap, unused. The separate 2 GB Pi runs the music streamer. |
 | SVBONY SV705C | Primary USB astronomical camera | Owned; planned first camera implementation using SVBONY SDK on Linux |
 | ZWO AM3 | Motorized telescope mount | Owned; **Alt/Az mode exclusively**; serial-control integration planned |
 | 12 V DC supply/distribution | Power to mount and accessories where appropriate | General power plan agreed; ratings, wiring and fused branches to document |
@@ -15,8 +15,7 @@ This file records the hardware we have chosen for AstroPi, how it connects, and 
 
 ## Configuration still to record
 
-- RAM confirmed at 4 GB nominal (3.7 GiB reported by `free -h`); verify exact Raspberry Pi model (expected Pi 4), OS image and kernel.
-- Telescope and focal length, including any reducer or Barlow (needed for plate solving and field-of-view predictions).
+- Telescope and focal length, including any reducer or Barlow (for image scale and field-of-view estimates).
 - Exact USB and serial port topology; persistent device identification.
 - Storage device and destination for FITS/raw captures.
 - Power-supply capacity, connector polarity, buck-converter ratings and cable layout.
