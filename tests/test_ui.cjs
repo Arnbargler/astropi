@@ -217,6 +217,8 @@ test("sequence cancel is operator controlled and updates browser status",async()
   assert.equal(h.el("cancel-sequence").disabled,true);
   await h.el("take-control").dispatch("click");
   h.el("sequence-count").value="2";
+  h.el("capture-fits").checked=true;
+  h.el("sequence-count").dispatch("input");
   await h.el("start-sequence").dispatch("click");
   await h.intervals.get(50)();
   assert.equal(h.el("cancel-sequence").disabled,false);
