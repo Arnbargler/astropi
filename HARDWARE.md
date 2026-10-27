@@ -385,7 +385,7 @@ User explicitly approved **erasing the old Raspberry Pi OS image** on the remova
 - **Filesystem UUID:** `25b33cfa-b178-4b86-8a15-d00c8305cca5`.
 - GPT partition UUID: `91e60011-2543-48e3-9ecb-b4f151f8b565`.
 - Verified ext4 signature using `wipefs -n /dev/sda1` and `blkid -p /dev/sda1`.
-- **Status:** Format and metadata identification verified, **not mounted yet**. Next intended step is automatic mount at `/media/astropi-data` using the UUID and fstab `nofail`, followed by actual mount and sustained write/read verification. The application must refuse disk recording when this mount is missing; do not fall back to the microSD.
+- **Mount configured and verified 2026-10-27:** User added UUID entry to `/etc/fstab`: `UUID=25b33cfa-b178-4b86-8a15-d00c8305cca5 /media/astropi-data ext4 defaults,nofail,x-systemd.device-timeout=10s 0 2`; backed up fstab, ran `systemctl daemon-reload`, and successfully mounted `/media/astropi-data`. `findmnt` shows `/dev/sda1 ext4 rw,relatime`; `df -h` shows 59 GiB available; `ls -ld` shows mount root owned by `arn:arn`. **Mount now verified; automatic remount on reboot and sustained write/read integrity/throughput remain untested.** The application must refuse disk recording when this mount is missing; do not fall back to the microSD.
 
 ## Pre-development integrated hardware acceptance checklist (planned 2026-10-27)
 
@@ -393,7 +393,7 @@ The core camera and mount interfaces have passed their **individual** smoke test
 
 | Priority | Test | Evidence for acceptance | Status |
 | --- | --- | --- | --- |
-| P0 | 64 GB USB 3 acquisition drive | Identify correct USB device and filesystem **before any formatting**, inspect capacity/UUID, mount persistently by UUID, perform non-destructive write/read integrity and sustained throughput test, verify clean unmount/remount and reboot persistence | **Not yet tested** |
+| P0 | 64 GB USB 3 acquisition drive | Identify correct USB device and filesystem **before any formatting**, inspect capacity/UUID, mount persistently by UUID, perform non-destructive write/read integrity and sustained throughput test, verify clean unmount/remount and reboot persistence | **Filesystem and live UUID-based mount verified**; speed/integrity and reboot persistence pending |
 | P0 | Camera capture to target storage | Verify explicit manual gain/exposure control, multiple consecutive RAW16 frames, nontrivial image statistics, preview of ordinary scene, proper frame format/12-bit alignment, and checksums/file sizes on the new drive | **One RAW16 frame saved to SD**; further work pending |
 | P0 | Realistic whole-system load & power | SV705C + AM3N + USB3 recording drive (+ intended Wi-Fi if needed) active together; monitor `vcgencmd get_throttled`, supply/buck ratings and voltage under load, `dmesg` USB disconnects/resets, `journalctl` and temperatures for ~20–30 minutes | **Single camera frame and mount tests verified, combined sustained test pending** |
 | P1 | Offline startup / time / network | Reboot on real field power without Internet; verify local browser accessibility, Wi-Fi/AP behaviour, reliable clock acquisition or clock fallback, mount clock synchronization, stable devices and writable data path | **NTP synchronized while online; offline untested, no hardware RTC** |
