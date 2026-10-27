@@ -8,7 +8,8 @@ mono preview 16.6 FPS / RAW 16.5 FPS.
 
 The one-shot USB file recorder passed simulated filesystem, format, API and
 browser tests and **has now created files on the real Pi** in four separate
-folders. Contents, checksums, and FITS data still need validation. Timed sequences
+folders. All 11 real files passed size and SHA-256 checks against metadata.json;
+independent FITS pixel/header interpretation still needs inspection. Timed sequences
 and AM3N mount movement/GoTo/tracking are not implemented.
 
 ## Update and start the service
@@ -91,6 +92,7 @@ To inspect or further verify those files:
     ls -lah /media/astropi-data/captures/
     find /media/astropi-data/captures -maxdepth 2 -type f | tail -n 20
 
-Next: validate actual hashes against metadata.json and inspect FITS data
-before depending on scientific results. Never intentionally unplug USB
+Real USB file-size and SHA-256 verification: 4/4 capture folders PASS,
+11/11 files PASS (2026-10-27). Next: independently inspect FITS
+headers/pixel values before treating the data as scientifically validated. Never intentionally unplug USB
 during a save. Longer exposure sequences remain for subsequent development.
