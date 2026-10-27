@@ -418,6 +418,17 @@ After USB drive persisted across reboot, the user verified `SVBGetNumOfConnected
 
 **Status:** Previously achieved single-frame RAW16 still stands; 10-frame end-to-end storage capture **NOT YET VERIFIED**. Do not attribute error to the flash drive or power without evidence.
 
+### SV705C camera enumeration → open → close follow-up PASS (2026-10-27)
+
+After the above ten-frame attempt returned SDK error 2 at `SVBOpenCamera(1)`, the user ran a minimal diagnostic using the camera-info API before opening:
+
+- `SVBGetNumOfConnectedCameras()` → **1**.
+- `SVBGetCameraInfo(..., index=0)` → **0 / success**; FriendlyName `SVBONY SV705C`, PortType `USB3.0`, **CameraID `1`**.
+- `SVBOpenCamera(info.CameraID)` → **0 / success**.
+- `SVBCloseCamera(info.CameraID)` → **0 / success**; script printed `CAMERA OPEN/CLOSE TEST PASSED`.
+
+**Diagnosis:** The likely cause of the earlier open failure is **skipping the camera-information discovery call/initialization sequence**, rather than a changed CameraID (it remained 1). Avoid assuming the camera works when opened with hardcoded ID alone; always perform SDK enumeration, `SVBGetCameraInfo`, use returned CameraID, and open/close cleanly. It is not yet proven whether the information API call alone is strictly required by all SDK versions or a transient timing effect contributed. **Multi-frame capture remains untested** until the corrected script completes.
+
 ## Pre-development integrated hardware acceptance checklist (planned 2026-10-27)
 
 The core camera and mount interfaces have passed their **individual** smoke tests. Before substantial application coding, test the complete field configuration in the following order. Statuses below distinguish **known**, **planned**, and **not yet verified**.
