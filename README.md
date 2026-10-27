@@ -1,8 +1,8 @@
 # AstroPi — project handoff
 
-**Status (2026-10-27): SV705C preview and colour/mono frame rates VERIFIED on Pi. New one-shot RAW16/FITS/JPG/PNG capture with USB-only atomic writing is software-tested but NOT yet Pi-tested. Timed sequences and mount control are unimplemented.** AstroPi is a Raspberry Pi 4-hosted, browser-operated deep-sky camera and telescope controller for one SVBONY SV705C and one ZWO AM3N mount, operating in **Alt/Az only**.
+**Status (2026-10-27): SV705C preview and colour/mono frame rates VERIFIED on Pi. One-shot RAW16/FITS/JPG/PNG capture successfully created selected formats on the real Pi USB drive in four separate capture directories; byte-level integrity review remains pending. Timed sequences and mount control are unimplemented.** AstroPi is a Raspberry Pi 4-hosted, browser-operated deep-sky camera and telescope controller for one SVBONY SV705C and one ZWO AM3N mount, operating in **Alt/Az only**.
 
-This private GitHub repository is the durable handoff for a **new AI assistant or development session**. Do not infer that a tested terminal script is a committed application: **live camera preview is Pi-verified; new one-shot file recording still needs real USB testing and mount control remains unimplemented**.
+This private GitHub repository is the durable handoff for a **new AI assistant or development session**. Do not infer that a tested terminal script is a committed application: **live camera preview and one-shot USB file creation are Pi-verified; full data/checksum verification, exposure sequences and mount control remain outstanding**.
 
 ## Read in this order
 
@@ -36,4 +36,4 @@ Validate the **experimental SV705C colour preview** using [SETUP.md](SETUP.md), 
 - Trusted home/field local network only; no user accounts or Internet-facing service planned.
 - Do not commit private credentials, SDK binaries or large captured RAW/FITS data.
 
-**Suggested new-session opener:** “Continue AstroPi from the private GitHub repository `Arnbargler/astropi`. Read README, REQUIREMENTS, HARDWARE and DEVELOPMENT in that order. The live camera preview works on Pi; the new one-shot RAW16/FITS/JPG/PNG saver requires its first USB hardware test. Preserve the single camera SDK owner, storage UUID checks, and untested mount safety boundaries.”
+**Suggested new-session opener:** “Continue AstroPi from the private GitHub repository `Arnbargler/astropi`. Read README, REQUIREMENTS, HARDWARE and DEVELOPMENT in that order. The live camera preview works on Pi; the one-shot RAW16/FITS/JPG/PNG saver produced four real capture folders on Pi USB; check checksum/data integrity next, then implement sequences. Preserve the single camera SDK owner, storage UUID checks, and untested mount safety boundaries.”

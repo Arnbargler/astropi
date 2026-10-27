@@ -79,11 +79,24 @@ At the **50 ms exposure** preset with the new two-thread JPEG preview pipeline, 
 
 The prior preview was **2.2 FPS** / **143 ms JPEG processing**, so the new colour path is ~6.7× faster; mono ~7.5× faster. Browser preview FPS is a measured instantaneous/smoothed rate and can briefly exceed RAW FPS; do not interpret that as sustained extra frames. At 50 ms the exposure-only ideal ceiling is 20 FPS, but readout/USB/processing impose overhead. Colour conversion is no longer the primary bottleneck. These numbers are snapshots, not a full benchmarking sweep or verified 30 s behaviour.
 
+## On-Pi one-shot capture file creation (verified 2026-10-27)
+
+The user tested independent recording format toggles and provided a Pi shell listing confirming four completed directories on `/media/astropi-data/captures/`:
+
+| UTC folder prefix | Observed files besides `metadata.json` |
+| --- | --- |
+| `20261027T212407_904664_f9b41e` | FITS, RAW16, JPG, PNG |
+| `20261027T212436_111525_ab0bbd` | FITS only |
+| `20261027T212445_542596_1dd89b` | FITS, JPG |
+| `20261027T212451_166770_6a75d1` | FITS, RAW16, JPG, PNG |
+
+Thus all four format writers and independent selection combinations produced files through the Pi app on its configured USB recording path. There were no `.partial` paths in the displayed list. **The listing does not independently validate checksums, FITS scientific values, file sizes, exact mounted UUID at that later time, or USB-loss behaviour**; the implementation's simulated filesystem tests cover those separately. First verify hashes/sizes from saved metadata before relying on science files. No exposure sequences yet.
+
 ## What remains unresolved (not pre-development blockers)
 
-1. **Pi browser status, SV705C preview and 50ms two-thread colour/mono rates are verified.** New one-shot RAW16/FITS/JPG/PNG saving is committed and software-tested but not yet physically verified on Pi USB; sequences and auto-start remain future work.
+1. **Pi browser status, SV705C preview and 50ms two-thread colour/mono rates are verified.** One-shot recording produced four completed capture directories on Pi USB with different combinations of FITS/RAW16/JPG/PNG. Byte-level integrity validation is still pending; sequences and auto-start remain future work.
 2. **Mount:** sky-pointing alignment model, Alt/Az GoTo, tracking/stop control and Park; offline location/time recovery; abnormal link-failure safety. Home works but does not establish pointing accuracy.
-3. **Camera:** verify one-shot RAW16/FITS/JPG/PNG saving to Pi USB; then test sequences, long-exposure metadata precision, colour calibration, ROI/binning beyond proven full-frame 1x and fault recovery. Live preview is near camera-limited speed at 50ms.
+3. **Camera:** verify real saved capture file sizes, metadata checksums and FITS data content; then test sequences, long-exposure metadata precision, colour calibration, ROI/binning beyond proven full-frame 1x and fault recovery. Live preview is near camera-limited speed at 50ms.
 4. **Physical field deployment:** actual optical tube and 12 V battery/buck wiring, cable clearance on Home/GoTo, safe physical Cancel, offline network and trusted time, sustained battery runtime. The successful test was with connected but **stationary** AM3N.
 5. **Service:** one process owns camera SDK; one serialized mount command queue; capture sequences must survive browser disconnect; one operator lease; timestamps/site/UUID validated before scientific recordings.
 

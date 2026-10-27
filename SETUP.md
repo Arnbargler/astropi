@@ -6,8 +6,9 @@ Pi browser preview, colour/mono paths, and gain/exposure response are verified
 on the actual SV705C. At 50ms: colour preview 14.8 FPS / RAW 15.8 FPS,
 mono preview 16.6 FPS / RAW 16.5 FPS.
 
-The NEW one-shot USB file recorder has passed simulated filesystem, format,
-API and browser tests, **but has not yet saved on the real Pi**. Timed sequences
+The one-shot USB file recorder passed simulated filesystem, format, API and
+browser tests and **has now created files on the real Pi** in four separate
+folders. Contents, checksums, and FITS data still need validation. Timed sequences
 and AM3N mount movement/GoTo/tracking are not implemented.
 
 ## Update and start the service
@@ -84,11 +85,12 @@ One image-save job at a time; saving happens in a separate worker thread and
 continues after browser disconnect. Recording full exposure sequences is a
 future milestone. The telescope is never moved by this version.
 
-First on-Pi test: record FITS+JPG with exposure 100ms/gain 0, then inspect
-files with:
+The user has already recorded FITS-only, FITS+JPG and all-four-format sets.
+To inspect or further verify those files:
 
     ls -lah /media/astropi-data/captures/
     find /media/astropi-data/captures -maxdepth 2 -type f | tail -n 20
 
-After first success, test all four formats. Send any capture error and the
-first resulting file listing. Never intentionally unplug the USB during a save.
+Next: validate actual hashes against metadata.json and inspect FITS data
+before depending on scientific results. Never intentionally unplug USB
+during a save. Longer exposure sequences remain for subsequent development.
