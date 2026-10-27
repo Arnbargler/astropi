@@ -368,6 +368,27 @@ Measurements below are from **`arn@astropi`**, not the separate N100 desktop. Th
 
 **Follow-ups:** Test 5V power and `get_throttled` under sustained camera load; verify the planned 64 GB USB 3 recording drive and mount it persistently; visually verify first frame, confirm RAW16 value alignment and check sustained camera power stability. Configure the Pi's time zone to the observing region if desired; astronomy calculations should use synchronized UTC plus explicitly configured observing latitude/longitude, not infer coordinates from time zone. Offline operation needs a way to acquire accurate time after boot (e.g. browser-provided clock or an RTC).
 
+## Pre-development integrated hardware acceptance checklist (planned 2026-10-27)
+
+The core camera and mount interfaces have passed their **individual** smoke tests. Before substantial application coding, test the complete field configuration in the following order. Statuses below distinguish **known**, **planned**, and **not yet verified**.
+
+| Priority | Test | Evidence for acceptance | Status |
+| --- | --- | --- | --- |
+| P0 | 64 GB USB 3 acquisition drive | Identify correct USB device and filesystem **before any formatting**, inspect capacity/UUID, mount persistently by UUID, perform non-destructive write/read integrity and sustained throughput test, verify clean unmount/remount and reboot persistence | **Not yet tested** |
+| P0 | Camera capture to target storage | Verify explicit manual gain/exposure control, multiple consecutive RAW16 frames, nontrivial image statistics, preview of ordinary scene, proper frame format/12-bit alignment, and checksums/file sizes on the new drive | **One RAW16 frame saved to SD**; further work pending |
+| P0 | Realistic whole-system load & power | SV705C + AM3N + USB3 recording drive (+ intended Wi-Fi if needed) active together; monitor `vcgencmd get_throttled`, supply/buck ratings and voltage under load, `dmesg` USB disconnects/resets, `journalctl` and temperatures for ~20–30 minutes | **Single camera frame and mount tests verified, combined sustained test pending** |
+| P1 | Offline startup / time / network | Reboot on real field power without Internet; verify local browser accessibility, Wi-Fi/AP behaviour, reliable clock acquisition or clock fallback, mount clock synchronization, stable devices and writable data path | **NTP synchronized while online; offline untested, no hardware RTC** |
+| P1 | Mount with actual optical payload | Confirm cables, camera/OTA clearance and power branches during native Home path (including near zenith); confirm external physical stop/power access and usable normal-stop/deadman behaviour | **Home and normal stops tested with existing configuration; full field cable/safety layout pending** |
+| P2 | Repeatability and recovery | Restart services, remove/reconnect devices **only while capture/motors are safely idle**, validate camera rediscovery, serial port by-id, readable files and predictable failure handling; reboot/power cycle time/location retention | **Not yet systematically tested** |
+
+**Technical notes:**
+- Raspberry Pi 4 documentation gives **1.2 A total downstream USB power budget** (shared across all ports), not 1.2 A per port. A powered USB hub is an option **only if actual tests show a power issue**. Source: `https://www.raspberrypi.com/documentation/computers/raspberry-pi.html`.
+- USB 3 cabling can degrade nearby 2.4 GHz reception; try a properly positioned dongle/5 GHz when testing actual field-network configuration.
+- SV705C SDK property readback reported supported bin values 1, 2, 3, 4, whereas the public SV705C specification explicitly lists 1× and 2×. Treat bin 3 and 4 as **unverified** until acquiring frames; do not assume that an advertised SDK field guarantees physical support. Product source: `https://www.svbony.com/products/sv705c-color-planetary-camera-imx585`.
+- Current success is a single saved RAW16 full-frame file from a dark, severely defocused optical setup. A file with correct size is not sufficient proof of correct debayering, pixel alignment, proper exposures or write reliability.
+- **Not a pre-coding blocker:** actual sky alignment, target GoTo accuracy, sustained sidereal/AltAz tracking, refined focusing and browser UI. They should be tested iteratively as the related modules are implemented, before real observing sessions.
+- Do not purchase additional hardware (RTC, powered hub, new storage) until the relevant acceptance test establishes a real need.
+
 ## Configuration still to record
 
 - Telescope and focal length, including any reducer or Barlow (for image scale and field-of-view estimates).
