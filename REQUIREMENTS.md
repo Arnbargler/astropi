@@ -18,6 +18,10 @@ This document records features explicitly selected for AstroPi. The larger à-la
 
 **Implementation / validation note:** Before relying on the integration, test VirtualSky with the full OpenNGC catalogue for rendering performance, label density and correct object selection. Filtering the objects displayed at each zoom level is acceptable; the full catalogue should remain searchable. The selection is recorded here; it is **not yet implemented or hardware-tested**.
 
+## Explicit scope decisions
+
+- **Camera:** SVBONY SV705C only. The SC571CC is **out of scope**; do not plan a ToupTek camera driver, camera switching, or SC571CC cooling controls.
+
 ## Not yet selected
 
-All remaining items from the proposed à-la-carte feature list are undecided. Do not interpret their earlier discussion as approval to implement them.
+Other items from the proposed à-la-carte feature list remain undecided unless explicitly recorded here. Do not interpret earlier discussion as approval to implement them.
