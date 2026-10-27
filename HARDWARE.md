@@ -124,6 +124,22 @@ Using the same working USB serial path and read-only LX200-like commands on `ast
 
 - **Still untested:** authoritative validation of all status flags, tracking behavior, physical motion and emergency stop, park/unpark, homing and GoTo. (Raw status queries do return replies.)
 
+### Current AM3N site coordinates and mount clock vs AstroPi clock (2026-10-27)
+
+Read-only USB serial queries returned:
+
+| Command | Raw response | Interpretation |
+| --- | --- | --- |
+| `:Gt#` | `+45*30:19#` | Latitude **+45°30′19″** ≈ **45.50528° N** |
+| `:Gg#` | `+076*05:12#` | Longitude **+76°05′12″** in mount's Meade **west-positive** convention; ≈ **76.08667° W**, or **−76.08667° east-positive** |
+| `:GS#` | `00:09:06#` | Sidereal-time readback; **accuracy is unverified** while mount date/time look reset |
+
+- West-positive convention supported by third-party ZWO AM mount serial driver documentation: `https://pkg.go.dev/github.com/mikefsq/lx200@v0.2.2/am5`. Do not use the raw sign as east-positive when communicating with map/astronomy libraries.
+- User-supplied Pi `timedatectl`: **Tue 2026-10-27 09:07:37 EDT**, UTC **13:07:37**, timezone **America/Toronto (EDT, UTC−4)**, `System clock synchronized: yes`, `NTP service: active`, no hardware RTC.
+- Earlier mount date/time/zone readback was `01/01/00#`, `00:07:12#`, `+00:00#`, so its clock appears **unset/unsynchronized** despite Pi synchronization. No mount clock or site settings changed.
+- **Do not equate the Pi time zone with mount `:GG#` sign convention without verifying the ZWO protocol.** Also confirm that the stored mount latitude/longitude are the user's intended observing site before assigning them to AstroPi configuration.
+- No motor or set commands issued; next test should establish an emergency-stop path and cautious physical motion before GoTo.
+
 ## ZWO AM3N serial connection — earlier AstroPi tests (2026-08-31)
 
 The following were recovered from earlier mount-control work on the Raspberry Pi; these are **historical results**, not tests on the disconnected mount during the 2026-10-27 hardware baseline.
