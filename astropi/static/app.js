@@ -214,6 +214,7 @@ $("capture-now").addEventListener("click", async () => {
   captureRequestPending = true;
   updateButtons();
   write("capture-error", "");
+  write("capture-results", "");
   write("capture-state", "Requesting next full-resolution camera frame…");
   try {
     const reply = await post("/api/capture", {formats});
@@ -236,7 +237,7 @@ function showCapture(job) {
   if (job.phase === "error" && job.error) write("capture-error", job.error);
   if (job.phase === "done" && Array.isArray(job.files)) {
     write("capture-error", "");
-    const lines = ["Saved: " + job.directory,
+    const lines = ["Saved: " + job.directory, "metadata.json (settings and checksums)",
       ...job.files.map(file => file.format + ": " + file.path +
         " (" + (file.bytes / 1048576).toFixed(1) + " MiB)")];
     write("capture-results", lines.join("\n"));

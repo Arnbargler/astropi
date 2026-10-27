@@ -186,3 +186,28 @@ def test_capture_api_requires_operator_and_valid_formats(tmp_path):
     assert r.get_json()["id"] == "test-capture-id"
     assert client.post("/api/capture", headers=headers, json={"formats": ["png"]}).status_code == 503
     assert client.get("/api/capture/status").get_json()["phase"] == "idle"
+
+
+
+def test_mid_save_failure_leaves_only_an_explicitly_partial_capture(tmp_path):
+    class FailSecondFile(CaptureStorage):
+        def _atomic_write(self, dir_fd, name, payload):
+            if name == "sv705c.fits":
+                raise OSError("simulated disk write failure")
+            return super()._atomic_write(dir_fd, name, payload)
+
+    store = FailSecondFile(
+        settings(tmp_path),
+        verifier=lambda path, uuid: {
+            "ready": True, "free_bytes": 1_000_000_000, "state": "ready",
+        },
+    )
+    with pytest.raises(OSError, match="simulated disk write failure"):
+        store.save(sample_raw(), ("raw", "fits"), gain=0, exposure_us=100_000,
+                   received_at=WHEN, stretch="fixed")
+    recorded = list((tmp_path / "captures").iterdir())
+    assert len(recorded) == 1
+    assert recorded[0].name.endswith(".partial")
+    assert not (recorded[0] / "metadata.json").exists()
+    assert (recorded[0] / "sv705c.raw16").exists()
+    assert not (recorded[0] / "sv705c.fits").exists()

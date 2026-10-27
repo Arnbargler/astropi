@@ -22,7 +22,7 @@ Do not build a general camera-agnostic driver system or implement unselected fea
 | `sky/catalog.py` / `sky/atlas.py` | Offline OpenNGC/Messier index and VirtualSky integration via replaceable adapter; sky-chart object selection → internal GoTo only. No manual RA/Dec entry UI. |
 | `server/` and `web/` | Responsive subdued-dark interface; multiple read-only viewers; exactly **one operator lease** with Take Control, timeout, consistent state feed; no login system on trusted LAN. |
 
-The split is conceptual; exact filenames and language for frontend are not yet decisions. Add unit tests for coordinate conversion, loss of operator lease, missing storage, session lifecycle and serial parsing. Keep Pi-specific hardware tests separate from pure code tests.
+The modular Flask/Python implementation now includes astropi/camera, astropi/capture, and astropi/web.py. Keep these ownership boundaries and use the existing endpoints rather than introducing a competing camera handler. Add unit tests for coordinate conversion, loss of operator lease, missing storage, session lifecycle and serial parsing. Keep Pi-specific hardware tests separate from pure code tests.
 
 ## Camera integration rules derived from working probes
 

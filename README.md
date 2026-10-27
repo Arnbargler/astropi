@@ -36,4 +36,4 @@ Validate the **experimental SV705C colour preview** using [SETUP.md](SETUP.md), 
 - Trusted home/field local network only; no user accounts or Internet-facing service planned.
 - Do not commit private credentials, SDK binaries or large captured RAW/FITS data.
 
-**Suggested new-session opener:** “Continue AstroPi from the private GitHub repository `Arnbargler/astropi`. Read README, REQUIREMENTS, HARDWARE and DEVELOPMENT in that order. Hardware probes are completed; start the modular application without changing scope or assuming untested mount features.”
+**Suggested new-session opener:** “Continue AstroPi from the private GitHub repository `Arnbargler/astropi`. Read README, REQUIREMENTS, HARDWARE and DEVELOPMENT in that order. The live camera preview works on Pi; the new one-shot RAW16/FITS/JPG/PNG saver requires its first USB hardware test. Preserve the single camera SDK owner, storage UUID checks, and untested mount safety boundaries.”
