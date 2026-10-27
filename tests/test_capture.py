@@ -387,3 +387,22 @@ def test_capture_worker_freezes_gain_exposure_during_active_sequence():
     with pytest.raises(RuntimeError, match="locked"):
         worker.configure(10, 100_000)
     assert worker._settings_request_id == 0
+
+
+
+def test_sequence_quicklook_stretch_frozen_at_start():
+    store = FakeSave()
+    manager = CaptureManager(store)
+    manager.request(["jpg"], count=2, stretch="fixed")
+    assert manager.accept_frame(b"one", gain=0, exposure_us=100000,
+                                stretch="auto")
+    deadline = time.monotonic() + 3
+    while manager.status()["completed_frames"] < 1 and time.monotonic() < deadline:
+        time.sleep(0.01)
+    assert manager.accept_frame(b"two", gain=0, exposure_us=100000,
+                                stretch="auto")
+    deadline = time.monotonic() + 3
+    while manager.status()["phase"] == "saving" and time.monotonic() < deadline:
+        time.sleep(0.01)
+    assert manager.status()["phase"] == "done"
+    assert [x[2]["stretch"] for x in store.received] == ["fixed", "fixed"]

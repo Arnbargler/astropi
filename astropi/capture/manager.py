@@ -23,6 +23,7 @@ class CaptureManager:
         self._lock = threading.Lock()
         self._pending = False
         self._stop_after_write = False
+        self._sequence_stretch = None
         self._state = self._initial()
         self._writer_thread = None
 
@@ -51,9 +52,11 @@ class CaptureManager:
                 "waiting", "saving",
             )
 
-    def request(self, selected, count=1):
+    def request(self, selected, count=1, stretch=None):
         """Start capture. One-shot remains the default for existing API."""
         formats = validate_formats(selected)
+        if stretch is not None and stretch not in ("auto", "fixed"):
+            raise ValueError("Quicklook stretch must be auto or fixed")
         if type(count) is not int or not 1 <= count <= self.MAX_FRAMES:
             raise ValueError(f"Frame count must be an integer from 1 to {self.MAX_FRAMES}")
         with self._lock:
@@ -70,6 +73,7 @@ class CaptureManager:
             )
             self._pending = True
             self._stop_after_write = False
+            self._sequence_stretch = stretch if count > 1 else None
             return identifier
 
     def cancel(self):
@@ -95,6 +99,8 @@ class CaptureManager:
             formats = tuple(self._state["formats"])
             index = self._state["completed_frames"] + 1
             count = self._state["total_frames"]
+            if self._sequence_stretch is not None:
+                stretch = self._sequence_stretch
             self._state["current_frame"] = index
             self._state["phase"] = "saving"
             received_at = datetime.now(timezone.utc)
