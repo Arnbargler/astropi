@@ -130,7 +130,7 @@ Using the same working USB serial path and read-only LX200-like commands on `ast
 - Latitude: **+45.2933°** north → **+45°17′36″** rounded to nearest arcsecond.
 - Longitude: **−75.8571°** east-positive (75.8571° west) → mount's **west-positive** setter **+075°51′26″** rounded to nearest arcsecond.
 - Corresponding known ZWO AM-series location-setting commands (as implemented in INDI's `LX200AM5::updateLocation`): `:Sg+075*51:26#` for longitude and `:St+45*17:36#` for latitude, with single-byte `1` success acknowledgement, followed by readback `:Gg#`/`:Gt#`. Upstream reference: `https://github.com/indilib/indi/blob/master/drivers/telescope/lx200am5.cpp`.
-- **Status:** User-provided AstroPi target location **recorded**, but **not yet written to or verified on the mount**. Last confirmed mount values remain latitude `+45*30:19#`, longitude `+076*05:12#` (west-positive); write/test next before alignment or GoTo.
+- **Status (verified on AM3N, 2026-10-27):** Before adjustment, `:Gt#` returned `+45*30:19#` and `:Gg#` returned `+076*05:12#`; sent `:Sg+075*51:26#` → acknowledgment `b'1'`, then `:St+45*17:36#` → acknowledgment `b'1'`. Subsequent readbacks returned **latitude `+45*17:36#` and longitude `+075*51:26#`**, matching the user-selected observing site to whole-arcsecond precision. `:GS#` then returned `11:06:40#`. **Site setting and readback verified; pointing alignment and GoTo not verified.**
 - AstroPi application should keep one explicit astronomy convention (east-positive signed decimal longitude), converting only at this ZWO command boundary.
 
 ### Current AM3N site coordinates and mount clock vs AstroPi clock (2026-10-27)
