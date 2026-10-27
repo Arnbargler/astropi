@@ -68,6 +68,10 @@ class FakeCamera:
         if type(enabled) is not bool:
             raise ValueError("Debayer must be boolean")
         return enabled
+    def capture_status(self):
+        return {"phase": "idle", "id": None, "files": []}
+    def request_capture(self, formats):
+        return "fake-id"
 
 
 def test_http_requires_lease(tmp_path):
