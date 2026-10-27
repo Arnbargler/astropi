@@ -1,20 +1,22 @@
-# AstroPi — single-image recording milestone (2026-10-27)
+# AstroPi — counted exposure sequences (2026-10-27)
 
-## Verified and pending
+## Verification status
 
-Pi browser preview, colour/mono paths, and gain/exposure response are verified
-on the actual SV705C. At 50ms: colour preview 14.8 FPS / RAW 15.8 FPS,
-mono preview 16.6 FPS / RAW 16.5 FPS.
+SV705C live preview, gain/exposure response and RAW/FITS/JPG/PNG single
+capturing are verified on the Pi. Four real USB capture directories produced
+11 image files; all 11 passed size and SHA-256 readback checks.
 
-The one-shot USB file recorder passed simulated filesystem, format, API and
-browser tests and **has now created files on the real Pi** in four separate
-folders. All 11 real files passed size and SHA-256 checks against metadata.json;
-independent FITS pixel/header interpretation still needs inspection. Timed sequences
-and AM3N mount movement/GoTo/tracking are not implemented.
+Counted **2–100-frame sequences and Cancel** are new, code-tested features
+that still need their first real Raspberry Pi hardware test. A read-only
+independent FITS/RAW16 Bayer pixel checker is also included; it passed
+synthetic tests but has not yet checked the real files.
 
-## Update and start the service
+No mount movement, tracking, plate solving or fixed-interval sequence
+scheduling has been added. The camera SDK stream remains continuous.
 
-Stop the old Flask process with Ctrl+C, then run these commands on AstroPi:
+## Install
+
+Stop the old Flask app with Ctrl+C. On the Pi:
 
     cd ~/astropi
     git pull --ff-only
@@ -23,76 +25,70 @@ Stop the old Flask process with Ctrl+C, then run these commands on AstroPi:
     python -m pytest -q
     python run.py --host 0.0.0.0 --port 8080
 
-Visit http://astropi.local:8080/ (or the Pi LAN IP), hard refresh
-Ctrl+Shift+R, Take Control and Start preview. This is still a LAN-only
-development server, not a systemd service. Never expose it to the Internet.
+Open http://astropi.local:8080/ on the trusted LAN, hard-refresh using
+Ctrl+Shift+R, Take Control, then Start preview.
 
-## Single-image save operation
+## Sequence controls
 
-Choose a short exposure (start at 100ms) and gain (start 0), wait for SDK
-Actual readbacks. In the **Save next camera frame** panel toggle any
-combination of formats, then click **Capture & Save**. Defaults are FITS
-and JPG selected; RAW16 and PNG optional. One button click uses the next
-retrieved full-frame camera RAW16 buffer for all chosen files. No saving
-happens automatically during ordinary preview.
+1. Choose exposure and gain from the existing radio-style presets. Wait for
+   their Actual SDK readbacks before starting a sequence.
+2. Check FITS/RAW16/JPG/PNG independently. FITS and JPG default selected.
+3. Set Frames in sequence to a whole number from **2 to 100** (default 10).
+4. Click Start Sequence and monitor "completed / requested" frames.
+5. Cancel Sequence stops at the next safe frame boundary. If a file is
+   being written, that frame is allowed to finish and sync first.
+6. Capture & Save remains a separate **single-frame** button.
 
-The UI shows Waiting -> Saving -> Saved/Failed and lists generated paths.
-Files are grouped in a timestamped folder under:
+The Pi saves one full-resolution RAW16 sensor frame at a time. All selected
+formats for that frame come from the SAME source buffer; the next source
+frame is not accepted until the disk writer has finished. The SDK never
+restarts between exposures. Exposure, gain and the saved JPG/PNG stretch
+are frozen throughout each sequence; changing exposure/gain is rejected.
+
+Each sequence frame gets its own timestamped folder under:
+
     /media/astropi-data/captures/
 
-Example files in one group (only selected formats are generated):
-    sv705c.raw16
-    sv705c.fits
-    sv705c.jpg
-    sv705c.png
-    metadata.json
+The folder contains only the selected formats plus metadata.json. Its
+"sequence" metadata includes the common job ID, 1-based frame index, and
+total requested count; completed frame folders are listed in the UI.
+Each frame has SHA-256 checksums and a UTC receipt timestamp; FITS start
+time is estimated because the camera SDK supplies no sensor timestamp.
 
-## Format fidelity
+**USB safety:** The Pi verifies the exact mounted recording UUID and
+sufficient estimated space for the ENTIRE requested sequence before
+acceptance, and verifies the USB again for every saved frame. Each completed
+directory is published atomically; incomplete writes remain .partial.
+There is NO fallback to the Pi's microSD card. The operation ends with a
+reported error if the drive fails or becomes full during recording.
 
-- RAW16: exact 3856x2180 little-endian camera SDK bytes; 12-bit GRBG sensor
-  values are shifted left four bits in a 16-bit container; no header.
-- FITS: scientifically useful 3856x2180 12-bit GRBG Bayer mosaic stored
-  unsigned via BITPIX=16 signed big-endian plus BZERO=32768 / BSCALE=1.
-  Readers reconstruct physical values 0..4095. No debayer/stretch applied.
-- JPG: colour quick-look only, 1928x1090 8-bit 2x2 GRBG superpixels; lossy.
-- PNG: same quick-look at 1928x1090 8-bit colour but lossless compression.
-  JPG/PNG use the selected auto/fixed stretch even if live Debayer is off.
-  These are NOT high-resolution calibrated science data. Keep FITS/RAW16
-  for scientific stacking and later processing.
-- metadata.json: settings, sensor dimensions, UTC receipt time, Bayer format,
-  file names, sizes and SHA-256 hashes.
+**Browser independence:** A recording continues on the Pi if the controlling
+browser reloads or disconnects. Do not restart/kill the Flask/Python process
+mid-sequence; service crashes/reboots do not resume a sequence automatically.
+Camera Stop terminates the sequence (possibly after an in-flight frame).
+Long exposures up to 30 seconds can delay cancellation or Stop until the
+SDK's current exposure/wait returns.
 
-FITS DATE-OBS is only an ESTIMATE: Pi UTC frame-receipt timestamp minus
-configured exposure; the current SDK interface provides no sensor hardware
-exposure-start timestamp. Pi has no RTC. Confirm UTC/NTP or manually verify
-the clock for offline field captures. The camera may buffer frames across
-setting changes, so SDK control readbacks are not calibrated timing proof.
+**Timing:** Sequence cadence is as fast as exposure, readout and the
+selected file formats allow. It is NOT a fixed-second interval scheduler.
 
-## USB recording safety
+## First hardware test
 
-Before accepting a job and again before each write/publish, AstroPi checks
-that /media/astropi-data is a mounted, writable filesystem with EXACT UUID:
-25b33cfa-b178-4b86-8a15-d00c8305cca5
+Use 5 frames, 100 ms exposure, gain 0, FITS+JPG only. Verify that progress
+reaches 5/5 frames saved. On AstroPi inspect the newest folders:
 
-The writer refuses recording when the USB is absent, wrong or low on space.
-All write operations use directory file descriptors pinned to the mounted USB
-device, not a blind pathname which might point to underlying microSD.
-File data and directories are fsynced. A whole capture folder is published
-atomically ONLY after all selected outputs and metadata are saved. If anything
-fails in the middle, the directory remains explicitly named .partial and is
-not reported as a completed exposure. Do not move/unplug USB during a save.
+    find /media/astropi-data/captures -mindepth 1 -maxdepth 1 -type d | tail -n 12
 
-One image-save job at a time; saving happens in a separate worker thread and
-continues after browser disconnect. Recording full exposure sequences is a
-future milestone. The telescope is never moved by this version.
+Then try a 10-frame sequence, optionally including RAW16 and PNG.
+To test Cancel, try a 10-frame sequence and cancel after 2–3 saved.
+Don't intentionally disconnect the USB stick during writing.
 
-The user has already recorded FITS-only, FITS+JPG and all-four-format sets.
-To inspect or further verify those files:
+## Independent FITS/RAW pixel verification
 
-    ls -lah /media/astropi-data/captures/
-    find /media/astropi-data/captures -maxdepth 2 -type f | tail -n 20
+Run this read-only check on the previously saved four-format exposure:
 
-Real USB file-size and SHA-256 verification: 4/4 capture folders PASS,
-11/11 files PASS (2026-10-27). Next: independently inspect FITS
-headers/pixel values before treating the data as scientifically validated. Never intentionally unplug USB
-during a save. Longer exposure sequences remain for subsequent development.
+    python -m astropi.capture.verify /media/astropi-data/captures/20261027T212451_166770_6a75d1
+
+This validates file lengths, SHA-256, FITS header dimensions, Bayer
+metadata, 12-bit range and, when RAW16 is included, EVERY FITS pixel
+against the original RAW16 data. No writes or SDK access.

@@ -1,8 +1,8 @@
 # AstroPi — project handoff
 
-**Status (2026-10-27): SV705C preview and colour/mono frame rates VERIFIED on Pi. One-shot RAW16/FITS/JPG/PNG capture successfully created selected formats on the real Pi USB drive in four separate capture directories; recorded file sizes and SHA-256 checksums verified on Pi (11/11 files); FITS pixel/header interpretation remains a separate check. Timed sequences and mount control are unimplemented.** AstroPi is a Raspberry Pi 4-hosted, browser-operated deep-sky camera and telescope controller for one SVBONY SV705C and one ZWO AM3N mount, operating in **Alt/Az only**.
+**Status (2026-10-27): SV705C preview and colour/mono frame rates VERIFIED on Pi. One-shot RAW16/FITS/JPG/PNG capture successfully created selected formats on the real Pi USB drive in four separate capture directories; recorded file sizes and SHA-256 checksums verified on Pi (11/11 files); FITS pixel/header interpretation remains a separate check. Counted frame sequences (2–100) are now implemented and software-tested, but await first real Pi sequence test; mount control is unimplemented.** AstroPi is a Raspberry Pi 4-hosted, browser-operated deep-sky camera and telescope controller for one SVBONY SV705C and one ZWO AM3N mount, operating in **Alt/Az only**.
 
-This private GitHub repository is the durable handoff for a **new AI assistant or development session**. Do not infer that a tested terminal script is a committed application: **live camera preview and one-shot USB file creation are Pi-verified; FITS pixel/header validation, exposure sequences and mount control remain outstanding**.
+This private GitHub repository is the durable handoff for a **new AI assistant or development session**. Do not infer that a tested terminal script is a committed application: **live camera preview and one-shot USB file creation are Pi-verified; on-Pi sequence testing, FITS Bayer pixel verification and mount control remain outstanding**.
 
 ## Read in this order
 
@@ -36,4 +36,4 @@ Validate the **experimental SV705C colour preview** using [SETUP.md](SETUP.md), 
 - Trusted home/field local network only; no user accounts or Internet-facing service planned.
 - Do not commit private credentials, SDK binaries or large captured RAW/FITS data.
 
-**Suggested new-session opener:** “Continue AstroPi from the private GitHub repository `Arnbargler/astropi`. Read README, REQUIREMENTS, HARDWARE and DEVELOPMENT in that order. The live camera preview works on Pi; the one-shot RAW16/FITS/JPG/PNG saver produced four real capture folders on Pi USB; the 11 saved files passed size and SHA-256 checks; validate FITS science content separately, then implement sequences. Preserve the single camera SDK owner, storage UUID checks, and untested mount safety boundaries.”
+**Suggested new-session opener:** “Continue AstroPi from the private GitHub repository `Arnbargler/astropi`. Read README, REQUIREMENTS, HARDWARE and DEVELOPMENT in that order. The live camera preview works on Pi; the one-shot RAW16/FITS/JPG/PNG saver produced four real capture folders on Pi USB; the 11 saved files passed size and SHA-256 checks; validate FITS science content using the read-only checker and hardware-test the new counted sequences. Preserve the single camera SDK owner, storage UUID checks, and untested mount safety boundaries.”
