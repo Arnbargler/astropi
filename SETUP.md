@@ -6,9 +6,10 @@ SV705C live preview, gain/exposure response and RAW/FITS/JPG/PNG single
 capturing are verified on the Pi. Four real USB capture directories produced
 11 image files; all 11 passed size and SHA-256 readback checks.
 
-**A five-frame exposure sequence has now completed on the real Pi**, with five
-completed frame folders reported by the browser. Longer runs and the actual
-Cancel behaviour are not yet hardware-verified. The independent FITS/RAW16
+**Five-frame and ten-frame sequences have completed on the real Pi.** A
+separate ten-frame sequence was safely cancelled with **4/10 saved**, four
+contiguously numbered frame folders and **zero .partial directories**.
+Extended endurance and simulated/real USB-failure recovery remain unverified. The independent FITS/RAW16
 checker passed against a real previously saved four-format camera capture:
 all four file size/hash checks passed, FITS structure and 12-bit range passed,
 and every FITS Bayer pixel matched the corresponding RAW16 sensor value.
@@ -81,9 +82,10 @@ for the five-frame FITS+JPG run. To inspect the latest folders:
 
     find /media/astropi-data/captures -mindepth 1 -maxdepth 1 -type d | tail -n 12
 
-**Next:** try a 10-frame sequence, optionally including RAW16 and PNG;
-check its file count and hashes. Test Cancel on a 10-frame sequence after
-2–3 saved and verify no incomplete frame is reported as complete.
+**Completed on Pi:** 10/10 normal sequence (ID 77f0893f415b) and 4/10
+cancelled sequence (ID 62b28bdbfabd). Frame numbering contiguous and zero
+incomplete folders. Next check these sequence frames' file-size/SHA-256
+checksums, optional all-format recording, and longer endurance/fault handling.
 Don't intentionally disconnect the USB stick during writing.
 
 ## Independent FITS/RAW pixel verification

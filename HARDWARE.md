@@ -114,11 +114,29 @@ PASS: All FITS pixels match the RAW16 sensor pixels.
 
 Hence **all 8,406,080 pixels of that saved FITS matched the paired RAW16** after accounting for the native 12-bit left shift and FITS signed storage offset. This validates one real recorded science-data pair; it does not independently calibrate sensor response, guarantee exact exposure timestamps, establish browser-disconnect endurance, test cancellation under load or prove recovery from lost USB storage.
 
+## Ten-frame completion and cancellation (verified on Pi, 2026-10-27)
+
+Follow-up real-camera / USB sequence tests passed:
+
+| Sequence ID | Browser completion status | Independent manifest enumeration |
+| --- | --- | --- |
+| `77f0893f415b` | Normal ten-frame run | **10 / 10** folders with frame numbers **1–10**, no gaps |
+| `62b28bdbfabd` | **Sequence: Capture sequence cancelled**, **4 / 10 frames saved** | **4 / 10** folders with frame numbers **1–4**, no gaps |
+
+The cancelled run displayed four completed capture directories:
+
+- `captures/20261027T220217_190814_74cd27`
+- `captures/20261027T220218_694299_c0327c`
+- `captures/20261027T220234_233343_3aafe0`
+- `captures/20261027T220240_248883_c39207`
+
+The user's manifest-inspection script reported **`Incomplete folders: 0`**. Cancellation appears to have respected the safe write boundary: four finished frames were retained and the remaining six were not saved. Together with the prior five-frame pass, normal completion and short-run cancellation are now **hardware-verified**. Not independently reverified in this test: per-file SHA-256 for the new sequences, camera exposure timing, browser-disconnection endurance, >10-frame endurance, or deliberate USB-loss recovery. No AM3N mount movement in these camera tests.
+
 ## What remains unresolved (not pre-development blockers)
 
-1. **Pi browser status, SV705C preview and 50ms two-thread colour/mono rates are verified.** One-shot recording produced four completed capture directories on Pi USB with different combinations of FITS/RAW16/JPG/PNG. All 11 file sizes and SHA-256 checksums verified against metadata on the Pi; FITS 12-bit Bayer pixel equality against RAW16 verified for one real capture; first five-frame sequence completed and reported five saved directories on Pi USB. Longer runs, cancellation under load and auto-start still need testing/development.
+1. **Pi browser status, SV705C preview and 50ms two-thread colour/mono rates are verified.** One-shot recording produced four completed capture directories on Pi USB with different combinations of FITS/RAW16/JPG/PNG. All 11 file sizes and SHA-256 checksums verified against metadata on the Pi; FITS 12-bit Bayer pixel equality against RAW16 verified for one real capture; first five-frame sequence completed and reported five saved directories on Pi USB. Ten-frame completion and four-frame cancellation during a requested ten-frame sequence are Pi-verified, with zero incomplete folders. Endurance beyond ten frames, fault recovery and auto-start remain unverified/unfinished.
 2. **Mount:** sky-pointing alignment model, Alt/Az GoTo, tracking/stop control and Park; offline location/time recovery; abnormal link-failure safety. Home works but does not establish pointing accuracy.
-3. **Camera:** test long sequences and in-flight cancellation on Pi, separately verify per-frame saved sequence checksums, long-exposure metadata precision, colour calibration, ROI/binning beyond proven full-frame 1x and fault recovery. Live preview is near camera-limited speed at 50ms.
+3. **Camera:** test extended endurance and failure handling, separately verify per-frame saved sequence checksums, long-exposure metadata precision, colour calibration, ROI/binning beyond proven full-frame 1x and fault recovery. Live preview is near camera-limited speed at 50ms.
 4. **Physical field deployment:** actual optical tube and 12 V battery/buck wiring, cable clearance on Home/GoTo, safe physical Cancel, offline network and trusted time, sustained battery runtime. The successful test was with connected but **stationary** AM3N.
 5. **Service:** one process owns camera SDK; one serialized mount command queue; capture sequences must survive browser disconnect; one operator lease; timestamps/site/UUID validated before scientific recordings.
 
