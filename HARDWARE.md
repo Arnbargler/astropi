@@ -503,6 +503,19 @@ A follow-up to the exposure/gain sweep's `SVBGetVideoData` SDK timeout 11 at cap
 - **Interpretation:** Exposure control/readback and actual light response **verified**; the earlier timeout likely involved video-stream restart/state/timing, but root cause remains unproven. Design camera module to handle bounded timeouts and avoid unnecessary stop/restart cycles.
 - **Still pending:** Gain response at same exposure, repeat baseline if desired, prolonged simultaneous capture/storage/power test.
 
+### SV705C gain-100 fresh-session capture and file verification — PASS (2026-10-27)
+
+Following the successful fresh-session gain-0 / 50 ms baseline frame, the user opened a separate camera session using the correct SDK enumeration/info/open sequence and captured at requested **50,000 µs** exposure with requested **gain 100**:
+
+- Exposure readback: **`(50148, 0)`**; gain readback: **`(100, 0)`**.
+- **First** frame retrieval returned SDK code **0**.
+- Sampled **12-bit mean 440.11**, maximum 4095; zero-valued fraction 0.0%; saturated sampled fraction **0.05%**.
+- Baseline at same exposure with gain 0 had mean **133.34**. Thus observed ~**3.30× higher** image mean with gain 100 under comparable (not externally calibrated) scene lighting.
+- SHA-256 verification of the saved RAW16 file: **PASS**, at `/media/astropi-data/exposure-gain-test/test-C-gain100-20261027-114024.raw16`.
+- `SVBStopVideoCapture`, restoration of gain and exposure, and `SVBCloseCamera` **all returned 0**. Pi `vcgencmd get_throttled` was **`throttled=0x0`**.
+- **Conclusion:** Manual gain-setting command, readback and physical gain response **PASS**. Alongside 10→50 ms exposure light-response test (~4.88× for 5× requested exposure), both primary camera controls are verified for the first AstroPi implementation. These are not precision calibrations of gain or exposure.
+- **Next:** A 20-minute combined SV705C continuous-stream / USB3 data-drive recording and periodic power/temperature check, with the mount connected but no movement commanded. Count frame retrieval timeouts and file integrity failures; monitor USB link errors.
+
 ## Pre-development integrated hardware acceptance checklist (planned 2026-10-27)
 
 The core camera and mount interfaces have passed their **individual** smoke tests. Before substantial application coding, test the complete field configuration in the following order. Statuses below distinguish **known**, **planned**, and **not yet verified**.
@@ -510,7 +523,7 @@ The core camera and mount interfaces have passed their **individual** smoke test
 | Priority | Test | Evidence for acceptance | Status |
 | --- | --- | --- | --- |
 | P0 | 64 GB USB 3 acquisition drive | Identify correct USB device and filesystem **before any formatting**, inspect capacity/UUID, mount persistently by UUID, perform non-destructive write/read integrity and sustained throughput test, verify clean unmount/remount and reboot persistence | **PASS:** USB3 5000M, UUID mount after reboot, 512 MiB SHA-256 test, 20.2 MiB/s write, 16 MiB SHA-256 retention after reboot. Long-duration mixed camera/drive load still pending |
-| P0 | Camera capture to target storage | Verify explicit manual gain/exposure control, multiple consecutive RAW16 frames, nontrivial image statistics, preview of ordinary scene, proper frame format/12-bit alignment, and checksums/file sizes on the new drive | **10/10 RAW16 files on USB3 SHA-256 PASS; grayscale and GRBG colour previews PASS; ~5× exposure produced 4.88× mean brightness in a fresh camera session**; gain effect, exact colour and long-term reliability pending |
+| P0 | Camera capture to target storage | Verify explicit manual gain/exposure control, multiple consecutive RAW16 frames, nontrivial image statistics, preview of ordinary scene, proper frame format/12-bit alignment, and checksums/file sizes on the new drive | **PASS:** 10/10 RAW16 files on USB3 SHA-256, grayscale/GRBG colour previews, exposure 5×→4.88× brightness, gain 0→100 gives 3.30× mean brightness, readbacks correct. Precision calibration and endurance testing remain pending |
 | P0 | Realistic whole-system load & power | SV705C + AM3N + USB3 recording drive (+ intended Wi-Fi if needed) active together; monitor `vcgencmd get_throttled`, supply/buck ratings and voltage under load, `dmesg` USB disconnects/resets, `journalctl` and temperatures for ~20–30 minutes | **Single camera frame and mount tests verified, combined sustained test pending** |
 | P1 | Offline startup / time / network | Reboot on real field power without Internet; verify local browser accessibility, Wi-Fi/AP behaviour, reliable clock acquisition or clock fallback, mount clock synchronization, stable devices and writable data path | **NTP synchronized while online; offline untested, no hardware RTC** |
 | P1 | Mount with actual optical payload | Confirm cables, camera/OTA clearance and power branches during native Home path (including near zenith); confirm external physical stop/power access and usable normal-stop/deadman behaviour | **Home and normal stops tested with existing configuration; full field cable/safety layout pending** |
