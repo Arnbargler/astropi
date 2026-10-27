@@ -159,6 +159,23 @@ Using the persistent USB serial port, Python `pyserial` and the Raspberry Pi's N
 
 **Result:** All setters acknowledged success and the readback reflected the intended **2026-10-27 UTC time**, advancing three seconds over the three-second delay. Mount-to-Pi clock synchronization is **verified at the time of test**, but clock retention across mount power cycles and long-term drift **remain untested**. AstroPi should synchronize the mount after connection once system time is trustworthy (NTP or a validated offline clock). Set mount and software time zones consistently; retain explicit observing-site latitude/longitude and verify before GoTo.
 
+### Mount clock, site and sidereal-time consistency checked (2026-10-27)
+
+With the mount clock synchronized in UTC and the previously configured site retained, the user obtained the following **read-only** serial values at essentially the same instant as the Pi's UTC time:
+
+| Query | Response |
+| --- | --- |
+| `:GC#` | `10/27/26#` |
+| `:GL#` | `13:39:59#` |
+| `:GS#` | `10:59:22#` |
+| `:Gt#` | `+45*30:19#` |
+| `:Gg#` | `+076*05:12#` (west-positive) |
+| Pi UTC (`datetime.now(timezone.utc)`) | `2026-10-27T13:39:59.365169+00:00` |
+
+- **Independent astronomical cross-check:** For UTC `2026-10-27 13:39:59` and east-positive longitude `−76.0866667°`, a standard Julian-date/GMST calculation gives **local mean sidereal time `10:59:21.56`**. The AM3N returned **`10:59:22`**, agreeing within about **0.44 seconds** (subject to non-simultaneous serial query times, rounding and differences between mean/apparent time).
+- **Verified:** Clock readback matches NTP-synced Pi UTC at second resolution, location readback persists, and mount sidereal-time readback agrees with independent astronomy calculations for that configured longitude.
+- **Not yet verified:** The configured latitude and longitude correspond to the user's intended observing site, physical mount alignment or pointing accuracy, system time after complete offline boot, persistence across mount power cycles, and GoTo correctness. Verify intended site coordinates before alignment/GoTo.
+
 ### Stop-all communication probe (2026-10-27)
 
 - `arn@astropi` opened `/dev/serial/by-id/usb-ZWO_Systems_ZWO_Device_123456-if00` at 9600 baud, transmitted `:Q#`, paused 0.3 s, then queried status and position; serial port closed normally.
