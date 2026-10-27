@@ -208,7 +208,25 @@ Following the visually confirmed east/azimuth movement at variable `120×` speed
 - `:GZ#` → `013*43:10#`
 - `:GU#` → `nNZM000000800#`
 
-**Conclusion:** The mount's reported azimuth was stable (zero change across five polls) and the status consistently indicated no active slew. Combined with the user's visual movement confirmation, this **passes the initial azimuth manual-motion and normal stop-settling probes**. The exact deceleration duration and physical emergency stop during software/USB failure remain **unverified**. Next proposed step: brief, moderate-speed altitude-axis movement (`:Mn#` then `:Qn#` / `:Q#`) with ample clearance and physical cancel access.
+**Conclusion:** The mount's reported azimuth was stable (zero change across five polls) and the status consistently indicated no active slew. Combined with the user's visual movement confirmation, this **passes the initial azimuth manual-motion and normal stop-settling probes**. The exact deceleration duration and physical emergency stop during software/USB failure remain **unverified**. The altitude-axis test subsequently changed the mount-reported altitude at the same 120× rate (see below).
+
+### First commanded altitude-axis movement (2026-10-27)
+
+The user ran a cautious 3-second north/up test at variable rate **120× sidereal** using `:Rv120.00#` and `:Mn#`, followed by directional stop `:Qn#` and stop-all `:Q#` within a Python `finally` block.
+
+| Measurement | Raw mount reply |
+| --- | --- |
+| Before altitude `:GA#` | `+00*00:00#` |
+| Before azimuth `:GZ#` | `013*43:10#` |
+| Immediately after stop altitude | `+01*29:22#` |
+| Immediately after stop azimuth | `013*43:10#` |
+| Immediately after stop status | `nZM001300883#` |
+| Three seconds later altitude | `+01*30:50#` |
+| Three seconds later status | `nNZM000000880#` |
+
+**Interpretation:** Reported altitude increased **1°30′50″** total while azimuth was unchanged. The command-period change to the initial post-stop query was **1°29′22″**; another **1′28″** accrued before the three-second-later query, exactly the same post-stop positional difference seen in the azimuth 120× test. This supports commanded altitude-axis movement and repeatable **non-instantaneous stopping/settling**; do not assume a stop command instantaneously ends motion. The `N` status flag appears only in the settled sample; remaining suffix is not decoded. **Independent visual confirmation of altitude motion was not explicitly reported.** Long-term stationary stability after this test, physical stop under fault conditions, tracking and GoTo remain untested.
+
+**Next:** Perform a no-motion, five-sample `:GA#`/`:GZ#`/`:GU#` polling check; then move to configuration of mount time/site and alignment once command semantics are verified.
 
 ## ZWO AM3N serial connection — earlier AstroPi tests (2026-08-31)
 
