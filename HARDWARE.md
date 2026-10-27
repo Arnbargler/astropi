@@ -8,9 +8,8 @@ This file records the hardware we have chosen for AstroPi, how it connects, and 
 | --- | --- | --- |
 | Raspberry Pi | Runs headless AstroPi, camera acquisition, mount control and browser server | Exact model, RAM and OS/kernel for the AstroPi unit: **to confirm** |
 | SVBONY SV705C | Primary USB astronomical camera | Owned; planned first camera implementation using SVBONY SDK on Linux |
-| SVBONY SC571CC | Optional higher-resolution cooled astronomical camera | Owned; future ToupTek SDK driver, cooling controls required |
 | ZWO AM3 | Motorized telescope mount | Owned; **Alt/Az mode exclusively**; serial-control integration planned |
-| 12 V DC supply/distribution | Power to mount and cooled camera where appropriate | General power plan agreed; ratings, wiring and fused branches to document |
+| 12 V DC supply/distribution | Power to mount and accessories where appropriate | General power plan agreed; ratings, wiring and fused branches to document |
 | 12 V-to-5 V buck converter | Power for Raspberry Pi | Planned / available per owner; validate voltage, current capacity and behaviour under load |
 | N100 Linux Mint desktop | Optional development, simulation and browser access | Available; not required as an intermediary between GitHub and Pi |
 
