@@ -81,9 +81,9 @@ The prior preview was **2.2 FPS** / **143 ms JPEG processing**, so the new colou
 
 ## What remains unresolved (not pre-development blockers)
 
-1. **Pi browser status, live SV705C colour preview and current fast preview worker are verified.** Exposure/gain preset response and full 1–30-second range, RAW/FITS capture integration and systemd auto-start still require verification/development.
+1. **Pi browser status, SV705C preview and 50ms two-thread colour/mono rates are verified.** New one-shot RAW16/FITS/JPG/PNG saving is committed and software-tested but not yet physically verified on Pi USB; sequences and auto-start remain future work.
 2. **Mount:** sky-pointing alignment model, Alt/Az GoTo, tracking/stop control and Park; offline location/time recovery; abnormal link-failure safety. Home works but does not establish pointing accuracy.
-3. **Camera:** long-exposure/scientific FITS metadata, colour calibration, valid ROI/binning modes beyond proven full-frame 1×, predictable recovery after capture restart or USB faults. Preview now reaches camera-limited speed at 50 ms; retest any larger processing pipeline changes.
+3. **Camera:** verify one-shot RAW16/FITS/JPG/PNG saving to Pi USB; then test sequences, long-exposure metadata precision, colour calibration, ROI/binning beyond proven full-frame 1x and fault recovery. Live preview is near camera-limited speed at 50ms.
 4. **Physical field deployment:** actual optical tube and 12 V battery/buck wiring, cable clearance on Home/GoTo, safe physical Cancel, offline network and trusted time, sustained battery runtime. The successful test was with connected but **stationary** AM3N.
 5. **Service:** one process owns camera SDK; one serialized mount command queue; capture sequences must survive browser disconnect; one operator lease; timestamps/site/UUID validated before scientific recordings.
 

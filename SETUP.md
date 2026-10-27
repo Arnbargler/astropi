@@ -1,18 +1,18 @@
-# AstroPi — current camera preview setup (2026-10-27)
+# AstroPi — single-image recording milestone (2026-10-27)
 
-## Verified state
+## Verified and pending
 
-AstroPi uses a Raspberry Pi 4 (4 GiB), SVBONY SV705C (USB3), and ZWO AM3N
-(Alt/Az). The Pi has already run the browser status UI and live colour preview.
-Fixed stretch showed that gain and exposure both affect the camera as expected.
+Pi browser preview, colour/mono paths, and gain/exposure response are verified
+on the actual SV705C. At 50ms: colour preview 14.8 FPS / RAW 15.8 FPS,
+mono preview 16.6 FPS / RAW 16.5 FPS.
 
-This newer preview-performance and controls iteration is **software-tested but
-not yet Pi-tested**. Mount motion/GoTo/tracking and full RAW/FITS recording are
-not implemented. The browser is for a trusted local network only.
+The NEW one-shot USB file recorder has passed simulated filesystem, format,
+API and browser tests, **but has not yet saved on the real Pi**. Timed sequences
+and AM3N mount movement/GoTo/tracking are not implemented.
 
-## Updating and running
+## Update and start the service
 
-In the currently running Flask terminal, stop the old server with **Ctrl+C**.
+Stop the old Flask process with Ctrl+C, then run these commands on AstroPi:
 
     cd ~/astropi
     git pull --ff-only
@@ -21,53 +21,74 @@ In the currently running Flask terminal, stop the old server with **Ctrl+C**.
     python -m pytest -q
     python run.py --host 0.0.0.0 --port 8080
 
-Browse to http://astropi.local:8080/ or the Pi's LAN address. Hard-refresh
-with **Ctrl+Shift+R** to ensure the latest JavaScript/CSS loads. The server
-still runs as a foreground development process, not a systemd service. Do not
-forward the port to the Internet.
+Visit http://astropi.local:8080/ (or the Pi LAN IP), hard refresh
+Ctrl+Shift+R, Take Control and Start preview. This is still a LAN-only
+development server, not a systemd service. Never expose it to the Internet.
 
-Choose **Take Control**, then **Start preview**. Other browser viewers can
-watch the same JPEG but cannot change camera settings without the operator
-lease.
+## Single-image save operation
 
-## Controls
+Choose a short exposure (start at 100ms) and gain (start 0), wait for SDK
+Actual readbacks. In the **Save next camera frame** panel toggle any
+combination of formats, then click **Capture & Save**. Defaults are FITS
+and JPG selected; RAW16 and PNG optional. One button click uses the next
+retrieved full-frame camera RAW16 buffer for all chosen files. No saving
+happens automatically during ordinary preview.
 
-- Exposure uses 18 native radio inputs styled as buttons: 1, 2, 5, 10, 25,
-  50, 100, 250, 500, 750 milliseconds, then 1, 2, 5, 10, 15, 20, 25, 30
-  seconds.
-- Gain buttons: 0, 5, 10, 20, 30, 50, 75, 100.
-- Clicking EITHER an exposure or gain button automatically submits both current
-  selected values. No **Apply** button. Requested selections stay highlighted
-  while waiting for the SDK. The "Actual" fields report SDK readbacks.
-- **Stretch A/F**: Auto adaptive brightness stretch, or Fixed brightness scale.
-- **Debayer On/Off**: On = sampled GRBG colour JPEG, Off = faster grayscale JPEG
-  using the green photosites of the raw Bayer mosaic. Both modes still acquire
-  original full 3856×2180 RAW16 frames. Neither saves or modifies source RAW16.
+The UI shows Waiting -> Saving -> Saved/Failed and lists generated paths.
+Files are grouped in a timestamped folder under:
+    /media/astropi-data/captures/
 
-## Performance design
+Example files in one group (only selected formats are generated):
+    sv705c.raw16
+    sv705c.fits
+    sv705c.jpg
+    sv705c.png
+    metadata.json
 
-There is no longer any 250-ms artificial preview delay. One thread exclusively
-owns the SVBONY SDK and acquires RAW16 frames. A second thread reads immutable
-copies from a one-frame mailbox and produces reduced-resolution JPEGs. It
-drops outdated frames whenever processing falls behind, bounding memory use.
-Preview colour uses simplified GRBG averaging and precomputed stretch lookup
-tables; monochrome bypasses colour reconstruction entirely.
+## Format fidelity
 
-The browser checks for new preview sequence numbers every **50 ms**, retrieving
-only newly generated JPEGs. The displayed RAW FPS, JPEG FPS and processing
-time are separate metrics. The Pi's actual CPU, USB and exposure time determine
-the achievable rates; no speed guarantee until measured on hardware.
+- RAW16: exact 3856x2180 little-endian camera SDK bytes; 12-bit GRBG sensor
+  values are shifted left four bits in a 16-bit container; no header.
+- FITS: scientifically useful 3856x2180 12-bit GRBG Bayer mosaic stored
+  unsigned via BITPIX=16 signed big-endian plus BZERO=32768 / BSCALE=1.
+  Readers reconstruct physical values 0..4095. No debayer/stretch applied.
+- JPG: colour quick-look only, 1928x1090 8-bit 2x2 GRBG superpixels; lossy.
+- PNG: same quick-look at 1928x1090 8-bit colour but lossless compression.
+  JPG/PNG use the selected auto/fixed stretch even if live Debayer is off.
+  These are NOT high-resolution calibrated science data. Keep FITS/RAW16
+  for scientific stacking and later processing.
+- metadata.json: settings, sensor dimensions, UTC receipt time, Bayer format,
+  file names, sizes and SHA-256 hashes.
 
-The backend coalesces rapid exposure/gain clicks, retaining only the newest
-pending pair. A 30-second in-flight exposure may delay applying the next
-setting or honoring Stop by up to its exposure/read timeout plus margin.
-Start performance testing at **50 ms or 100 ms** exposure and compare Debayer
-On versus Off, including the Pi temperature.
+FITS DATE-OBS is only an ESTIMATE: Pi UTC frame-receipt timestamp minus
+configured exposure; the current SDK interface provides no sensor hardware
+exposure-start timestamp. Pi has no RTC. Confirm UTC/NTP or manually verify
+the clock for offline field captures. The camera may buffer frames across
+setting changes, so SDK control readbacks are not calibrated timing proof.
 
-The camera may show SDK code 11 on some stop/restart cycles, as previously
-observed in the separate hardware tests. Do not repeatedly unplug/reset it
-without checking the error. The mount is NEVER moved by this web application
-at its current development stage.
+## USB recording safety
 
-Read README.md, REQUIREMENTS.md, HARDWARE.md, and DEVELOPMENT.md for scope,
-exact hardware setup, important tested behaviour, and remaining work.
+Before accepting a job and again before each write/publish, AstroPi checks
+that /media/astropi-data is a mounted, writable filesystem with EXACT UUID:
+25b33cfa-b178-4b86-8a15-d00c8305cca5
+
+The writer refuses recording when the USB is absent, wrong or low on space.
+All write operations use directory file descriptors pinned to the mounted USB
+device, not a blind pathname which might point to underlying microSD.
+File data and directories are fsynced. A whole capture folder is published
+atomically ONLY after all selected outputs and metadata are saved. If anything
+fails in the middle, the directory remains explicitly named .partial and is
+not reported as a completed exposure. Do not move/unplug USB during a save.
+
+One image-save job at a time; saving happens in a separate worker thread and
+continues after browser disconnect. Recording full exposure sequences is a
+future milestone. The telescope is never moved by this version.
+
+First on-Pi test: record FITS+JPG with exposure 100ms/gain 0, then inspect
+files with:
+
+    ls -lah /media/astropi-data/captures/
+    find /media/astropi-data/captures -maxdepth 2 -type f | tail -n 20
+
+After first success, test all four formats. Send any capture error and the
+first resulting file listing. Never intentionally unplug the USB during a save.
