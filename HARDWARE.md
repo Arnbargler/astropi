@@ -7,7 +7,7 @@ This file records the hardware we have chosen for AstroPi, how it connects, and 
 | Device | Purpose | Status / notes |
 | --- | --- | --- |
 | Raspberry Pi 4 Model B Rev 1.5 (4 GB RAM) | Runs headless AstroPi, camera acquisition, mount control and browser server | **Verified on `astropi` (2026-10-27):** Raspberry Pi 4 Model B Rev 1.5; Debian GNU/Linux **13.6 (Trixie)**; kernel **`6.18.39+rpt-rpi-v8`**; `free -h`: **3.7 GiB RAM total**, 188 MiB used, 3.5 GiB available; 2.0 GiB swap, unused. The separate 2 GB Pi runs the music streamer. |
-| 64 GB USB 3 thumb drive | Intended storage for saved SV705C RAW/FITS exposures and image exports | **Detected 2026-10-27 at USB 3.0 5000M** as `/dev/sda` model `Flash Drive FIT`, total **59.8 GiB**. Contains a pre-existing Raspberry Pi-style partition scheme: `/dev/sda1` 512 MiB VFAT label `bootfs` UUID `0398-3084`; `/dev/sda2` 59.2 GiB ext4 label `rootfs` UUID `02f61d5e-92cb-4f9c-a781-099d97795020`. **Neither partition is mounted. No writes/formatting performed.** The running Pi boots from `/dev/mmcblk0` (separate UUIDs). Ask owner to confirm no data needs preserving before destructive repartition/format; then test throughput and persistent mount. |
+| 64 GB USB 3 thumb drive | Intended storage for saved SV705C RAW/FITS exposures and image exports | **User-approved 2026-10-27 reformat successful:** `Flash Drive FIT` at USB 3.0 **5000M**, 59.8 GiB. Old Pi OS image erased; now a single **ext4** GPT partition `sda1` labelled `astropi-data`, filesystem UUID **`25b33cfa-b178-4b86-8a15-d00c8305cca5`**. Confirmed independently with `blkid -p`, `wipefs -n`, and `lsblk` after `udevadm settle`. **Mount configuration and write tests still pending.** Operating-system root is separately on `/dev/mmcblk0`. |
 | SVBONY SV705C | Primary USB astronomical camera | **Detected and identified through SDK on AstroPi (2026-10-27):** USB `f266:9a0a` at **5000M**, permissions `0666`; Python SDK enumeration `1`; camera-info returned name, port `USB3.0`, ID `1`. **Full-resolution RAW16 frame successfully acquired and saved (all SDK return codes `0`); sampled pixel statistics checked, visual confirmation pending.** |
 | ZWO AM3N | Motorized telescope mount | **Connected to AstroPi, USB/CDC ACM enumerated (2026-10-27):** `03c3:4001`, `/dev/ttyACM0`, stable `/dev/serial/by-id/usb-ZWO_Systems_ZWO_Device_123456-if00`; `arn` in `dialout`. **Live serial queries verified** (`AM3N#`, firmware `1.8.8#`, RA/Dec responses). **User visually confirmed** commanded azimuth movement at 120× sidereal; instantaneous/fail-safe stop, tracking and GoTo remain unverified. Alt/Az mode exclusively; older protocol tests below. |
 | 12 V DC supply/distribution | Power to mount and accessories where appropriate | General power plan agreed; ratings, wiring and fused branches to document |
@@ -375,6 +375,17 @@ User hot-plugged the intended flash storage drive while both camera and AM3N rem
 `lsusb -t` simultaneously reported **USB 3 mass storage at 5000M**, SV705C vendor device at **5000M**, and ZWO AM3N CDC ACM at **12M** USB 2. USB **link negotiation** verified, but measured file write speed, integrity, bus stability under load, and persistent mount **not yet verified**.
 
 **Do not destroy the pre-existing partitions without explicit confirmation** that the stick's old OS image/data may be erased. If approved, create one clean ext4 acquisition volume and identify/mount it by UUID; record its replacement UUID and measured performance. Always reconfirm the device name before any destructive command: `/dev/sda` is observed now, not guaranteed forever.
+
+### USB acquisition stick: dedicated ext4 filesystem confirmed (2026-10-27)
+
+User explicitly approved **erasing the old Raspberry Pi OS image** on the removable `Flash Drive FIT` storage device. After repartitioning to one GPT Linux partition and formatting ext4, the first `lsblk` response showed the new `sda1` partition but no filesystem metadata; a later `udevadm settle`, `blkid -p`, `wipefs -n`, and `lsblk` verification confirmed:
+
+- Device at time of test: **`/dev/sda1`**, 59.8 GiB; original `/dev/mmcblk0` root OS untouched.
+- Filesystem: **ext4**, version 1.0, 4 KiB blocks, label **`astropi-data`**.
+- **Filesystem UUID:** `25b33cfa-b178-4b86-8a15-d00c8305cca5`.
+- GPT partition UUID: `91e60011-2543-48e3-9ecb-b4f151f8b565`.
+- Verified ext4 signature using `wipefs -n /dev/sda1` and `blkid -p /dev/sda1`.
+- **Status:** Format and metadata identification verified, **not mounted yet**. Next intended step is automatic mount at `/media/astropi-data` using the UUID and fstab `nofail`, followed by actual mount and sustained write/read verification. The application must refuse disk recording when this mount is missing; do not fall back to the microSD.
 
 ## Pre-development integrated hardware acceptance checklist (planned 2026-10-27)
 
