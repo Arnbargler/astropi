@@ -167,6 +167,22 @@ The user ran a Python serial test at 9600 baud on the stable ZWO device alias, w
 - **Conclusion:** Post-stop **position stability is verified by mount telemetry** over roughly 12 seconds. The poll contained no movement commands. This supports successful commanded stopping but does not substitute for independent visual confirmation or verify fail-safe stopping on a process crash or USB failure.
 - **Next cautiously proposed test:** 3-second motion at the same `:R5#` preset with direction-specific and all-stop commands in a `finally` block, and physical cancel immediately available; confirm physical motion and post-stop stability.
 
+### Second commanded AM3N azimuth motion — three-second rate-5 test (2026-10-27)
+
+User executed a 3-second eastward `:Me#` motion after sending rate preset `:R5#`, with `:Qe#` and `:Q#` stop commands in a Python `finally` clause. Telemetry:
+
+| Readback | Mount reported |
+| --- | --- |
+| Before azimuth | `000*02:00#` |
+| After azimuth | `000*08:00#` |
+| After status | `nNZM000000500#` |
+| Three seconds later azimuth | `000*08:00#` |
+| Three seconds later status | `nNZM000000500#` |
+
+- **Reported change: +6 arcminutes in 3 seconds**, consistent with the preceding +2 arcminutes in 1 second at the same preset. Post-stop azimuth/status remained constant in the separate 3-second follow-up observation.
+- This provides repeatable telemetry evidence for start/stop timing and mount motion; user has not yet clearly confirmed **seeing** the mount move. A more readily visible, brief higher-speed test has been requested; use cautious rate escalation, physical clearances and backup cancel control.
+- The mount's clock was still reported as unset earlier; no GoTo or alignment has been issued.
+
 ## ZWO AM3N serial connection — earlier AstroPi tests (2026-08-31)
 
 The following were recovered from earlier mount-control work on the Raspberry Pi; these are **historical results**, not tests on the disconnected mount during the 2026-10-27 hardware baseline.
