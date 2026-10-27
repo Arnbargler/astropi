@@ -14,6 +14,10 @@ let stretchChangePending = false;
 let debayerChangePending = false;
 let previousFrame = -1;
 let progressBusy = false;
+let storageReady = false;
+let captureBusy = false;
+let captureRequestPending = false;
+const saveFormats = ["fits", "raw", "jpg", "png"];
 const $ = id => document.getElementById(id);
 const write = (id, value) => { $(id).textContent = value; };
 const nearest = (values, number) => values.reduce((a, b) =>
@@ -44,6 +48,9 @@ function updateButtons() {
   $("release-control").hidden = !owner;
   $("start-camera").disabled = !owner || !["stopped", "error"].includes(currentPhase);
   $("stop-camera").disabled = !owner || !["running", "connecting"].includes(currentPhase);
+  $("capture-now").disabled = !owner || currentPhase !== "running" ||
+    !storageReady || captureBusy || captureRequestPending ||
+    !saveFormats.some(fmt => $("capture-" + fmt).checked);
   const active = owner && currentPhase === "running";
   for (const v of exposurePresets) $("exposure-" + v).disabled = !active;
   for (const v of gainPresets) $("gain-" + v).disabled = !active;
@@ -194,8 +201,51 @@ async function changeDebayer(enabled) {
 $("debayer-on").addEventListener("click", () => changeDebayer(true));
 $("debayer-off").addEventListener("click", () => changeDebayer(false));
 
+for (const fmt of saveFormats) {
+  $("capture-" + fmt).addEventListener("change", updateButtons);
+}
+$("capture-now").addEventListener("click", async () => {
+  if (captureBusy || captureRequestPending) return;
+  const formats = saveFormats.filter(fmt => $("capture-" + fmt).checked);
+  if (!formats.length) {
+    write("capture-error", "Select at least one file format");
+    return;
+  }
+  captureRequestPending = true;
+  updateButtons();
+  write("capture-error", "");
+  write("capture-state", "Requesting next full-resolution camera frame…");
+  try {
+    const reply = await post("/api/capture", {formats});
+    write("capture-state", "Capture " + reply.id + " queued; waiting for the next frame…");
+  } catch (error) {
+    write("capture-error", error.message);
+    write("capture-state", "Capture not started");
+  } finally {
+    captureRequestPending = false;
+    updateButtons();
+  }
+});
+function showCapture(job) {
+  if (!job) return;
+  captureBusy = job.phase === "waiting" || job.phase === "saving";
+  const stages = {idle: "No capture requested", waiting: "Waiting for next camera frame…",
+    saving: "Saving files on USB drive…", done: "Capture saved to USB drive",
+    error: "Capture failed"};
+  write("capture-state", stages[job.phase] || job.phase);
+  if (job.phase === "error" && job.error) write("capture-error", job.error);
+  if (job.phase === "done" && Array.isArray(job.files)) {
+    write("capture-error", "");
+    const lines = ["Saved: " + job.directory,
+      ...job.files.map(file => file.format + ": " + file.path +
+        " (" + (file.bytes / 1048576).toFixed(1) + " MiB)")];
+    write("capture-results", lines.join("\n"));
+  }
+  updateButtons();
+}
 function showProgress(data) {
   currentPhase = data.phase;
+  if (data.capture) showCapture(data.capture);
   write("camera-phase", "Camera: " + data.phase);
   const fps = typeof data.preview_fps === "number" ? data.preview_fps.toFixed(1) + " fps" : "— fps";
   const raw = typeof data.capture_fps === "number" ? data.capture_fps.toFixed(1) + " fps" : "— fps";
@@ -238,6 +288,7 @@ async function refresh() {
     if (data.camera.last_error) write("camera-error", data.camera.last_error);
     write("mount-usb", data.mount.usb_detected ? "USB detected" : "USB not detected");
     write("mount-serial", data.mount.serial_present ? "Serial alias available" : "Serial alias unavailable");
+    storageReady = Boolean(data.storage.ready);
     write("storage-state", data.storage.ready ? "Recording drive ready" : data.storage.state.replaceAll("_", " "));
     write("storage-free", freeSpace(data.storage.free_bytes));
     write("pi-temp", data.host.cpu_temperature_c === null ? "Temperature unavailable" : data.host.cpu_temperature_c + " °C");
@@ -245,7 +296,7 @@ async function refresh() {
     write("pi-uptime", typeof s === "number" ? "Uptime: " + Math.floor(s / 86400) +
       "d " + Math.floor(s % 86400 / 3600) + "h" : "Uptime unavailable");
     write("last-update", new Date(data.utc).toLocaleTimeString());
-    showProgress(data.camera);
+    showProgress({...data.camera, capture:data.capture});
   } catch (error) {
     el.textContent = "Service unavailable";
     el.className = "connection offline";

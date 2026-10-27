@@ -115,10 +115,10 @@ def create_app(settings: Settings | None = None, camera=None, lease=None) -> Fla
             return jsonify(error=str(exc)), 400
         except CaptureBusy as exc:
             return jsonify(error=str(exc)), 409
-        except RuntimeError as exc:
-            return jsonify(error=str(exc)), 409
         except StorageError as exc:
             return jsonify(error=str(exc)), 503
+        except RuntimeError as exc:
+            return jsonify(error=str(exc)), 409
         return jsonify(ok=True, id=capture_id), 202
 
     @app.get("/api/capture/status")

@@ -20,9 +20,9 @@
       </div>
     </header>
     <section class="intro">
-      <div class="eyebrow">DEVELOPMENT BUILD · CAMERA PREVIEW</div>
+      <div class="eyebrow">DEVELOPMENT BUILD · CAMERA CAPTURE</div>
       <h2>Observatory</h2>
-      <p>Experimental SV705C colour preview. One browser controls camera settings; multiple browsers can view the image. Mount commands and recording remain disabled.</p>
+      <p>Live SV705C preview and one-shot recording to the verified USB drive. One browser controls the camera; others can view. Mount commands remain disabled.</p>
     </section>
     <section class="preview-layout">
       <article class="card preview-card">
@@ -121,6 +121,24 @@
         <p id="camera-error" role="alert"></p>
         <p class="hint">Exposure/gain preset changes apply automatically. RAW acquisition and preview run separately; no science RAW/FITS data is recorded.</p>
       </article>
+    </section>
+    <section class="card save-panel" aria-label="Capture and save">
+      <div class="save-header">
+        <div><h3>Save next camera frame</h3>
+          <p>Choose any combination. All files come from the same fresh, full-resolution RAW16 frame.</p>
+        </div>
+        <button id="capture-now" disabled>Capture &amp; Save</button>
+      </div>
+      <div class="save-formats" role="group" aria-label="Recording file formats">
+        <label class="format-option"><input id="capture-fits" type="checkbox" checked><span><strong>FITS</strong><small>Full-res 12-bit Bayer · scientific</small></span></label>
+        <label class="format-option"><input id="capture-raw" type="checkbox"><span><strong>RAW16</strong><small>Exact 16-bit SDK bytes · original</small></span></label>
+        <label class="format-option"><input id="capture-jpg" type="checkbox" checked><span><strong>JPG</strong><small>Colour quick-look · lossy</small></span></label>
+        <label class="format-option"><input id="capture-png" type="checkbox"><span><strong>PNG</strong><small>Colour quick-look · lossless 8-bit</small></span></label>
+      </div>
+      <p class="hint">FITS/RAW16: 3856 × 2180, untouched Bayer mosaic. JPG/PNG: colour 1928 × 1090 convenience images. Captures also include metadata and SHA-256 checksums.</p>
+      <p id="capture-state" role="status" aria-live="polite">Ready to capture when the camera and recording drive are available.</p>
+      <p id="capture-error" role="alert"></p>
+      <div id="capture-results"></div>
     </section>
     <section class="cards" aria-label="System status">
       <article class="card"><h3>ZWO AM3N</h3><div class="metric" id="mount-usb">Checking…</div>
