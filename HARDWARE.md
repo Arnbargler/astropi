@@ -105,6 +105,23 @@ Both commands executed successfully at 9600 baud from `arn@astropi` using the pe
 - **No movement command was issued.** Verify Alt/Az altitude/azimuth and date/time readbacks next, then test safety stop before performing an actual slew.
 
 
+### Current AM3N pointing and clock query results (2026-10-27)
+
+Using the same working USB serial path and read-only LX200-like commands on `astropi`:
+
+| Command | Description | Observed response |
+| --- | --- | --- |
+| `:GA#` | Reported altitude | `+00*00:00#` |
+| `:GZ#` | Reported azimuth | `000*00:00#` |
+| `:GC#` | Mount date | `01/01/00#` |
+| `:GL#` | Mount local time | `00:07:12#` |
+| `:GG#` | Mount UTC offset | `+00:00#` |
+
+- Altitude and azimuth both read zero, **not proof of actual pointing** before alignment or physical position confirmation.
+- Date appears to represent **January 1, 2000** and clock time reads 00:07:12, unlike the current 2026-10-27 date. The mount clock therefore **appears unset/reset**. UTC offset 0 may be a default; do not assume it reflects the observing location.
+- Clock, offset, observing coordinates, and alignment should be managed explicitly in AstroPi before performing GoTo or interpreting sky positions. Avoid changing mount time or location until command semantics and intended observing location are confirmed.
+- **No motors moved in this test.** Next inspect configured site latitude/longitude (`:Gt#` / `:Gg#`) and consider whether the clock advances. Before any powered movement, verify a safe stop strategy and clear mechanical range.
+
 - **Still untested:** authoritative validation of all status flags, tracking behavior, physical motion and emergency stop, park/unpark, homing and GoTo. (Raw status queries do return replies.)
 
 ## ZWO AM3N serial connection — earlier AstroPi tests (2026-08-31)
