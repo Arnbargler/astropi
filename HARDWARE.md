@@ -157,7 +157,15 @@ The user ran a Python serial test at 9600 baud on the stable ZWO device alias, w
 3. In a Python `finally` block, transmitted directional stop `:Qe#` followed by all-stop `:Q#`.
 4. After 0.3 seconds: `:GU#` → `nNZM000000500#`, `:GA#` → `+00*00:00#`, `:GZ#` → `000*02:00#`; script finished without error.
 
-**Interpretation:** Mount-reported azimuth increased by **0°02′00″ (2 arcminutes, ≈0.0333°)**; mount-reported altitude was unchanged. The user said the mount *may* have moved physically, but by a tiny amount. The `N` status flag is consistent with not slewing during post-stop polling; the suffix `500` is **not decoded**. This supports a successful movement command and stop sequence at the telemetry level, **but does not independently prove physical movement or a fail-safe stop**. Next test: poll `:GZ#` and `:GU#` repeatedly without issuing any movement commands, verifying azimuth remains stable; independently test physical stopping in a controlled manner before any automated GoTo.
+**Interpretation:** Mount-reported azimuth increased by **0°02′00″ (2 arcminutes, ≈0.0333°)**; mount-reported altitude was unchanged. The user said the mount *may* have moved physically, but by a tiny amount. The `N` status flag is consistent with not slewing during post-stop polling; the suffix `500` is **not decoded**. This supports a successful movement command and stop sequence at the telemetry level, **but does not independently prove physical movement or a fail-safe stop**. A subsequent six-sample stationary readback showed the exact same position and status each time (see below). Independently test physical stopping in a controlled manner before any automated GoTo.
+
+### AM3N post-stop stationary monitoring (2026-10-27)
+
+- Following the initial `:R5#` / `:Me#` one-second movement and `:Qe#` + `:Q#` stop commands, the user ran a separate **read-only** Python polling test of `:GU#` and `:GZ#` six times at 2-second intervals.
+- **All six** status responses were identical: `nNZM000000500#`.
+- **All six** azimuth responses were identical: `000*02:00#` (reported azimuth drift **0 arcminutes** across the test).
+- **Conclusion:** Post-stop **position stability is verified by mount telemetry** over roughly 12 seconds. The poll contained no movement commands. This supports successful commanded stopping but does not substitute for independent visual confirmation or verify fail-safe stopping on a process crash or USB failure.
+- **Next cautiously proposed test:** 3-second motion at the same `:R5#` preset with direction-specific and all-stop commands in a `finally` block, and physical cancel immediately available; confirm physical motion and post-stop stability.
 
 ## ZWO AM3N serial connection — earlier AstroPi tests (2026-08-31)
 
