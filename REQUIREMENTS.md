@@ -41,11 +41,7 @@ This file is the **selected feature set** for AstroPi. Numbers below are retaine
 - **#38 — Single-image capture:** Save full-quality SV705C raw sensor frames, preferably as FITS with useful metadata.
 - **#39 — JPEG/PNG export:** Save or export processed/display images in browser-friendly formats.
 - **#40 — Exposure sequences:** Run a specified number of exposures of a selected duration on the Pi.
-- **#44 — Live stacking:** Accumulate successive deep-sky exposures while updating a browser preview.
-- **#45 — Alt/Az field-rotation compensation:** Register/rotate **separate frames** for live stacking; cannot correct rotation blur within a single exposure.
-- **#46 — Bad-frame rejection:** Simple quality screening to omit unusable frames from the live stack.
-- **#47 — Basic live-stack histogram/stretch:** Keep live-stack display adjustments simple and non-destructive.
-- **#48 — Optional file saving:** Checkbox-controlled saving of individual raw exposures and/or resulting stack; do not require every frame to be saved.
+- **#48 — Optional file saving:** Checkbox-controlled saving of individual high-quality raw exposures (including sequence frames) and image exports. When saving is enabled, preserve individual frames for later alignment, field-rotation correction and stacking in external astrophotography software. No live-stack files.
 
 **Image-precision decision:** There is **no manual bit-depth selection** (#7 is not a user-interface feature). Use highest suitable SV705C sensor precision for recorded DSO data (12-bit sensor values in a 16-bit storage container), while serving efficient 8-bit compressed previews to browsers. Preview processing must not damage the original raw data.
 
@@ -53,7 +49,7 @@ This file is the **selected feature set** for AstroPi. Numbers below are retaine
 
 - **#53 — Responsive browser interface:** Usable on a desktop, tablet or phone.
 - **#54 — Subdued dark theme:** A tasteful low-brightness astronomy interface, **closer to N.I.N.A. than a bright SharpCap-style screen**; not an entirely red interface.
-- **#56 — Background operation:** The Pi owns ongoing exposures/stacks/sequences; browser disconnect or reload must not stop them.
+- **#56 — Background operation:** The Pi owns ongoing exposures and capture sequences; browser disconnect or reload must not stop them.
 - **#57 — Status display:** Camera/mount connectivity, current operations, frame status, basic Pi health, and meaningful errors.
 - **#59 — Multiple viewers / Take Control:** Multiple browser clients share one camera feed. Exactly one active operator may control camera and mount at a time. Provide **Take Control** and release/timeout handling. **No user accounts, passwords or access-control security for this trusted local setup.** The backend must still enforce operator ownership to prevent conflicting commands, and a disconnected operator's continuous manual slew must stop.
 
@@ -62,5 +58,6 @@ This file is the **selected feature set** for AstroPi. Numbers below are retaine
 - **Camera:** SV705C only. Do not implement the SC571CC, ToupTek driver, camera switching or camera-cooling support.
 - **Observing:** Deep-sky targets, **Alt/Az only**. No planetary high-speed/video feature set.
 - **Not selected:** #23 plate solving, #24 automatic plate-solve alignment and #25 automatic GoTo centering. Pointing refinement will be **manual** via selected alignment stars. Do not silently add these features.
+- **No live stacking:** #44–#47 are excluded. No live frame registration, Alt/Az field-rotation correction, live bad-frame rejection, or live-stack stretch; those tasks may be performed later using desktop astrophotography processing software.
 - **All other menu features not listed above remain out of scope** unless explicitly selected later.
 - **Status:** Design requirements recorded; software implementation and real hardware validation remain future work.
