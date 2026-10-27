@@ -11,7 +11,7 @@ const GAIN = [0,5,10,20,30,50,75,100];
 
 function harness() {
   const elements = new Map(), intervals = new Map(), calls = [];
-  let capture = {phase:"idle",files:[],directory:null};
+  let capture = {phase:"idle",files:[],directory:null,total_frames:0,completed_frames:0,directories:[]};
   let camera = {
     phase: "running", has_frame: false, frame_number: 0,
     gain: 0, exposure_us: 100143, settings_applied_id: 0,
@@ -42,6 +42,15 @@ function harness() {
     if (url === "/api/camera/progress") return {ok:true,json:async()=>({...camera,capture:{...capture}})};
     if (url === "/api/control/take") return {ok:true,json:async()=>({token:"test-token"})};
     if (url === "/api/control/heartbeat") return {ok:true,json:async()=>({ok:true})};
+    if (url === "/api/capture/sequence") {
+      capture = {phase:"waiting",id:"sequence-mock",total_frames:payload.count,
+        completed_frames:0,formats:payload.formats,files:[],directories:[]};
+      return {ok:true,json:async()=>({ok:true,id:"sequence-mock",count:payload.count})};
+    }
+    if (url === "/api/capture/cancel") {
+      capture = {...capture,phase:"cancelled",cancel_requested:true};
+      return {ok:true,json:async()=>({ok:true,id:capture.id})};
+    }
     if (url === "/api/capture") {
       capture = {phase:"waiting",id:"mock-1",formats:payload.formats,files:[]};
       return {ok:true,json:async()=>({ok:true,id:"mock-1"})};
@@ -169,4 +178,62 @@ test("save controls are disabled when no formats are selected",async()=>{
   for(const name of ["fits","raw","jpg","png"]) h.el("capture-"+name).checked=false;
   h.el("capture-fits").dispatch("change");
   assert.equal(h.el("capture-now").disabled,true);
+});
+
+
+test("sequence frame count submits formats and does not require browser to stay open",async()=>{
+  const h=harness();
+  await h.flush();
+  await h.el("take-control").dispatch("click");
+  h.el("capture-fits").checked=true;
+  h.el("capture-jpg").checked=true;
+  h.el("capture-raw").checked=false;
+  h.el("capture-png").checked=false;
+  h.el("sequence-count").value="5";
+  h.el("sequence-count").dispatch("input");
+  assert.equal(h.el("start-sequence").disabled,false);
+  await h.el("start-sequence").dispatch("click");
+  const sends=h.calls.filter(c=>c.url==="/api/capture/sequence");
+  assert.equal(sends.length,1);
+  assert.deepEqual(sends[0].payload,{count:5,formats:["fits","jpg"]});
+  await h.intervals.get(50)();
+  assert.equal(h.el("start-sequence").disabled,true);
+  assert.equal(h.el("gain-5").disabled,true);
+  assert.equal(h.el("cancel-sequence").disabled,false);
+  h.updateCapture({phase:"saving",completed_frames:2,current_frame:3, total_frames:5});
+  await h.intervals.get(50)();
+  assert.match(h.el("sequence-progress").textContent,/2 \/ 5/);
+  h.updateCapture({phase:"done",completed_frames:5,
+    directories:["captures/a","captures/b","captures/c","captures/d","captures/e"]});
+  await h.intervals.get(50)();
+  assert.equal(h.el("start-sequence").disabled,false);
+  assert.equal(h.el("cancel-sequence").disabled,true);
+  assert.match(h.el("capture-results").textContent,/captures\/e/);
+});
+
+test("sequence cancel is operator controlled and updates browser status",async()=>{
+  const h=harness();
+  await h.flush();
+  assert.equal(h.el("cancel-sequence").disabled,true);
+  await h.el("take-control").dispatch("click");
+  h.el("sequence-count").value="2";
+  await h.el("start-sequence").dispatch("click");
+  await h.intervals.get(50)();
+  assert.equal(h.el("cancel-sequence").disabled,false);
+  await h.el("cancel-sequence").dispatch("click");
+  await h.intervals.get(50)();
+  assert.equal(h.el("cancel-sequence").disabled,true);
+  assert.match(h.el("capture-state").textContent,/cancelled/);
+});
+
+test("invalid sequence counts are rejected without POST",async()=>{
+  const h=harness();
+  await h.flush();
+  await h.el("take-control").dispatch("click");
+  for(const count of ["1","101","3.5","0"]) {
+    h.el("sequence-count").value=count;
+    h.el("sequence-count").dispatch("input");
+    assert.equal(h.el("start-sequence").disabled,true);
+  }
+  assert.equal(h.calls.filter(c=>c.url==="/api/capture/sequence").length,0);
 });
