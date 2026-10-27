@@ -297,8 +297,28 @@ After the 3-second 120× north/up movement and subsequent stop/settling, the use
 | `:GR#` | `21:52:17#` |
 | `:GD#` | `+44*35:00#` |
 
-**Home control remains untested**. INDI's ZWO AM mount driver uses the USB serial command `:hC#` for Go Home, distinct from `:hP#` for Park; the user's **1.8.8** firmware has a distinct horizontal default Park posture. An AM-series hand controller is optional for normal USB control but is useful as a physical Cancel safety fallback during an autonomous Home slew. A future Home test should provide adequate mechanical/cable clearance and monitor positions until stopped.
+**At that time Home control remained untested**, but the user subsequently ran a successful USB-controlled `:hC#` Home operation (see below). INDI's ZWO AM mount driver uses `:hC#` for Home, distinct from `:hP#` for Park; firmware **1.8.8** has a distinct horizontal default Park posture. The AM-series hand controller is optional for normal USB control but is a useful independent physical Cancel fallback during an autonomous slew.
 
+
+### First verified ZWO AM3N autonomous Go Home from AstroPi (2026-10-27)
+
+**Successful actual motion over USB serial** with firmware **1.8.8**, in **Alt/Az** mode and with the hand controller **disconnected**. The user had substantial physical clearance and explicitly observed the test completing. The Python test sent **`:hC#`** directly on the stable serial port, then polled `:GU#`, `:GA#` and `:GZ#` approximately every two seconds, with a 90-second timeout and `:Q#` fallback if it did not detect completion.
+
+| Moment | Altitude | Azimuth | Status |
+| --- | --- | --- | --- |
+| Before Home command | `+01*30:50#` | `013*43:10#` | — |
+| First observed poll | `+09*19:25#` | `005*52:02#` | `nZM010100994#` |
+| On ascent (example) | `+82*26:55#` | `358*07:37#` | `nZM800100994#` |
+| Near zenith | `+88*20:29#` | `180*58:30#` | `nZM8b8900992#` |
+| On descent (example) | `+79*36:52#` | `002*52:37#` | `nZM808900992#` |
+| First Home reading | `-00*00:00#` | `000*00:00#` | `nNHZM040400990#` |
+| Four consecutive stable readings | `-00*00:00#` | `000*00:00#` | `nNHZM040400990#` |
+| Final status queried | `-00*00:00#` | `000*00:00#` | `nNHZM040400990#` |
+
+- **Verified:** The Home command `:hC#` initiated a motorized return sequence without the hand controller; the reported position reached 0° altitude and 0° azimuth, and the program detected four consistent home-position/status samples before exiting successfully. Third-party ZWO driver documentation confirms `H` in `:GU#` = at home, `N` = no longer slewing, `Z` = Alt/Az. Reference: `https://pkg.go.dev/github.com/mikefsq/lx200@v0.2.2/am5`.
+- **Safety discovery:** The reported Home path passed **within ~1°40′ of zenith**, and azimuth readings underwent ~180° jumps near the top. These may involve coordinate discontinuities at/near zenith, so do **not** conclude the motor physically rotated instantaneously by ~180°. However the reported trajectory raises real concerns for telescope clearance, tripod/pier strike, cable strain, and autonomous motion planning. Recheck with the **actual telescope and cable bundle** before routine Home use; this test does not establish collision safety.
+- **Physical safety caveat:** The user explicitly **did not plug in the hand controller** for this test. USB software timeout/stop cannot guarantee safety during a lost link or process failure. Recommend an independent reachable cancel/power mechanism before running unattended or higher-risk motion.
+- **Next checks:** A short read-only follow-up to reconfirm Home and stable axes; only afterward investigate alignment and GoTo. Clock/location were synchronized and site corrected beforehand; Home does **not** itself establish sky-pointing accuracy or alignment.
 
 ## ZWO AM3N serial connection — earlier AstroPi tests (2026-08-31)
 
