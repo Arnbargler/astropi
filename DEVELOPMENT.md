@@ -1,6 +1,6 @@
 # AstroPi development guide (read-only browser skeleton present)
 
-**Status: browser status and SV705C colour preview verified on Pi (2026-10-27); a newer preview-pacing and input-polling fix is awaiting Pi retest.** Read [REQUIREMENTS.md](REQUIREMENTS.md) for authoritative scope and [HARDWARE.md](HARDWARE.md) for **actually verified** devices and quirks. This file is a recommended route to implementation, **not a claim that the proposed hardware-control modules or system services already exist**. Keep implementation modular and modest; avoid one enormous `app.py`.
+**Status: browser status and SV705C colour preview verified on Pi (2026-10-27); a fixed-scale preview mode and RAW pixel measurements are added for diagnosing gain response, pending Pi retest.** Read [REQUIREMENTS.md](REQUIREMENTS.md) for authoritative scope and [HARDWARE.md](HARDWARE.md) for **actually verified** devices and quirks. This file is a recommended route to implementation, **not a claim that the proposed hardware-control modules or system services already exist**. Keep implementation modular and modest; avoid one enormous `app.py`.
 
 ## First working milestone
 

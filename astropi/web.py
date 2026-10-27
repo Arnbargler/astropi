@@ -78,6 +78,16 @@ def create_app(settings: Settings | None = None, camera=None, lease=None) -> Fla
             return jsonify(error="Camera command queue is full"), 429
         return jsonify(ok=True, request_id=request_id), 202
 
+    @app.post("/api/camera/preview-mode")
+    def camera_preview_mode():
+        require_operator()
+        payload = request.get_json(silent=True) or {}
+        try:
+            mode = worker.set_preview_mode(payload.get("mode"))
+        except ValueError as exc:
+            return jsonify(error=str(exc)), 400
+        return jsonify(ok=True, mode=mode)
+
     @app.get("/api/camera/progress")
     def camera_progress():
         # Cheap polling path; avoids findmnt and USB scans on every frame check.

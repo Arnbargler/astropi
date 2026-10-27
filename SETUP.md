@@ -33,3 +33,14 @@ Stop Flask using Ctrl+C, pull changes, run pytest, restart, and attempt Take Con
 The SV705C live colour preview was confirmed working on AstroPi. Two UI/performance bugs were found: the three-second polling cycle replaced unsaved exposure/gain inputs after focus moved, and the browser's 1200ms image timer plus 750ms backend frame throttle prevented a fast preview. This update independently preserves dirty values until **Apply settings**, acknowledges a settings command only when the single SDK worker has applied it, and checks for new camera frames at 200ms intervals (downloading the JPEG only when its sequence number changes). Backend preview cap is now 250ms and it reports **measured JPEG preview FPS**, **measured camera read FPS**, and **JPEG-processing milliseconds**. There is no promise of a particular frame rate: full-frame RAW16 exposure, USB read time and Pi CPU processing still determine it.
 
 Stop the Flask server (Ctrl+C), pull, run `python -m pytest -q`, then restart. Refresh the browser (Ctrl+Shift+R). Try 50ms or 100ms exposure first, edit BOTH exposure and gain without pressing Apply, wait >3 seconds to verify edits remain unchanged, then click Apply once. Report the measured FPS and processing time displayed below the preview. There is no RAW/FITS recording and no mount action in this update.
+
+
+## Gain visibility diagnosis — new preview controls (2026-10-27)
+
+AstroPi's full-frame SV705C colour preview works, but changing gain was not visually obvious. The initial JPEG processing uses a different low/high percentile for **each frame and colour channel**, cancelling many brightness changes. This does **not** prove gain is ineffective: earlier separate hardware probes measured the raw mean rising about 3.3x from gain 0 to 100 at the same exposure.
+
+The new **Preview brightness** selector has two options:
+- **Auto stretch — faint detail:** current per-frame adaptive preview for astronomy. Brightness changes can be disguised.
+- **Fixed stretch — compare gain:** one gamma-adjusted 0–4095 mapping for every frame. Use this for gain/exposure comparisons; the image may look darker.
+
+The panel now displays **RAW mean / 4095 ADU**, **99th-percentile ADU** and **% saturated**, computed from a small subset of unmodified RAW16 frame pixels (12-bit values obtained with >>4). These are indicative, not sensor calibration. Use an evenly lit scene and constant exposure. Test gain 0 and gain 100, waiting for Applied and for at least two fresh JPEG frames each time. The RAW mean should change if gain is taking effect. If it does not, report the displayed mean, gain and exposure; then check the SDK control path. All adjustments are display-only except the existing explicit camera gain/exposure controls. No RAW/FITS data is saved.

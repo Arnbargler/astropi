@@ -2,7 +2,7 @@ import io
 import numpy as np
 from PIL import Image
 
-from astropi.camera.preview import raw16_to_jpeg
+from astropi.camera.preview import raw16_to_jpeg, raw16_statistics
 from astropi.camera.sdk import RAW_BYTES, WIDTH, HEIGHT
 from astropi.camera.worker import CameraWorker
 from astropi.config import Settings
@@ -60,6 +60,10 @@ class FakeCamera:
     def configure(self, gain, exposure_us):
         if type(gain) is not int:
             raise ValueError("Invalid gain")
+    def set_preview_mode(self, mode):
+        if mode not in ("auto", "fixed"):
+            raise ValueError("Invalid preview mode")
+        return mode
 
 
 def test_http_requires_lease(tmp_path):
@@ -125,7 +129,7 @@ def test_worker_setting_command_is_acknowledged_only_when_applied(monkeypatch):
     from astropi.camera import worker as module
     from astropi.camera.sdk import EXPOSURE, GAIN
 
-    monkeypatch.setattr(module, "raw16_to_jpeg", lambda raw: b"\xff\xd8test")
+    monkeypatch.setattr(module, "raw16_to_jpeg", lambda raw, stretch="auto": b"\xff\xd8test")
     active = threading.Event()
     observed = []
 
@@ -166,3 +170,43 @@ def test_fast_camera_progress_endpoint_works(tmp_path):
     response = client.get("/api/camera/progress")
     assert response.status_code == 200
     assert response.get_json()["frame_number"] == 0
+
+
+
+def test_gain_changes_unstretched_pixels_even_if_auto_preview_looks_similar():
+    import numpy as np
+    raw = np.empty((HEIGHT, WIDTH), dtype="<u2")
+    raw[:] = 144 << 4
+    fixed_low = np.asarray(Image.open(io.BytesIO(raw16_to_jpeg(raw, stretch="fixed"))))
+    auto_low = np.asarray(Image.open(io.BytesIO(raw16_to_jpeg(raw, stretch="auto"))))
+    stats_low = raw16_statistics(raw)
+    raw[:] = 550 << 4
+    fixed_high = np.asarray(Image.open(io.BytesIO(raw16_to_jpeg(raw, stretch="fixed"))))
+    auto_high = np.asarray(Image.open(io.BytesIO(raw16_to_jpeg(raw, stretch="auto"))))
+    stats_high = raw16_statistics(raw)
+    assert stats_low["raw_mean_adu"] == 144
+    assert stats_high["raw_mean_adu"] == 550
+    assert float(fixed_high.mean()) > float(fixed_low.mean()) + 25
+    # Constant uniform scenes have the same output under auto normalization.
+    assert abs(float(auto_high.mean()) - float(auto_low.mean())) < 2
+
+
+def test_preview_mode_endpoint_requires_operator(tmp_path):
+    config = Settings(tmp_path, "expected", tmp_path / "serial", tmp_path / "usb")
+    client = create_app(settings=config, camera=FakeCamera()).test_client()
+    assert client.post("/api/camera/preview-mode", json={"mode": "fixed"}).status_code == 403
+    token = client.post("/api/control/take").get_json()["token"]
+    headers = {"X-AstroPi-Control": token}
+    response = client.post("/api/camera/preview-mode", headers=headers, json={"mode": "fixed"})
+    assert response.status_code == 200
+    assert response.get_json()["mode"] == "fixed"
+    assert client.post("/api/camera/preview-mode", headers=headers, json={"mode": "invalid"}).status_code == 400
+
+
+def test_preview_statistics_reject_short_buffer():
+    try:
+        raw16_statistics(bytes(2))
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("Short raw buffer accepted")

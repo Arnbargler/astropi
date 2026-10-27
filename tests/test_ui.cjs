@@ -12,7 +12,8 @@ test("status polling never overwrites either unapplied camera input", async () =
   let camera = {
     phase: "running", has_frame: false, frame_number: 0,
     gain: 0, exposure_us: 100143, settings_applied_id: 0,
-    preview_fps: 1.0, preview_processing_ms: 100
+    preview_fps: 1.0, preview_processing_ms: 100,
+    preview_mode: "auto", raw_mean_adu: 150, raw_p99_adu: 300, raw_saturated_percent: 0
   };
   function el(id) {
     if (!elements.has(id)) {
@@ -45,6 +46,10 @@ test("status polling never overwrites either unapplied camera input", async () =
     }
     if (url === "/api/camera/settings") {
       return {ok: true, json: async () => ({ok: true, request_id: 1})};
+    }
+    if (url === "/api/camera/preview-mode") {
+      camera = {...camera, preview_mode: JSON.parse(options.body).mode};
+      return {ok: true, json: async () => ({ok:true, mode:camera.preview_mode})};
     }
     throw Error("Unexpected request " + url);
   };
@@ -84,6 +89,12 @@ test("status polling never overwrites either unapplied camera input", async () =
   assert.equal(el("gain").value, 30);
   assert.equal(el("exposure-ms").value, 250);
   assert.match(el("settings-message").textContent, /applied/);
+  assert.match(el("raw-metrics").textContent, /RAW mean: 150/);
+  el("preview-mode").value = "fixed";
+  await el("preview-mode").dispatch("change");
+  await intervals.get(200)();
+  assert.equal(camera.preview_mode, "fixed");
+  assert.equal(el("preview-mode").value, "fixed");
 });
 
 test("preview checks run more often than old 1200ms timer and avoid duplicate JPEG loads", async () => {

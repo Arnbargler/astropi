@@ -22,6 +22,7 @@ function updateButtons() {
   for (const id of ["gain", "exposure-ms", "apply-settings"]) {
     $(id).disabled = !editEnabled;
   }
+  $("preview-mode").disabled = !owner;
 }
 for (const id of ["gain", "exposure-ms"]) {
   $(id).addEventListener("input", () => {
@@ -92,6 +93,14 @@ $("release-control").addEventListener("click", async () => {
 });
 $("start-camera").addEventListener("click", () => action("/api/camera/start"));
 $("stop-camera").addEventListener("click", () => action("/api/camera/stop"));
+$("preview-mode").addEventListener("change", async () => {
+  try {
+    await post("/api/camera/preview-mode", {mode: $("preview-mode").value});
+    write("camera-error", "");
+  } catch (error) {
+    write("camera-error", error.message);
+  }
+});
 $("apply-settings").addEventListener("click", async () => {
   const gain = Number($("gain").value);
   const exposureMs = Number($("exposure-ms").value);
@@ -118,6 +127,17 @@ function showProgress(data) {
   const processing = typeof data.preview_processing_ms === "number" ? data.preview_processing_ms.toFixed(0) + " ms processing" : "";
   write("frame-count", (data.frame_number || 0) + " JPEG frames · " + fps + " preview · " + capture + " · " + processing);
   syncSettings(data);
+  if (typeof data.preview_mode === "string" &&
+      document.activeElement !== $("preview-mode")) {
+    $("preview-mode").value = data.preview_mode;
+  }
+  if (typeof data.raw_mean_adu === "number") {
+    write("raw-metrics", "RAW mean: " + data.raw_mean_adu.toFixed(1) +
+      " / 4095 ADU · 99th percentile: " + data.raw_p99_adu +
+      " · saturated: " + data.raw_saturated_percent.toFixed(2) + "%");
+  } else {
+    write("raw-metrics", "Raw sensor signal: waiting for frames…");
+  }
   updateButtons();
   const image = $("preview-image");
   if (!data.has_frame) {

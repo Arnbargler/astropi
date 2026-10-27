@@ -5,7 +5,7 @@ import threading
 import time
 
 from .sdk import SVBDriver, SDKError, RAW_BYTES, GAIN, EXPOSURE
-from .preview import raw16_to_jpeg
+from .preview import raw16_to_jpeg, raw16_statistics
 
 
 class CameraWorker:
@@ -26,6 +26,10 @@ class CameraWorker:
         self._capture_fps = 0.0
         self._preview_fps = 0.0
         self._preview_ms = 0.0
+        self._preview_mode = "auto"
+        self._raw_mean_adu = None
+        self._raw_p99_adu = None
+        self._raw_saturated_percent = None
 
     def status(self):
         with self._lock:
@@ -37,6 +41,10 @@ class CameraWorker:
                 "capture_fps": self._capture_fps,
                 "preview_fps": self._preview_fps,
                 "preview_processing_ms": self._preview_ms,
+                "preview_mode": self._preview_mode,
+                "raw_mean_adu": self._raw_mean_adu,
+                "raw_p99_adu": self._raw_p99_adu,
+                "raw_saturated_percent": self._raw_saturated_percent,
             }
 
     def frame(self):
@@ -56,6 +64,9 @@ class CameraWorker:
             self._settings_request_id = 0
             self._settings_applied_id = 0
             self._capture_fps = self._preview_fps = self._preview_ms = 0.0
+            self._raw_mean_adu = None
+            self._raw_p99_adu = None
+            self._raw_saturated_percent = None
             self._thread = threading.Thread(target=self._run, name="sv705c-sdk", daemon=True)
             self._thread.start()
             return True
@@ -80,6 +91,14 @@ class CameraWorker:
             self._commands.put_nowait((request_id, gain, exposure_us))
             self._settings_request_id = request_id
             return request_id
+
+    def set_preview_mode(self, mode):
+        """Software-only stretch selection; browser never touches the SDK."""
+        if mode not in ("auto", "fixed"):
+            raise ValueError("Preview mode must be auto or fixed")
+        with self._lock:
+            self._preview_mode = mode
+        return mode
 
     def _run(self):
         driver = None
@@ -135,7 +154,10 @@ class CameraWorker:
                 # Acquisition continues between previews; source RAW is never altered.
                 if now - last_preview < 0.25:
                     continue
-                jpeg = raw16_to_jpeg(raw)
+                with self._lock:
+                    mode = self._preview_mode
+                stats = raw16_statistics(raw)
+                jpeg = raw16_to_jpeg(raw, stretch=mode)
                 finished = time.monotonic()
                 processing_ms = 1000.0 * (finished - now)
                 if last_preview_complete is not None and finished > last_preview_complete:
@@ -148,6 +170,9 @@ class CameraWorker:
                     self._image = jpeg
                     self._sequence += 1
                     self._preview_ms = round(processing_ms, 1)
+                    self._raw_mean_adu = stats["raw_mean_adu"]
+                    self._raw_p99_adu = stats["raw_p99_adu"]
+                    self._raw_saturated_percent = stats["raw_saturated_percent"]
                     if measured:
                         previous = self._preview_fps
                         self._preview_fps = round(measured if previous == 0 else 0.25 * measured + 0.75 * previous, 2)

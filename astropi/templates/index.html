@@ -44,6 +44,13 @@
         <label for="gain">Gain</label>
         <input id="gain" type="number" min="0" max="100" step="1" value="0" disabled>
         <button id="apply-settings" disabled>Apply settings</button>
+        <label for="preview-mode">Preview brightness</label>
+        <select id="preview-mode" disabled>
+          <option value="auto">Auto stretch — faint detail</option>
+          <option value="fixed">Fixed stretch — compare gain</option>
+        </select>
+        <p class="hint">Auto stretch normalizes every frame and can hide gain changes. Fixed stretch uses the same brightness scale on every frame.</p>
+        <p id="raw-metrics">Raw sensor signal: waiting for frames…</p>
         <p id="settings-message" role="status" class="settings-message"></p>
         <p id="camera-error" role="alert"></p>
         <p class="hint">Images are disposable 8-bit JPEG previews. No science RAW/FITS data is being recorded.</p>
