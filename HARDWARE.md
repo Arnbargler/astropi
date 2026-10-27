@@ -8,7 +8,7 @@ This file records the hardware we have chosen for AstroPi, how it connects, and 
 | --- | --- | --- |
 | Raspberry Pi 4 Model B Rev 1.5 (4 GB RAM) | Runs headless AstroPi, camera acquisition, mount control and browser server | **Verified on `astropi` (2026-10-27):** Raspberry Pi 4 Model B Rev 1.5; Debian GNU/Linux **13.6 (Trixie)**; kernel **`6.18.39+rpt-rpi-v8`**; `free -h`: **3.7 GiB RAM total**, 188 MiB used, 3.5 GiB available; 2.0 GiB swap, unused. The separate 2 GB Pi runs the music streamer. |
 | 64 GB USB 3 thumb drive | Intended storage for saved SV705C RAW/FITS exposures and image exports | **Owned and selected for acquisition data**; not connected or tested during 2026-10-27 baseline; confirm filesystem, actual capacity, sustained writes and stable mount path when attached. |
-| SVBONY SV705C | Primary USB astronomical camera | **Connected and USB 3 link verified on AstroPi (2026-10-27):** `f266:9a0a`, Bus 002 Device 002, negotiated **5000M**; device permissions `0666` via installed `90-ckusb.rules`; ARM64 SDK loads in Python. **SDK camera enumeration and capture not yet tested.** |
+| SVBONY SV705C | Primary USB astronomical camera | **Connected and detected by SVBONY SDK on AstroPi (2026-10-27):** `f266:9a0a`, USB 3 **5000M**, udev permissions `0666`, ARM64 SDK dynamically loads; `SVBGetNumOfConnectedCameras()` returned **1** as user `arn`. **Open camera and image capture not yet tested.** |
 | ZWO AM3N | Motorized telescope mount | Owned; **Alt/Az mode exclusively**. Prior Raspberry Pi USB serial communication verified in August 2026 (see details below). Previously listed in this file as AM3; mount reported model `AM3N#` to `:GVP#`. |
 | 12 V DC supply/distribution | Power to mount and accessories where appropriate | General power plan agreed; ratings, wiring and fused branches to document |
 | 12 V-to-5 V buck converter | Power for Raspberry Pi | Planned / available per owner; validate voltage, current capacity and behaviour under load |
@@ -20,8 +20,9 @@ This file records the hardware we have chosen for AstroPi, how it connects, and 
 - **Verified negotiated link:** `lsusb -t` shows Bus 002, Port 002, device `Vendor Specific Class` at **5000M** (USB 3 SuperSpeed). Bus and device numbers can change on reconnect.
 - **Verified permissions:** `/dev/bus/usb/002/002` is `crw-rw-rw-` (`0666`, `root:root`); `arn` can access the node. Vendor rule `90-ckusb.rules` specifies `f266:9a0a` and `MODE="0666"`; installed at `/etc/udev/rules.d/90-ckusb.rules`. Appropriate for this trusted local setup; reconsider if exposed to untrusted local users.
 - **Verified SDK dynamic loading:** `ctypes.CDLL('/home/arn/svbony-sdk/SVBCameraSDK/lib/armv8/libSVBCameraSDK.so')` succeeded under normal user `arn`.
+- **Verified SDK camera enumeration:** Python `ctypes` call `SVBGetNumOfConnectedCameras()` returned **1** (as normal user `arn`, camera attached, 2026-10-27). This confirms SDK-level detection; successful camera opening and actual frame transfer remain untested.
 - **Power/thermal after connection:** `vcgencmd get_throttled` → `throttled=0x0`; `vcgencmd measure_temp` → **33.6°C**. This is connected/idle, **not a sustained camera-capture load test**.
-- **Outstanding tests:** Call SDK camera enumeration, retrieve properties, open camera and capture actual frames; retest throttling/power during continuous use.
+- **Outstanding tests:** Query SDK camera identity/properties, open camera and capture actual frames; retest throttling/power during continuous use.
 
 ## SVBONY Linux SDK location (reported 2026-10-27)
 
@@ -34,7 +35,7 @@ The SDK distribution is already extracted **on the AstroPi**, separate from the 
 - **Verified native ARM64 SDK library:** `/home/arn/svbony-sdk/SVBCameraSDK/lib/armv8/libSVBCameraSDK.so`. `file` reports **ELF 64-bit LSB shared object, ARM aarch64**, dynamically linked.
 - **Verified dependency resolution:** `ldd` resolves every dependency with **no missing libraries**: `libstdc++.so.6`, `libusb-1.0.so.0`, `libm.so.6`, `libgcc_s.so.1`, `libc.so.6`, `libudev.so.1`, and `libcap.so.2`.
 - **USB dependency:** `libusb-1.0.so.0` resolves to the installed system library at `/lib/aarch64-linux-gnu/libusb-1.0.so.0`; the SDK-bundled libusb is not currently necessary for dependency resolution.
-- **Status:** ARM64 binary architecture and shared-library dependencies **verified on AstroPi (2026-10-27)**. SDK loading through Python ctypes, USB-node permissions and installed udev rule **verified on AstroPi (2026-10-27)**. SDK-level camera enumeration and successful frame capture **not yet verified**.
+- **Status:** ARM64 binary architecture and shared-library dependencies **verified on AstroPi (2026-10-27)**. SDK loading through Python ctypes, USB-node permissions and installed udev rule **verified on AstroPi (2026-10-27)**. SDK camera enumeration **verified (1 device)**; opening the camera and successful frame capture **not yet verified**.
 
 For implementation, use this verified ARM64 SDK build; do not use the x86 builds. Don't commit vendor SDK binaries to this repository.
 
@@ -84,7 +85,7 @@ Measurements below are from **`arn@astropi`**, not the separate N100 desktop. Th
 | Runtime | **Python 3.13.5**, `aarch64` |
 | Swap | `zram0` 2 GiB swap; earlier `free -h` reported no swap usage |
 
-**Follow-ups:** Test 5V power and `get_throttled` under sustained camera load; verify the planned 64 GB USB 3 recording drive and mount it persistently; verify SDK camera enumeration/capture and the camera's sustained power stability. Configure the Pi's time zone to the observing region if desired; astronomy calculations should use synchronized UTC plus explicitly configured observing latitude/longitude, not infer coordinates from time zone. Offline operation needs a way to acquire accurate time after boot (e.g. browser-provided clock or an RTC).
+**Follow-ups:** Test 5V power and `get_throttled` under sustained camera load; verify the planned 64 GB USB 3 recording drive and mount it persistently; verify SDK camera opening, capture and sustained power stability. Configure the Pi's time zone to the observing region if desired; astronomy calculations should use synchronized UTC plus explicitly configured observing latitude/longitude, not infer coordinates from time zone. Offline operation needs a way to acquire accurate time after boot (e.g. browser-provided clock or an RTC).
 
 ## Configuration still to record
 
@@ -92,7 +93,7 @@ Measurements below are from **`arn@astropi`**, not the separate N100 desktop. Th
 - Reconfirm the historical AM3N USB cable/port connection and stable `/dev/serial/by-id/` alias once the mount is reconnected; map the remaining USB devices.
 - Connect and verify 64 GB USB 3 thumb drive; choose filesystem and configure persistent mount by UUID (e.g., `/media/astropi-data`) as FITS/raw capture destination. No formatting or filesystem changes approved yet.
 - Power-supply capacity, connector polarity, buck-converter ratings and cable layout.
-- Query camera enumeration and SDK-reported version, and obtain a successful SV705C capture. Recheck AM3N-reported version (historically `1.8.8#`) and test motion/stop/tracking/GoTo safely.
+- Query camera identity/properties and SDK-reported version, then open camera and obtain a successful SV705C capture. Recheck AM3N-reported version (historically `1.8.8#`) and test motion/stop/tracking/GoTo safely.
 
 ## Rules
 
