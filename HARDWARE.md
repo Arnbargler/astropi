@@ -14,6 +14,17 @@ This file records the hardware we have chosen for AstroPi, how it connects, and 
 | 12 V-to-5 V buck converter | Power for Raspberry Pi | Planned / available per owner; validate voltage, current capacity and behaviour under load |
 | N100 Linux Mint desktop | Optional development, simulation and browser access | Available; not required as an intermediary between GitHub and Pi |
 
+## SVBONY Linux SDK location (reported 2026-10-27)
+
+The SDK distribution is already extracted **on the AstroPi**, separate from the Git repository:
+
+- **SDK root:** `/home/arn/svbony-sdk/SVBCameraSDK/`
+- **Original archive:** `/home/arn/svbony-sdk/linux-SVBCameraSDK-v1.13.4.zip` (archive filename indicates SDK **v1.13.4**)
+- **Directories/files observed:** `include/`, `lib/`, `demo/`, `readme.txt`, `90-ckusb.rules`
+- **Status:** Paths and file listing supplied from `arn@astropi`; SDK shared-library architecture, dependency loading, udev-rule installation, and SV705C detection/capture **not yet verified**.
+
+For implementation, locate and inspect the compatible **ARM64/aarch64** shared library within `lib/` rather than assuming an x86 library or hard-coding a guessed filename. Don't commit vendor SDK binaries to this repository.
+
 ## Verified running-system baseline (2026-10-27)
 
 Measurements below are from **`arn@astropi`**, not the separate N100 desktop. These are idle-state measurements; camera and mount were **not connected**.
@@ -38,7 +49,7 @@ Measurements below are from **`arn@astropi`**, not the separate N100 desktop. Th
 - Exact USB and serial port topology; persistent device identification.
 - Connect and verify 64 GB USB 3 thumb drive; choose filesystem and configure persistent mount by UUID (e.g., `/media/astropi-data`) as FITS/raw capture destination. No formatting or filesystem changes approved yet.
 - Power-supply capacity, connector polarity, buck-converter ratings and cable layout.
-- Camera SDK versions, mount firmware version, and successful hardware tests.
+- Confirm the extracted SDK's actual library version and ARM64 compatibility; validate udev rules, library dependencies and a successful SV705C capture. Record AM3 firmware version and hardware tests.
 
 ## Rules
 
