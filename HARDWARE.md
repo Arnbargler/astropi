@@ -1,568 +1,79 @@
-# AstroPi Hardware Inventory
+# AstroPi hardware and verified integration
 
-This file records the hardware we have chosen for AstroPi, how it connects, and what still needs testing. **User-reported ownership is not the same as driver or hardware verification.** Update this file as components are tested.
+**Current truth as of 2026-10-27.** This is the **concise operational reference**, not a chronological test diary. “Verified” means directly observed from `arn@astropi` terminal output or inspected images. “Planned” means **not implemented or not tested**. The full 69 KB original probe log remains in [Git history at `f01ae019`](https://github.com/Arnbargler/astropi/blob/f01ae019f9ba840f90b5bb5e566d0fc17dab41b7/HARDWARE.md) for troubleshooting; some statements in that historical snapshot were superseded by later tests.
 
-## Core equipment
+## Equipment and connections
 
-| Device | Purpose | Status / notes |
-| --- | --- | --- |
-| Raspberry Pi 4 Model B Rev 1.5 (4 GB RAM) | Runs headless AstroPi, camera acquisition, mount control and browser server | **Verified on `astropi` (2026-10-27):** Raspberry Pi 4 Model B Rev 1.5; Debian GNU/Linux **13.6 (Trixie)**; kernel **`6.18.39+rpt-rpi-v8`**; `free -h`: **3.7 GiB RAM total**, 188 MiB used, 3.5 GiB available; 2.0 GiB swap, unused. The separate 2 GB Pi runs the music streamer. |
-| 64 GB USB 3 thumb drive | Intended storage for saved SV705C RAW/FITS exposures and image exports | **User-approved 2026-10-27 reformat successful:** `Flash Drive FIT` at USB 3.0 **5000M**, 59.8 GiB. Old Pi OS image erased; now a single **ext4** GPT partition `sda1` labelled `astropi-data`, filesystem UUID **`25b33cfa-b178-4b86-8a15-d00c8305cca5`**. Confirmed independently with `blkid -p`, `wipefs -n`, and `lsblk` after `udevadm settle`. **UUID-based ext4 mount verified**, with 512 MiB random-write test at **20.2 MiB/s**, readback SHA-256 PASS and **16 MiB test file checksum PASS after reboot**. Automatic `/media/astropi-data` mount and USB 3 5000M reconnection verified post-reboot. Operating-system root remains separately on `/dev/mmcblk0`. |
-| SVBONY SV705C | Primary USB astronomical camera | **Detected and identified through SDK on AstroPi (2026-10-27):** USB `f266:9a0a` at **5000M**, permissions `0666`; Python SDK enumeration `1`; camera-info returned name, port `USB3.0`, ID `1`. **Ten full-resolution RAW16 frames successfully captured to the USB acquisition drive after proper SDK enumeration**, all 16,812,160 bytes; 10/10 saved-frame SHA-256 checks PASS with 10 distinct frame hashes; camera stop and close return 0; pixel encoding, optical preview and realistic long-duration load still pending. |
-| ZWO AM3N | Motorized telescope mount | **Connected to AstroPi, USB/CDC ACM enumerated (2026-10-27):** `03c3:4001`, `/dev/ttyACM0`, stable `/dev/serial/by-id/usb-ZWO_Systems_ZWO_Device_123456-if00`; `arn` in `dialout`. **Live serial queries verified** (`AM3N#`, firmware `1.8.8#`, RA/Dec responses). **User visually confirmed** commanded azimuth movement at 120× sidereal; instantaneous/fail-safe stop, tracking and GoTo remain unverified. Alt/Az mode exclusively; older protocol tests below. |
-| 12 V DC supply/distribution | Power to mount and accessories where appropriate | General power plan agreed; ratings, wiring and fused branches to document |
-| 12 V-to-5 V buck converter | Power for Raspberry Pi | Planned / available per owner; validate voltage, current capacity and behaviour under load |
-| N100 Linux Mint desktop | Optional development, simulation and browser access | Available; not required as an intermediary between GitHub and Pi |
-
-## SV705C USB detection (2026-10-27, connected hardware)
-
-- **Verified with `lsusb` on `astropi`:** `Bus 002 Device 002: ID f266:9a0a SVBONY SVBONY SV705C`.
-- **Verified negotiated link:** `lsusb -t` shows Bus 002, Port 002, device `Vendor Specific Class` at **5000M** (USB 3 SuperSpeed). Bus and device numbers can change on reconnect.
-- **Verified permissions:** `/dev/bus/usb/002/002` is `crw-rw-rw-` (`0666`, `root:root`); `arn` can access the node. Vendor rule `90-ckusb.rules` specifies `f266:9a0a` and `MODE="0666"`; installed at `/etc/udev/rules.d/90-ckusb.rules`. Appropriate for this trusted local setup; reconsider if exposed to untrusted local users.
-- **Verified SDK dynamic loading:** `ctypes.CDLL('/home/arn/svbony-sdk/SVBCameraSDK/lib/armv8/libSVBCameraSDK.so')` succeeded under normal user `arn`.
-- **Verified SDK camera enumeration:** Python `ctypes` call `SVBGetNumOfConnectedCameras()` returned **1** (as normal user `arn`, camera attached, 2026-10-27). This confirmed SDK-level detection, followed by successful camera opening and RAW16 capture described below.
-- **Verified camera identity:** `SVBGetCameraInfo(..., index=0)` returned success (`0`), name `SVBONY SV705C`, port `USB3.0`, `DeviceID=4865`, and `CameraID=1`. The SDK's camera index and its returned camera ID are distinct.
-- **Verified SDK initialization and sensor capabilities:** A fresh process called `SVBGetNumOfConnectedCameras()` → `1`, `SVBGetCameraInfo(index=0)` → success (`0`, `CameraID=1`), `SVBOpenCamera(1)` → `0`, `SVBGetCameraProperty(1, ...)` → `0`, and `SVBCloseCamera(1)` → `0`. Reported maximum resolution **3856 × 2180** (8,406,080 pixels), **colour sensor**, **maximum bit depth 12**, supported binning **1, 2, 3, 4**, raw **Bayer enum 2**, and supported image-format enum values **0, 4, 5, 10** (`-1` appears to terminate the list; additional zero-filled array slots follow). Decode enum meaning from exact SDK header before using it. The earlier error `2` happened when the property query was attempted before opening the camera; this sequencing issue is now resolved.
-- **Power/thermal after connection:** `vcgencmd get_throttled` → `throttled=0x0`; `vcgencmd measure_temp` → **33.6°C**. This is connected/idle, **not a sustained camera-capture load test**.
-- **Outstanding tests:** Check actual pixel-value distribution and render a recognizable preview, verify exposure/gain settings and RAW16 byte ordering/value alignment, then retest throttling/power during continuous use.
-
-## First successful SV705C RAW16 capture (2026-10-27)
-
-**Verified on `arn@astropi`, using Python `ctypes` and the native `armv8/libSVBCameraSDK.so` library:**
-
-| Capture step | Observed SDK return code |
+| Item | Current configuration / evidence |
 | --- | --- |
-| `SVBGetCameraInfo` | `0` |
-| `SVBOpenCamera` | `0` |
-| `SVBGetCameraProperty` | `0` |
-| `SVBSetROIFormat(id, 0, 0, 3856, 2180, 1)` | `0` |
-| `SVBSetOutputImageType(id, 4)` (RAW16) | `0` |
-| `SVBStartVideoCapture` | `0` |
-| `SVBGetVideoData` (20-second wait limit) | `0` |
-| `SVBStopVideoCapture` | `0` |
-| `SVBCloseCamera` | `0` |
+| Host | Raspberry Pi **4 Model B Rev 1.5, 4 GiB**, hostname **`astropi`**, username **`arn`**; Debian **13.6 Trixie**, kernel **`6.18.39+rpt-rpi-v8`**, Python **3.13.5**, ARM64. Boots from **32 GB microSD** (`/dev/mmcblk0`). |
+| Network/time | Wi-Fi `wlan0` works, NTP was active and synchronized in tests; **no hardware RTC**. Do not depend on the Pi's local timezone; use trusted **UTC**. Offline time acquisition is **not implemented**. |
+| Camera | **SVBONY SV705C**, USB ID **`f266:9a0a`**, USB3 **5000M** on the Pi's blue port, 3856×2180 colour sensor, max sensor depth **12 bits**; SDK Bayer enum 2 = **GRBG**. |
+| Mount | **ZWO AM3N**, firmware **`1.8.8`**, USB ID **`03c3:4001`**, CDC ACM USB2 **12M**; Alt/Az **only**. `arn` belongs to `dialout`. |
+| Recording | **64 GB** USB3 flash stick, model **Flash Drive FIT**, negotiated **5000M**. One ext4 GPT partition, label `astropi-data`, filesystem UUID **`25b33cfa-b178-4b86-8a15-d00c8305cca5`**, auto-mounted at **`/media/astropi-data`**. |
+| Test optics | **Canon EF kit lens at 18 mm** attached to SV705C; this produced recognizable room images. **Not** a final telescope/focal-length specification. |
+| Power | Intended field setup: **12 V supply/battery** feeding AM3N and **12→5 V buck** for Pi. Exact buck ratings, wiring/fusing and end-to-end battery endurance **not yet documented/tested**. |
+| Other workstation | Linux Mint **N100** for development/browser use and eventual offline/post-capture alignment/stacking/field-rotation correction; **not required for Pi acquisition**. |
 
-- **First saved image:** `/home/arn/sv705c-first-frame.raw16` on the Pi's microSD root filesystem, **16,812,160 bytes** (3856 × 2180 × 2 bytes/pixel). No FITS header or color processing; this is an unprocessed raw pixel buffer. The configured exposure was the camera's existing setting, not explicitly set by the test.
-- **SDK headers decode reported enums:** Bayer `2` = **GRBG**; supported formats `0` = RAW8, `4` = RAW16, `5` = Y8, `10` = RGB24. The sensor reports maximum 12-bit depth; RAW16 is a 16-bit output container.
-- **Verification boundary:** The SDK reported a successful full-resolution frame transfer and a file was written at exactly the expected size. **A stride-sampled pixel distribution has been checked:** across 8,406,080 16-bit pixels (sampling every 997th), minimum `0`, maximum `288`, average `17.72`, `18` distinct sampled values; first 20 pixel values were mostly `0` with some `16`. Nontrivial values are present but the frame is very dark. Sample values suggest possible 12-bit data left-aligned within RAW16 (multiples of 16); bit alignment **not yet verified**. **Visual image validity, controlled exposure/gain tests, repeated captures, FITS packaging and sustained power have not yet been tested.** Do not claim these are complete.
-- **Optical conditions (user reported):** The camera had a lens attached that was zoomed in and substantially out of focus during the first capture. Therefore this frame is **not a useful test of focus or image sharpness**; defocus and an unknown scene/exposure may help explain its low contrast, but do not by themselves verify the intensity or RAW16 alignment. Test a focused, well-lit ordinary subject later (never aim optics toward the Sun).
-- **Post-capture power check:** `vcgencmd get_throttled` → `throttled=0x0` (no undervoltage/throttling detected at that time; not proof of stability during a sustained acquisition sequence).
-- **Implementation detail:** Successful call sequence was enumerate → get camera info → open → set ROI → set RAW16 → start video capture → get frame → stop → close. The SDK's “video” functions can be used to retrieve individual image frames.
+Bus/device numbers and `/dev/sda`/ `/dev/ttyACM0` may change after reconnect; use a stable serial alias and the filesystem UUID. Observed USB layout during endurance: SV705C on USB3 bus 2 port 2, stick on USB3 bus 2 port 1, AM3N on USB2 using `cdc_acm`. All three remained enumerated after Pi reboot.
 
-## SVBONY Linux SDK location (reported 2026-10-27)
+## Camera: SDK and exact integration details
 
-The SDK distribution is already extracted **on the AstroPi**, separate from the Git repository:
+- SVBONY Linux SDK distribution `v1.13.4` is installed **on the Pi, not in this repository**. ARM64 library: **`/home/arn/svbony-sdk/SVBCameraSDK/lib/armv8/libSVBCameraSDK.so`**; headers: `/home/arn/svbony-sdk/SVBCameraSDK/include/`. Load via Python `ctypes.CDLL`; system `libusb-1.0` dependencies resolve.
+- Camera USB permission rule: `/etc/udev/rules.d/90-ckusb.rules`, vendor/product `f266:9a0a`, mode `0666` (trusted local environment). Do not commit the vendor binaries.
+- **Required demonstrated initialization order:** `SVBGetNumOfConnectedCameras()` → `SVBGetCameraInfo(&info, index=0)` → use `info.CameraID` → `SVBOpenCamera(id)` → configure → `SVBStartVideoCapture(id)` → `SVBGetVideoData(...)` → `SVBStopVideoCapture(id)` → `SVBCloseCamera(id)`. CameraInfo has 32-byte `FriendlyName`, `CameraSN`, `PortType`, then unsigned `DeviceID` and signed `CameraID`; observed CameraID **1**, **do not hard-code it**.
+- A test skipping `SVBGetCameraInfo` before `SVBOpenCamera(1)` failed with **SDK error 2**. After proper enumeration/info, open/close succeeded. Treat correct sequence as mandatory even though the precise SDK-internal reason is unproven.
+- Verified full resolution call `SVBSetROIFormat(id, 0, 0, 3856, 2180, 1)` and output enum **4 = RAW16**; RAW8 enum 0 also supported. Each full RAW16 buffer is exactly **16,812,160 bytes**. Supported bin modes were reported **1, 2, 3, 4**, but **3 and 4 have not been capture-tested** (published camera specifications may differ). Do not expose modes just because a capability array lists them.
+- SDK control **0 = gain**, **1 = exposure in microseconds**. Use `SVBSetControlValue` and read back `SVBGetControlValue`; SDK exposure quantizes slightly. Verified requests/readbacks: 10,000→**10,007 µs**, 50,000→**50,148 µs**, 1,000,000→**1,000,143 µs**; gain 0→0 and 100→100, with auto flag 0.
+- Exposure validation: at gain 0, changing ~10 ms→50 ms changed sampled 12-bit mean from **27.35→133.34 (~4.88×)** at similar light levels. Gain validation: at ~50 ms, gain 0→100 increased mean **133.34→440.11 (~3.30×)**; high-gain sample had ~0.05% saturation. These are **functional tests, not calibration standards**.
+- RAW16 sampled pixel words were **100% multiples of 16** in dark and illuminated frames, strongly supporting **12-bit data left-aligned by four bits**; right-shift by 4 for preview scaling. Dark frames had **lens cap on**. An illuminated 10 ms frame showed sampled max raw **5,328**, mean **317.22**, ~3.77% zero pixels, no sampled saturation. The original RAW must remain unchanged.
+- Colour preview: **GRBG** arrangement; combine each **4×4 Bayer sensor block** into one RGB sample, ~**964×545**, rough percentile-based white balance/stretch, encode PNG. User inspected both grayscale and RGB views; recognizably correct indoor objects and plausible colours. **Not** a full-resolution/photometrically calibrated demosaic, and performance for live preview still needs profiling.
+- SDK stream caveat: a test calling stop/start for a *second* capture within the same camera session failed at `SVBGetVideoData` with **error 11 = timeout**. A fresh camera session with one stream start captured the 50 ms frame on its first request. **Root cause not proved.** Prefer maintaining one streaming session; implement bounded timeouts, safe cleanup and reconnect handling rather than assuming every restart will work.
+- Paths of actual retained examples: `/media/astropi-data/camera-test-20261027-110857/` (ten full RAW16 frames), `/media/astropi-data/light-test-20261027-111913.raw16` plus grayscale and `-color.png`, `/media/astropi-data/exposure-gain-test/`, and endurance output below. These are on the **Pi USB stick, not in Git**.
 
-- **SDK root:** `/home/arn/svbony-sdk/SVBCameraSDK/`
-- **Original archive:** `/home/arn/svbony-sdk/linux-SVBCameraSDK-v1.13.4.zip` (archive filename indicates SDK **v1.13.4**)
-- **Directories/files observed:** `include/`, `lib/`, `demo/`, `readme.txt`, `90-ckusb.rules`
-- **Library builds seen:** `lib/armv6/`, `lib/armv7/`, `lib/armv8/`, `lib/x86/`, `lib/x64/`; these include `libSVBCameraSDK.so`, a static `.a` archive, and bundled `libusb-1.0` files.
-- **Verified native ARM64 SDK library:** `/home/arn/svbony-sdk/SVBCameraSDK/lib/armv8/libSVBCameraSDK.so`. `file` reports **ELF 64-bit LSB shared object, ARM aarch64**, dynamically linked.
-- **Verified dependency resolution:** `ldd` resolves every dependency with **no missing libraries**: `libstdc++.so.6`, `libusb-1.0.so.0`, `libm.so.6`, `libgcc_s.so.1`, `libc.so.6`, `libudev.so.1`, and `libcap.so.2`.
-- **USB dependency:** `libusb-1.0.so.0` resolves to the installed system library at `/lib/aarch64-linux-gnu/libusb-1.0.so.0`; the SDK-bundled libusb is not currently necessary for dependency resolution.
-- **Status:** ARM64 binary architecture and shared-library dependencies **verified on AstroPi (2026-10-27)**. SDK loading through Python ctypes, USB-node permissions and installed udev rule **verified on AstroPi (2026-10-27)**. SDK enumeration **verified (1 device)**; camera open/close and sensor-property retrieval **verified (success return codes)**. A single SDK RAW16 frame acquisition and expected-sized file write **verified**; image content still requires validation.
+### Proven capture/storage endurance
 
-For implementation, use this verified ARM64 SDK build; do not use the x86 builds. Don't commit vendor SDK binaries to this repository.
+**20-minute test 2026-10-27**, AM3N connected but stationary, one continuous camera session, gain 0, measured exposure 1,000,143 µs, RAW16 at full resolution, a frame retrieval every 2 seconds and an `fsync`/SHA-256-checked file every fifth retrieval:
 
-## ZWO AM3N connected hardware — AstroPi retest (2026-10-27)
-
-**Verified from the live `arn@astropi` USB/udev and power outputs:**
-
-- `lsusb` → `03c3:4001 ZWO ZWO Device`; SVBONY SV705C simultaneously present as `f266:9a0a`.
-- `lsusb -t` → `cdc_acm` interfaces for the mount at **12M** on USB2 bus; the SV705C still runs at **5000M** on the USB3 bus.
-- Serial node: `/dev/ttyACM0`, permissions `crw-rw---- root dialout`. User `arn` is a member of `dialout`; no sudo expected for serial queries.
-- Persistent symlink: `/dev/serial/by-id/usb-ZWO_Systems_ZWO_Device_123456-if00 -> ../../ttyACM0`. Prefer this alias in configuration.
-- Kernel events at connection: Espressif `303a:1001` USB JTAG/serial debug unit briefly enumerated, disconnected and was replaced by `03c3:4001` ZWO USB CDC ACM within about a second; this may be a normal boot-to-application sequence, but its cause has not been established.
-- With camera and mount connected: `vcgencmd get_throttled` → `throttled=0x0`; `vcgencmd measure_temp` → **39.9°C**.
-- **Verification boundary:** Linux USB detection, serial-device creation and account permissions confirmed. **Serial request/reply is now verified (see below), but motor movement, physical stop behavior, tracking and coordinate accuracy have not yet been verified**. Prior historical responses are documented below.
-
-### Current AM3N serial communication verified (2026-10-27)
-
-- `python3-serial` / `pyserial` **3.5** is already installed. Python serial port opening and queries worked as user `arn`, no `sudo` required.
-- Connected using stable `/dev/serial/by-id/usb-ZWO_Systems_ZWO_Device_123456-if00`, at **9600 baud, 8N1**, `timeout=2`, no XON/XOFF or RTS/CTS flow control.
-- Each query returned a `#`-terminated reply, and the port closed normally:
-
-| Read-only command | 2026-10-27 reply |
+| Metric | Observed |
 | --- | --- |
-| `:GVP#` (mount model) | `AM3N#` |
-| `:GV#` (firmware version) | `1.8.8#` |
-| `:GR#` (reported right ascension) | `12:02:59#` |
-| `:GD#` (reported declination) | `+44*29:41#` |
-
-- These confirm the mount identity and live serial request/response path with the camera still connected. Coordinates are the mount's **reported** values, **not** verified pointing accuracy or an indication that alignment is complete.
-
-### Current read-only AM3N status replies (2026-10-27)
-
-Both commands executed successfully at 9600 baud from `arn@astropi` using the persistent serial port:
-
-| Command | Observed response | Interpretation and limitations |
-| --- | --- | --- |
-| `:GU#` | `nNZM000000000#` | Third-party ZWO AM3/AM5 protocol implementation documents `n` = not tracking, `N` = not slewing, `Z` = Alt/Az mode. `M` and numeric suffix not yet decoded; the flag mapping should be checked against this mount's behaviour in subsequent tests. |
-| `:GAT#` | `e7#` | Raw response recorded. Third-party protocol documentation expects `0`/`1` for tracking status, **inconsistent** with the observed `e7#`; do **not** decode it or assume its tracking meaning. |
-
-- The responses match the historical August 2026 replies **exactly**.
-- Protocol interpretation reference: `https://docs.rs/zwo_mount_control/latest/src/zwo_mount_control/protocol.rs.html` (third-party library; status flag mapping, not itself an AM3N hardware validation).
-- **No movement command was issued.** Verify Alt/Az altitude/azimuth and date/time readbacks next, then test safety stop before performing an actual slew.
-
-
-### Current AM3N pointing and clock query results (2026-10-27)
-
-Using the same working USB serial path and read-only LX200-like commands on `astropi`:
-
-| Command | Description | Observed response |
-| --- | --- | --- |
-| `:GA#` | Reported altitude | `+00*00:00#` |
-| `:GZ#` | Reported azimuth | `000*00:00#` |
-| `:GC#` | Mount date | `01/01/00#` |
-| `:GL#` | Mount local time | `00:07:12#` |
-| `:GG#` | Mount UTC offset | `+00:00#` |
-
-- Altitude and azimuth both read zero, **not proof of actual pointing** before alignment or physical position confirmation.
-- Date appears to represent **January 1, 2000** and clock time reads 00:07:12, unlike the current 2026-10-27 date. The mount clock therefore **appears unset/reset**. UTC offset 0 may be a default; do not assume it reflects the observing location.
-- Clock, offset, observing coordinates, and alignment should be managed explicitly in AstroPi before performing GoTo or interpreting sky positions. Avoid changing mount time or location until command semantics and intended observing location are confirmed.
-- **No motors moved in this test.** Next inspect configured site latitude/longitude (`:Gt#` / `:Gg#`) and consider whether the clock advances. Before any powered movement, verify a safe stop strategy and clear mechanical range.
-
-- **Still untested:** authoritative validation of all status flags, confirmation of when high-speed stopping physically completes, disconnection fail-safe, tracking, park/unpark, homing and GoTo. User has visually confirmed commanded azimuth motion using the variable 120× speed. (Raw status queries do return replies.)
-
-### User-selected AstroPi observing site (2026-10-27)
-
-**User supplied intended observing coordinates** (not inferred from the mount):
-- Latitude: **+45.2933°** north → **+45°17′36″** rounded to nearest arcsecond.
-- Longitude: **−75.8571°** east-positive (75.8571° west) → mount's **west-positive** setter **+075°51′26″** rounded to nearest arcsecond.
-- Corresponding known ZWO AM-series location-setting commands (as implemented in INDI's `LX200AM5::updateLocation`): `:Sg+075*51:26#` for longitude and `:St+45*17:36#` for latitude, with single-byte `1` success acknowledgement, followed by readback `:Gg#`/`:Gt#`. Upstream reference: `https://github.com/indilib/indi/blob/master/drivers/telescope/lx200am5.cpp`.
-- **Status (verified on AM3N, 2026-10-27):** Before adjustment, `:Gt#` returned `+45*30:19#` and `:Gg#` returned `+076*05:12#`; sent `:Sg+075*51:26#` → acknowledgment `b'1'`, then `:St+45*17:36#` → acknowledgment `b'1'`. Subsequent readbacks returned **latitude `+45*17:36#` and longitude `+075*51:26#`**, matching the user-selected observing site to whole-arcsecond precision. `:GS#` then returned `11:06:40#`. **Site setting and readback verified; pointing alignment and GoTo not verified.**
-- AstroPi application should keep one explicit astronomy convention (east-positive signed decimal longitude), converting only at this ZWO command boundary.
-
-### Current AM3N site coordinates and mount clock vs AstroPi clock (2026-10-27)
-
-Read-only USB serial queries returned:
-
-| Command | Raw response | Interpretation |
-| --- | --- | --- |
-| `:Gt#` | `+45*30:19#` | Latitude **+45°30′19″** ≈ **45.50528° N** |
-| `:Gg#` | `+076*05:12#` | Longitude **+76°05′12″** in mount's Meade **west-positive** convention; ≈ **76.08667° W**, or **−76.08667° east-positive** |
-| `:GS#` | `00:09:06#` | Sidereal-time readback; **accuracy is unverified** while mount date/time look reset |
-
-- West-positive convention supported by third-party ZWO AM mount serial driver documentation: `https://pkg.go.dev/github.com/mikefsq/lx200@v0.2.2/am5`. Do not use the raw sign as east-positive when communicating with map/astronomy libraries.
-- User-supplied Pi `timedatectl`: **Tue 2026-10-27 09:07:37 EDT**, UTC **13:07:37**, timezone **America/Toronto (EDT, UTC−4)**, `System clock synchronized: yes`, `NTP service: active`, no hardware RTC.
-- Earlier mount date/time/zone readback was `01/01/00#`, `00:07:12#`, `+00:00#`, so its clock **was unset/unsynchronized** at that moment despite Pi synchronization. The UTC clock was **subsequently set and read back successfully** on 2026-10-27 (see below); site coordinates were not modified.
-- **Do not equate the Pi time zone with mount `:GG#` sign convention without verifying the ZWO protocol.** Also confirm that the stored mount latitude/longitude are the user's intended observing site before assigning them to AstroPi configuration.
-- No motor or set commands issued; next test should establish an emergency-stop path and cautious physical motion before GoTo.
-
-### AM3N mount UTC clock configured successfully (2026-10-27)
-
-Using the persistent USB serial port, Python `pyserial` and the Raspberry Pi's NTP-synchronized UTC clock, the user successfully set **UTC offset 0** and current date/time on the mount. This was a clock configuration test only; **no motion or site-coordinate changes** were commanded.
-
-| Operation | Command or query | Observed |
-| --- | --- | --- |
-| Initial timezone read | `:GG#` | `+00:00#` |
-| Initial date read | `:GC#` | `01/01/00#` |
-| Initial clock read | `:GL#` | `00:38:30#` |
-| Set UTC offset zero | `:SG+00:00#` | acknowledgment `1` |
-| Set date | `:SC10/27/26#` | acknowledgment `1` |
-| Set time | `:SL13:37:03#` | acknowledgment `1` |
-| Final UTC offset | `:GG#` | `+00:00#` |
-| Final date | `:GC#` | `10/27/26#` |
-| Final time | `:GL#` | `13:37:04#` |
-| Time 3 seconds later | `:GL#` | `13:37:07#` |
-
-**Result:** All setters acknowledged success and the readback reflected the intended **2026-10-27 UTC time**, advancing three seconds over the three-second delay. Mount-to-Pi clock synchronization is **verified at the time of test**, but clock retention across mount power cycles and long-term drift **remain untested**. AstroPi should synchronize the mount after connection once system time is trustworthy (NTP or a validated offline clock). Set mount and software time zones consistently; retain explicit observing-site latitude/longitude and verify before GoTo.
-
-### Mount clock, site and sidereal-time consistency checked (2026-10-27)
-
-With the mount clock synchronized in UTC and the previously configured site retained, the user obtained the following **read-only** serial values at essentially the same instant as the Pi's UTC time:
-
-| Query | Response |
-| --- | --- |
-| `:GC#` | `10/27/26#` |
-| `:GL#` | `13:39:59#` |
-| `:GS#` | `10:59:22#` |
-| `:Gt#` | `+45*30:19#` |
-| `:Gg#` | `+076*05:12#` (west-positive) |
-| Pi UTC (`datetime.now(timezone.utc)`) | `2026-10-27T13:39:59.365169+00:00` |
-
-- **Independent astronomical cross-check:** For UTC `2026-10-27 13:39:59` and east-positive longitude `−76.0866667°`, a standard Julian-date/GMST calculation gives **local mean sidereal time `10:59:21.56`**. The AM3N returned **`10:59:22`**, agreeing within about **0.44 seconds** (subject to non-simultaneous serial query times, rounding and differences between mean/apparent time).
-- **Verified:** Clock readback matches NTP-synced Pi UTC at second resolution, location readback persists, and mount sidereal-time readback agrees with independent astronomy calculations for that configured longitude.
-- **Not yet verified:** The configured latitude and longitude correspond to the user's intended observing site, physical mount alignment or pointing accuracy, system time after complete offline boot, persistence across mount power cycles, and GoTo correctness. Verify intended site coordinates before alignment/GoTo.
-
-### Stop-all communication probe (2026-10-27)
-
-- `arn@astropi` opened `/dev/serial/by-id/usb-ZWO_Systems_ZWO_Device_123456-if00` at 9600 baud, transmitted `:Q#`, paused 0.3 s, then queried status and position; serial port closed normally.
-- Subsequent replies: `:GU#` → `nNZM000000000#`; `:GA#` → `+00*00:00#`; `:GZ#` → `000*00:00#`.
-- **Verified:** stop command bytes can be sent without impairing serial communication, and subsequent queries work.
-- **NOT verified:** stop acknowledgment (none expected for this command), any actual motor stop, fail-safe stop on a disconnected USB link, or physical-motion safety. Do not mark emergency stop operational until tested with actual motion.
-- Protocol cross-check: ZWO AM-series third-party implementations describe `:Q#` as stop-all, direction starts `:Me#`/`:Mw#`/`:Mn#`/`:Ms#` with per-axis stops, and numbered rates `:R0#`–`:R9#`. Before using motion, ensure clearances and access to the mount's physical cancel control.
-
-### First commanded AM3N azimuth motion — preliminary success (2026-10-27)
-
-The user ran a Python serial test at 9600 baud on the stable ZWO device alias, with mount clearance and the camera connected:
-
-1. Before motion: `:GU#` → `nNZM000000000#`, `:GA#` → `+00*00:00#`, `:GZ#` → `000*00:00#`.
-2. Transmitted rate preset `:R5#`, waited 0.2 seconds, then `:Me#` (east/azimuth direction) for 1.0 second.
-3. In a Python `finally` block, transmitted directional stop `:Qe#` followed by all-stop `:Q#`.
-4. After 0.3 seconds: `:GU#` → `nNZM000000500#`, `:GA#` → `+00*00:00#`, `:GZ#` → `000*02:00#`; script finished without error.
-
-**Interpretation:** Mount-reported azimuth increased by **0°02′00″ (2 arcminutes, ≈0.0333°)**; mount-reported altitude was unchanged. The user said the mount *may* have moved physically, but by a tiny amount. The `N` status flag is consistent with not slewing during post-stop polling; the suffix `500` is **not decoded**. This supports a successful movement command and stop sequence at the telemetry level, **but does not independently prove physical movement or a fail-safe stop**. A subsequent six-sample stationary readback showed the exact same position and status each time (see below). Independently test physical stopping in a controlled manner before any automated GoTo.
-
-### AM3N post-stop stationary monitoring (2026-10-27)
-
-- Following the initial `:R5#` / `:Me#` one-second movement and `:Qe#` + `:Q#` stop commands, the user ran a separate **read-only** Python polling test of `:GU#` and `:GZ#` six times at 2-second intervals.
-- **All six** status responses were identical: `nNZM000000500#`.
-- **All six** azimuth responses were identical: `000*02:00#` (reported azimuth drift **0 arcminutes** across the test).
-- **Conclusion:** Post-stop **position stability is verified by mount telemetry** over roughly 12 seconds. The poll contained no movement commands. This supports successful commanded stopping but does not substitute for independent visual confirmation or verify fail-safe stopping on a process crash or USB failure.
-- **Next cautiously proposed test:** 3-second motion at the same `:R5#` preset with direction-specific and all-stop commands in a `finally` block, and physical cancel immediately available; confirm physical motion and post-stop stability.
-
-### Second commanded AM3N azimuth motion — three-second rate-5 test (2026-10-27)
-
-User executed a 3-second eastward `:Me#` motion after sending rate preset `:R5#`, with `:Qe#` and `:Q#` stop commands in a Python `finally` clause. Telemetry:
-
-| Readback | Mount reported |
-| --- | --- |
-| Before azimuth | `000*02:00#` |
-| After azimuth | `000*08:00#` |
-| After status | `nNZM000000500#` |
-| Three seconds later azimuth | `000*08:00#` |
-| Three seconds later status | `nNZM000000500#` |
-
-- **Reported change: +6 arcminutes in 3 seconds**, consistent with the preceding +2 arcminutes in 1 second at the same preset. Post-stop azimuth/status remained constant in the separate 3-second follow-up observation.
-- This provides repeatable telemetry evidence for start/stop timing and mount motion; user subsequently **visually confirmed** real mount rotation in the 120× sidereal test recorded below. Continue to use physical clearances and backup cancel control.
-- The mount's clock was still reported as unset earlier; no GoTo or alignment has been issued.
-
-### First visually verified AM3N movement — 120× sidereal (2026-10-27)
-
-The user reported that rate preset `:R7#` still produced barely perceptible movement, then ran the `:Rv120.00#` variable-speed setup and `:Me#` eastward command for 10 seconds **multiple times**, stopping with `:Qe#` and `:Q#` in a Python `finally` block each run. **User visually confirmed real motor-driven motion**; the last run's specific terminal output was:
-
-| Observation | Response |
-| --- | --- |
-| Before motion `:GZ#` | `008*41:38#` |
-| Directly after 10-second motion and stop commands `:GZ#` | `013*41:42#` |
-| Immediately after stop `:GU#` | `nZM130000803#` |
-| Three seconds after stop `:GZ#` | `013*43:10#` |
-| Three seconds after stop `:GU#` | `nNZM000000800#` |
-
-- **During the commanded 10-second motion:** reported azimuth increased **5°00′04″** (approximately **0.5°/s**). This matches 120× approximate sidereal angular rate (15 arcseconds/second × 120 = 0.5°/second).
-- **After stop commands:** mount-reported azimuth increased **another 1′28″** by the three-second follow-up; immediate `:GU#` lacked the `N` flag, while the later response restored it. This is **consistent with non-instantaneous stopping/deceleration or telemetry latency**, but the mechanism and precise stop time are **not verified**. The status suffixes `803` and `800` are not decoded.
-- **Important distinction:** User **visually observed the mount move**, unlike the preceding subtle low-speed tests. However **no independent observation has established the exact instant at which physical motion stops**, and no fail-safe under USB disconnection/software crash has been tested.
-- **Engineering requirement for AstroPi:** Treat sending `:Q#` as a **stop request**, not immediate proof of halt; poll status and repeated altitude/azimuth samples to confirm stability before claiming stopped or allowing new movements. Implement deadman limits and provide independent physical cancel/power access.
-- No tracking, park, two-star alignment or GoTo behavior has been validated yet. The mount clock was previously found uninitialized.
-
-### Repeat high-speed post-stop stationary polling (2026-10-27)
-
-Following the visually confirmed east/azimuth movement at variable `120×` speed and the initial `1′28″` post-stop change, the user performed an additional **five consecutive read-only position/status samples** (one-second intervals). All five were identical:
-
-- `:GZ#` → `013*43:10#`
-- `:GU#` → `nNZM000000800#`
-
-**Conclusion:** The mount's reported azimuth was stable (zero change across five polls) and the status consistently indicated no active slew. Combined with the user's visual movement confirmation, this **passes the initial azimuth manual-motion and normal stop-settling probes**. The exact deceleration duration and physical emergency stop during software/USB failure remain **unverified**. The altitude-axis test subsequently changed the mount-reported altitude at the same 120× rate (see below).
-
-### First commanded altitude-axis movement (2026-10-27)
-
-The user ran a cautious 3-second north/up test at variable rate **120× sidereal** using `:Rv120.00#` and `:Mn#`, followed by directional stop `:Qn#` and stop-all `:Q#` within a Python `finally` block.
-
-| Measurement | Raw mount reply |
-| --- | --- |
-| Before altitude `:GA#` | `+00*00:00#` |
-| Before azimuth `:GZ#` | `013*43:10#` |
-| Immediately after stop altitude | `+01*29:22#` |
-| Immediately after stop azimuth | `013*43:10#` |
-| Immediately after stop status | `nZM001300883#` |
-| Three seconds later altitude | `+01*30:50#` |
-| Three seconds later status | `nNZM000000880#` |
-
-**Interpretation:** Reported altitude increased **1°30′50″** total while azimuth was unchanged. The command-period change to the initial post-stop query was **1°29′22″**; another **1′28″** accrued before the three-second-later query, exactly the same post-stop positional difference seen in the azimuth 120× test. This supports commanded altitude-axis movement and repeatable **non-instantaneous stopping/settling**; do not assume a stop command instantaneously ends motion. The `N` status flag appears only in the settled sample; remaining suffix is not decoded. **Independent visual confirmation of altitude motion was not explicitly reported.** Subsequent five-sample position polling verified both axes stationary (see below). Physical stop under fault conditions, tracking and GoTo remain untested.
-
-**Next:** Perform a no-motion, five-sample `:GA#`/`:GZ#`/`:GU#` polling check; then move to configuration of mount time/site and alignment once command semantics are verified.
-
-### Both-axes stationary verification following movement (2026-10-27)
-
-After the 3-second 120× north/up movement and subsequent stop/settling, the user executed **five read-only** serial sampling rounds (one-second intervals) of `:GA#`, `:GZ#` and `:GU#` via the persistent ZWO serial path. Every round returned:
-
-- **Altitude:** `+01*30:50#`
-- **Azimuth:** `013*43:10#`
-- **Status:** `nNZM000000880#`
-
-**Result:** No reported motion on either axis across the samples and a stable non-slewing status after stopping. Alongside prior successful and visually confirmed azimuth motion and the altitude telemetry changes, **initial normal-operation motion and stop-settling tests are complete on both axes**. The user's visual confirmation applied explicitly to the azimuth high-speed test; visual confirmation of altitude motion was not separately stated.
-
-**Important boundary:** Stop was not instantaneous in the 120× tests: each axis showed **1′28″** of additional reported travel between the immediate post-stop and three-second-later samples. Exact stop timing, behaviour after abnormal software failure/USB disconnection, and tracking / GoTo / alignment remain unverified. Future mount controller must treat `:Q#` as a request to stop, poll status and both axes for stability, and provide operator physical cancel/power fallback.
-
-### AM3N baseline readback before Home command (2026-10-27)
-
-**Clarification from user:** The hand controller was **not connected**, and the user **only ran the read-only Python script**; they did **not** initiate Home. Therefore the unchanged coordinates are expected and the test should **not** be classified as a failed or attempted Home operation.
-
-| Read-only command | Response |
-| --- | --- |
-| `:GU#` | `nNZM000000880#` |
-| `:GA#` | `+01*30:50#` |
-| `:GZ#` | `013*43:10#` |
-| `:GR#` | `21:52:17#` |
-| `:GD#` | `+44*35:00#` |
-
-**At that time Home control remained untested**, but the user subsequently ran a successful USB-controlled `:hC#` Home operation (see below). INDI's ZWO AM mount driver uses `:hC#` for Home, distinct from `:hP#` for Park; firmware **1.8.8** has a distinct horizontal default Park posture. The AM-series hand controller is optional for normal USB control but is a useful independent physical Cancel fallback during an autonomous slew.
-
-
-### First verified ZWO AM3N autonomous Go Home from AstroPi (2026-10-27)
-
-**Successful actual motion over USB serial** with firmware **1.8.8**, in **Alt/Az** mode and with the hand controller **disconnected**. The user had substantial physical clearance and explicitly observed the test completing. The Python test sent **`:hC#`** directly on the stable serial port, then polled `:GU#`, `:GA#` and `:GZ#` approximately every two seconds, with a 90-second timeout and `:Q#` fallback if it did not detect completion.
-
-| Moment | Altitude | Azimuth | Status |
-| --- | --- | --- | --- |
-| Before Home command | `+01*30:50#` | `013*43:10#` | — |
-| First observed poll | `+09*19:25#` | `005*52:02#` | `nZM010100994#` |
-| On ascent (example) | `+82*26:55#` | `358*07:37#` | `nZM800100994#` |
-| Near zenith | `+88*20:29#` | `180*58:30#` | `nZM8b8900992#` |
-| On descent (example) | `+79*36:52#` | `002*52:37#` | `nZM808900992#` |
-| First Home reading | `-00*00:00#` | `000*00:00#` | `nNHZM040400990#` |
-| Four consecutive stable readings | `-00*00:00#` | `000*00:00#` | `nNHZM040400990#` |
-| Final status queried | `-00*00:00#` | `000*00:00#` | `nNHZM040400990#` |
-
-- **Verified:** The Home command `:hC#` initiated a motorized return sequence without the hand controller; the reported position reached 0° altitude and 0° azimuth, and the program detected four consistent home-position/status samples before exiting successfully. Third-party ZWO driver documentation confirms `H` in `:GU#` = at home, `N` = no longer slewing, `Z` = Alt/Az. Reference: `https://pkg.go.dev/github.com/mikefsq/lx200@v0.2.2/am5`.
-- **User clarification on Home trajectory:** The owner confirms the AM3N has **always** followed this characteristic near-zenith path when commanded Home by its **hand controller**, not just via AstroPi USB. Therefore this trajectory is **expected for this unit**, and is not evidence of incorrect USB commands or an AstroPi homing fault. The reported ~180° azimuth jump near zenith may reflect a coordinate discontinuity; it is not proof of physically instantaneous rotation. **Normal does not automatically mean collision-free** with every telescope, accessory, and cable arrangement: confirm clearances and cable slack under the intended real-world setup. AstroPi should use the mount's native Home command rather than inventing its own path.
-- **Physical safety caveat:** The user explicitly **did not plug in the hand controller** for this test. USB software timeout/stop cannot guarantee safety during a lost link or process failure. Recommend an independent reachable cancel/power mechanism before running unattended or higher-risk motion.
-- **Next checks:** A short read-only follow-up to reconfirm Home and stable axes; only afterward investigate alignment and GoTo. Clock/location were synchronized and site corrected beforehand; Home does **not** itself establish sky-pointing accuracy or alignment.
-
-## ZWO AM3N serial connection — earlier AstroPi tests (2026-08-31)
-
-The following were recovered from earlier mount-control work on the Raspberry Pi; these are **historical results**, not tests on the disconnected mount during the 2026-10-27 hardware baseline.
-
-| Detail | Earlier observed result |
-| --- | --- |
-| USB enumeration | ZWO Systems **VID:PID `03c3:4001`**; Linux **CDC ACM** serial device |
-| Device path | `/dev/ttyACM0` |
-| Persistent device alias | `/dev/serial/by-id/usb-ZWO_Systems_ZWO_Device_123456-if00` (prefer to a changing `ttyACM` number; reconfirm on reconnection) |
-| Serial settings | **9600 baud, 8N1, no hardware/software flow control** |
-| User permissions | `/dev/ttyACM0` previously `root:dialout`, mode `0660`; user `arn` was in `dialout` |
-| Connection routes tested | USB serial replies were obtained from an AM3N connection at the **saddle USB-C** port; subsequent diagnostic replies were obtained using the **head USB-B** port. Recheck the preferred physical control connection when wired up again. |
-| Protocol | **LX200-style ASCII commands** ending in `#`, used directly over serial; INDI not required for this interface |
-
-**Actually observed serial replies in earlier tests:**
-
-- `:GR#` → `12:03:12#` (reported RA); `:GD#` → `+44*29:41#` (reported Dec).
-- `:GVP#` → `AM3N#` (mount product/model identification).
-- `:GV#` → `1.8.8#` (**reported version at the time**; recheck firmware later).
-- `:GU#` → `nNZM000000000#` and `:GAT#` → `e7#` (raw replies recorded; their meaning is **not** inferred here).
-
-**Earlier controller design / movement probe (requires renewed validation):**
-
-- Controller commands used/proposed: `:hR#` unpark; speed presets `:R0#`, `:R3#`, `:R6#`, `:R9#`; directions `:Mn#`, `:Ms#`, `:Me#`, `:Mw#`; stops `:Qn#`, `:Qs#`, `:Qe#`, `:Qw#` and `:Q#` (all-stop).
-- Previous diagnostics included `:hR#`, `:R6#`, and `:Me#` during a movement test. The precise physical-motion/stop outcomes were not fully recoverable in this review, so **do not mark the entire slew-control or safety behavior verified**.
-- A prototype browser/Flask AM3N controller was drafted with press-and-hold movement, speed selection, stop-all, and a timeout watchdog. Existence of code does **not** prove these behaviors are hardware-tested.
-- **Still to test:** command acceptance, physical stop response, all speed levels, tracking start/stop, parking, GoTo, and manual two-/multi-star alignment, all in Alt/Az mode.
-
-**Physical caution previously reported by owner:** The mount's M12 counterweight-hole path can extend into internal wiring. **Do not insert an excessively long M12 bolt.** Confirm mounting hardware clearance before use.
-
-## Verified running-system baseline (2026-10-27)
-
-Measurements below are from **`arn@astropi`**, not the separate N100 desktop. These are idle-state measurements; camera and mount were **not connected**.
-
-| Check | Observed value |
-| --- | --- |
-| Power / throttling | `vcgencmd get_throttled` → `throttled=0x0` (no undervoltage or throttling reported since boot) |
-| CPU temperature | `vcgencmd measure_temp` → **34.0°C** |
-| SD card | `mmcblk0` **29 GiB**, ~32 GB marketed capacity; 512 MiB firmware boot partition plus 28.5 GiB ext4 root partition |
-| Filesystem space | Root filesystem **28 GiB total, 5.6 GiB used, 22 GiB available** (21% used); recording destination not yet chosen |
-| USB | 5 Gbit/s USB 3 root hub present with **no USB 3 devices connected**; VIA Labs USB 2 hub detected (480 Mbit/s); no SV705C observed in scan |
-| Network | `wlan0` up; `eth0` down, no carrier |
-| Clock | NTP active and synchronized; **Europe/London (GMT)** time zone as of test; RTC unavailable (`n/a`) |
-| Runtime | **Python 3.13.5**, `aarch64` |
-| Swap | `zram0` 2 GiB swap; earlier `free -h` reported no swap usage |
-
-**Follow-ups:** Test 5V power and `get_throttled` under sustained camera load; verify the planned 64 GB USB 3 recording drive and mount it persistently; visually verify first frame, confirm RAW16 value alignment and check sustained camera power stability. Configure the Pi's time zone to the observing region if desired; astronomy calculations should use synchronized UTC plus explicitly configured observing latitude/longitude, not infer coordinates from time zone. Offline operation needs a way to acquire accurate time after boot (e.g. browser-provided clock or an RTC).
-
-## 64 GB acquisition USB stick — first connection (2026-10-27)
-
-User hot-plugged the intended flash storage drive while both camera and AM3N remained connected. `lsblk` reported **`sda` 59.8 GiB, USB, Flash Drive FIT**, with two old Raspberry Pi OS-style volumes: `sda1` 512 MiB `vfat` `bootfs`, `sda2` 59.2 GiB `ext4` `rootfs`. Neither volume mounted; **the active OS is on `mmcblk0`**, with `mmcblk0p2` mounted at `/` and `mmcblk0p1` at `/boot/firmware`. Its partition UUIDs differ from those on the flash stick.
-
-`lsusb -t` simultaneously reported **USB 3 mass storage at 5000M**, SV705C vendor device at **5000M**, and ZWO AM3N CDC ACM at **12M** USB 2. USB **link negotiation** verified, but measured file write speed, integrity, bus stability under load, and persistent mount **not yet verified**.
-
-**Do not destroy the pre-existing partitions without explicit confirmation** that the stick's old OS image/data may be erased. If approved, create one clean ext4 acquisition volume and identify/mount it by UUID; record its replacement UUID and measured performance. Always reconfirm the device name before any destructive command: `/dev/sda` is observed now, not guaranteed forever.
-
-### USB acquisition stick: dedicated ext4 filesystem confirmed (2026-10-27)
-
-User explicitly approved **erasing the old Raspberry Pi OS image** on the removable `Flash Drive FIT` storage device. After repartitioning to one GPT Linux partition and formatting ext4, the first `lsblk` response showed the new `sda1` partition but no filesystem metadata; a later `udevadm settle`, `blkid -p`, `wipefs -n`, and `lsblk` verification confirmed:
-
-- Device at time of test: **`/dev/sda1`**, 59.8 GiB; original `/dev/mmcblk0` root OS untouched.
-- Filesystem: **ext4**, version 1.0, 4 KiB blocks, label **`astropi-data`**.
-- **Filesystem UUID:** `25b33cfa-b178-4b86-8a15-d00c8305cca5`.
-- GPT partition UUID: `91e60011-2543-48e3-9ecb-b4f151f8b565`.
-- Verified ext4 signature using `wipefs -n /dev/sda1` and `blkid -p /dev/sda1`.
-- **Mount configured and verified 2026-10-27:** User added UUID entry to `/etc/fstab`: `UUID=25b33cfa-b178-4b86-8a15-d00c8305cca5 /media/astropi-data ext4 defaults,nofail,x-systemd.device-timeout=10s 0 2`; backed up fstab, ran `systemctl daemon-reload`, and successfully mounted `/media/astropi-data`. `findmnt` shows `/dev/sda1 ext4 rw,relatime`; `df -h` shows 59 GiB available; `ls -ld` shows mount root owned by `arn:arn`. **Mount now verified; automatic remount on reboot and sustained write/read integrity/throughput remain untested.** The application must refuse disk recording when this mount is missing; do not fall back to the microSD.
-
-### USB acquisition stick: 512 MiB performance and integrity probe (2026-10-27)
-
-User ran a Python acquisition-storage probe on **`/media/astropi-data`** after guarding that `findmnt` returned the expected filesystem UUID `25b33cfa-b178-4b86-8a15-d00c8305cca5`.
-
-- Wrote **512 MiB** of random data in 128 chunks of 4 MiB, then issued `os.fsync()`.
-- **Reported write speed:** **20.2 MiB/s**, inclusive of the final `fsync`.
-- **Reported read speed:** **146.5 MiB/s**; likely influenced by Linux page cache, **not** an independently verified sustained device-read rate.
-- Calculated SHA-256 while writing and reading; **data integrity PASS**, equal digests.
-- The temporary benchmark file was deleted.
-- SV705C full-frame RAW16 data size is **16,812,160 bytes (~16.03 MiB)**, equivalent to roughly **0.79 seconds/frame** at measured sustained write speed, not including camera exposure, SDK transfer, file-format processing, metadata, or future throughput variability. This is sufficient for low-cadence DSO captures but **not** an independently measured end-to-end capture pipeline.
-- **Subsequent confirmation:** Retention and automatic mount **passed the reboot test** below. Longer-running write tests and actual consecutive camera captures while all peripherals are connected remain pending.
-
-### USB acquisition drive — persistence and peripherals across reboot VERIFIED (2026-10-27)
-
-The user wrote a persistent **16 MiB random file** to the mounted `/media/astropi-data/.reboot-test.bin` with `conv=fsync`, stored its SHA-256 manifest on the Pi, and **rebooted**. Subsequent outputs:
-
-- `findmnt /media/astropi-data` → `/dev/sda1`, **ext4**, `rw,relatime`: automatic mount after boot is **verified**.
-- `sha256sum -c ~/astropi-usb-reboot.sha256` → `/media/astropi-data/.reboot-test.bin: OK`: **content persisted and matched SHA-256 across reboot**.
-- `lsusb -t` → USB3 mass-storage device at **5000M**, vendor-specific **SV705C** at **5000M**, **AM3N** using `cdc_acm` at **12M** over USB2: **all three device connections enumerated after reboot**.
-- `vcgencmd get_throttled` → **`throttled=0x0`**, no currently/lifetime recorded Pi under-voltage or throttle flags reported at that check.
-- **Conclusion:** Basic USB acquisition storage setup, automatic mount, 512 MiB benchmark/checksum and reboot persistence **PASS**. The benchmark's 146.5 MiB/s read result might include page caching. Further tests still required for **long-duration mixed camera/USB load, actual end-to-end SDK camera captures to this drive, and offline network/time recovery**.
-- The 16 MiB `.reboot-test.bin` file was not reported removed; can be deleted after the confirmation if desired, after verifying the correct mounted filesystem.
-
-### SV705C post-reboot ten-frame capture attempt — camera open failed (2026-10-27)
-
-After USB drive persisted across reboot, the user verified `SVBGetNumOfConnectedCameras()` returned **1**. They then ran an attempted 10-frame 200 ms RAW16 acquisition to `/media/astropi-data`: the script checked the **correct mounted filesystem UUID**, confirmed available capacity, created empty output directory `camera-test-20261027-110113`, and printed expected frame size **16,812,160 bytes**. Before configuring exposure or starting any capture, it failed at `SVBOpenCamera(1)` with **SDK error code 2**. **No camera frames were acquired or saved.**
-
-**Likely implementation error to test, not yet confirmed:** This Python code hard-coded `CAM = 1` without calling `SVBGetCameraInfo(..., index=0)` to read the **current** `CameraID`; the previous successful SDK probe enumerated camera info prior to opening the device. SVBONY SDK docs specify that `CameraID` from `SVB_CAMERA_INFO` is the handle for `SVBOpenCamera`. Use the real current `CameraID` instead of assuming it is always 1, and validate enumerate → info → open → close with a short probe before repeating long capture script. Source: `https://docs.rs/svbony-sys/latest/svbony_sys/struct.SVB_CAMERA_INFO.html`. The visible garbled paste after the function definition did not prevent Python from reaching the Open Camera operation.
-
-**Status:** Previously achieved single-frame RAW16 still stands; 10-frame end-to-end storage capture **NOT YET VERIFIED**. Do not attribute error to the flash drive or power without evidence.
-
-### SV705C camera enumeration → open → close follow-up PASS (2026-10-27)
-
-After the above ten-frame attempt returned SDK error 2 at `SVBOpenCamera(1)`, the user ran a minimal diagnostic using the camera-info API before opening:
-
-- `SVBGetNumOfConnectedCameras()` → **1**.
-- `SVBGetCameraInfo(..., index=0)` → **0 / success**; FriendlyName `SVBONY SV705C`, PortType `USB3.0`, **CameraID `1`**.
-- `SVBOpenCamera(info.CameraID)` → **0 / success**.
-- `SVBCloseCamera(info.CameraID)` → **0 / success**; script printed `CAMERA OPEN/CLOSE TEST PASSED`.
-
-**Diagnosis:** The likely cause of the earlier open failure is **skipping the camera-information discovery call/initialization sequence**, rather than a changed CameraID (it remained 1). Avoid assuming the camera works when opened with hardcoded ID alone; always perform SDK enumeration, `SVBGetCameraInfo`, use returned CameraID, and open/close cleanly. It is not yet proven whether the information API call alone is strictly required by all SDK versions or a transient timing effect contributed. **This was resolved in the subsequent successful ten-frame test below.**
-
-### SV705C dark-frame pixel sample and lens-cap clarification (2026-10-27)
-
-A read-only sample of **83,229 pixel values** (stride 101) from saved `camera-test-20261027-110857` images reported:
-- `frame-01.raw16`: minimum 0, maximum **128**, mean **4.52**, 8 unique sampled values, **78.73% zeros**, **100% divisible by 16**.
-- `frame-10.raw16`: minimum 0, maximum **160**, mean **1.75**, 10 unique sampled values, **91.62% zeros**, **100% divisible by 16**.
-
-**Owner clarified the lens cap was ON during these captures.** The low intensity and high percentage of zeros are therefore **expected dark-frame behavior**, not evidence of a light sensitivity or exposure malfunction. All sampled 16-bit words being multiples of 16 is consistent with 12-bit data left-aligned by four bits, but this is **not yet conclusively verified across the full images / illuminated dynamic range**. Next optical test should remove the cap, use a short exposure and a safe diffused illuminated scene (**never point at the Sun**), and inspect range, clipping and proper preview/debayering.
-
-### SV705C ten consecutive RAW16 frames saved to USB3 storage — PASS (2026-10-27)
-
-Using the corrected SDK order **enumerate → `SVBGetCameraInfo(index=0)` → `SVBOpenCamera(info.CameraID)`**, user successfully performed **10 consecutive frame retrievals** from the SV705C, configured for **3856×2180 RAW16**, requested exposure **200,000 µs** via SDK control ID 1, and saved them with `fsync` to `/media/astropi-data/camera-test-20261027-110857`. The script first verified the mounted data-drive UUID was `25b33cfa-b178-4b86-8a15-d00c8305cca5` and checked free space. This proves camera-to-removable-storage end-to-end capture and file persistence within the test session, **not** exposure-timing accuracy, optical image quality or prolonged uptime.
-
-- Camera `SVBONY SV705C`, dynamically discovered CameraID `1`; SDK returned **0** on start/configuration calls and on **Stop** / **Close**.
-- **10/10 frames retrieved**, each exactly **16,812,160 bytes** (3856×2180×2 bytes), roughly **160.3 MiB** total.
-- Per-frame fetch+hash+disk-write-and-`fsync` measured durations in seconds: **1.11, 1.11, 1.68, 0.59, 0.63, 0.60, 0.62, 0.64, 0.63, 0.57**. These durations are **not** exposure durations; they include retrieval, hashing and file sync.
-- **10/10 file sizes and SHA-256 readback checks passed**, **10 unique frame digests** (not byte-identical images).
-- `vcgencmd get_throttled` → **`throttled=0x0`**.
-- All ten RAW16 files remain saved in the above directory; initial failed capture attempt's separate folder may remain empty.
-- **Next useful camera checks:** inspect actual pixel distributions / 12-bit packing, make a displayable debayered preview under proper lighting, verify gain/exposure control readback and effect, and perform a longer capture/storage/USB reliability run. Full-on-sky alignment, GoTo, tracking and focusing remain future application development work.
-
-### SV705C first illuminated light frame and basic grayscale PNG preview (2026-10-27)
-
-With the **lens cap removed** and camera pointed at an ordinary illuminated scene, the user ran a 10 ms requested exposure with full 3856×2180 RAW16 output, after proper SDK enumerate → info → open initialization and confirming the UUID-mounted USB storage. The capture finished with `CAPTURE COMPLETE`, producing:
-
-- **Full-resolution RAW:** `/media/astropi-data/light-test-20261027-111913.raw16`.
-- **Downscaled grayscale preview:** `/media/astropi-data/light-test-20261027-111913.png`, **964×545**. The preview is an intensity-stretched, averaged Bayer-cell image, **not yet debayered colour** and **not yet visually inspected by user**. Its 12-bit interpreted stretch bounds were `0–118`.
-- Sampled RAW16 pixel statistics: **minimum 0, maximum 5,328, average 317.22**, **3.77% zero**, **100.0% multiples of 16**, **0.0% near saturation** (all based on sampled pixel stride).
-- Compared with lens-cap-on dark frames (means **4.52** and **1.75**, many more zeros), light responsiveness is **strongly indicated**, and the absence of sampled saturated pixels is encouraging.
-- Pixel encoding is strongly **consistent with 12-bit values left-shifted by four bits** inside RAW16: e.g., maximum sampled raw 5,328 corresponds to 333 after shifting right four bits. Do not claim conclusively validated bit alignment without complete sensor/full-dynamic-range tests.
-- **Open question:** Inspect PNG on the user's Linux desktop to confirm visible scene features and sane orientation; check exposure/gain response and then colour debayering before building browser preview.
-- **Not proved:** optical focusing, scientific calibration, requested exposure timing accuracy or long-duration load reliability.
-
-### SV705C preview inspected visually — recognizable indoor scene (2026-10-27)
-
-User uploaded/inspected the **964×545 grayscale PNG** from `light-test-20261027-111913.png`. The preview clearly resolves recognizable indoor objects (television with people on screen, laptop, desk/mouse, doorway/stairs); indoor highlights and shadows are distinguishable. User reports the image is **surprisingly close to focus** using a **Canon EF kit lens set to 18 mm** for this camera-testing setup. This is **test optics**, not a final telescope/focal-length specification.
-
-**Result:** First full imaging-path **visual preview sanity check PASS**: camera → RAW16 → numerical right-shift / Bayer-cell grayscale average → dynamic-range stretch → PNG appears as recognizable scene with no obvious gross corruption. It is not yet a quantitative focus, colour calibration, correct Bayer/debayer, accurate exposure/gain, or long-duration performance validation. The preview is deliberately monochrome due to a simple Bayer-cell averaging algorithm; SV705C SDK camera properties reported **GRBG Bayer**. Next optional probe: generate a correctly demosaiced colour preview from the already saved RAW16 file, with appropriate per-channel white balance, without modifying the original.
-
-### First reconstructed GRBG colour preview inspected — PASS (2026-10-27)
-
-From the **previously recorded**, unmodified full-resolution `light-test-20261027-111913.raw16`, a pure-Python script decoded candidate **12-bit left-aligned RAW16** (right-shift four), used the confirmed **GRBG** Bayer layout to combine **4×4 sensor blocks into one RGB output pixel**, computed rough per-channel white-balance gains using channel 99.5th-percentile levels, applied a simple stretch/gamma, and encoded a **964×545 true-colour PNG** at `/media/astropi-data/light-test-20261027-111913-color.png`.
-
-The user inspected and shared the PNG, reporting **“perfect”**. The image visibly depicts recognizable coloured indoor objects (television, laptop, furniture, doorway). Colour channel ordering and the 4×4 Bayer-cell aggregation appear visually plausible; no obvious image corruption or wild colour-channel swaps. Some pink tint in the hallway remains consistent with **approximate, uncalibrated white balance**.
-
-**Result:** First GRBG → RGB preview **visual acceptance PASS**. No new exposure, original RAW16 preserved. This proves a practical browser-preview processing path on Pi 4 hardware, **not full-resolution debayering**, measured colour accuracy, or optimized throughput. Potential future improvements are proper demosaicing at higher resolution, white balance controls and realtime preview performance measurements; those can be implemented as software features rather than further hardware-blocking probes.
-
-### Exposure/gain sweep interrupted by camera frame timeout (2026-10-27)
-
-User began a four-condition test with full resolution RAW16 `3856×2180`, distinct short recordings for each setting (SDK `SVBStartVideoCapture`/`SVBStopVideoCapture` per condition), and readback via `SVBGetControlValue`.
-
-| Test | Requested | Actual SDK readback | Result |
-| --- | --- | --- | --- |
-| A | 10,000 µs exposure; gain 0 | **10,007 µs**, gain **0**, auto flags 0 | **PASS**: saved `/media/astropi-data/exposure-gain-test/test-A.raw16`, sampled 12-bit average **27.35**, max 444, zeros 1.08%, saturated 0% |
-| B | 50,000 µs exposure; gain 0 | **50,148 µs**, gain **0**, auto flags 0 | **FAILED at first discarded frame**: `SVBGetVideoData` returned **11**, i.e. `SVB_ERROR_TIMEOUT`, after opening the second video capture stream; no B file saved |
-| C / D | Planned gain increase / return to baseline | — | Not reached |
-
-The script successfully stopped recording after the error (`Stop: 0`), restored both control values (`Restore control 0 result: 0`, `Restore control 1 result: 0`), and closed the camera (`Close: 0`). **This does not establish gain or exposure response.** It demonstrates 50 ms was accepted on write/readback but **no frame was delivered before the 5-second SDK wait timeout**. The code had stopped the first video stream and restarted a second on the same open camera handle; stream restart/state timing is a plausible cause, **not yet proven**. The camera/USB/power should not be pronounced faulty based on this alone.
-
-SDK definitions: `SVB_ERROR_TIMEOUT = 11`; `SVBGetVideoData` `iWaitms` controls wait time in milliseconds. Source `https://docs.rs/svbony-sys/latest/svbony_sys/constant.SVB_ERROR_TIMEOUT.html`, `https://docs.rs/svbony-sys/latest/svbony_sys/fn.SVBGetVideoData.html`. INDI user discussions describe transient camera frame timeouts as a real SDK integration concern: `https://forum.indilib.org/t/indi-svbony-ccd-driver-monochrome-reimplementation/12036`.
-
-**Next focused diagnosis:** Open a fresh camera session, set 50 ms / gain 0, start one video stream, and attempt a frame with bounded timeout retries (no immediate stop/start within the same session). Compare output and camera cleanup. Only once this works resume gain comparison; postpone long endurance capture until camera restart behavior is understood.
-
-### SV705C fresh-session 50 ms exposure probe — PASS (2026-10-27)
-
-A follow-up to the exposure/gain sweep's `SVBGetVideoData` SDK timeout 11 at capture-stream restart was performed using a **fresh camera open** and **single stream start**, with a 0.5-second warm-up and up to three bounded frame-read attempts.
-
-- `SVBGetControlValue` after setting gain 0 → `(0, 0)`; requested exposure 50,000 µs → readback **`(50148, 0)`**.
-- **First frame attempt succeeded:** SDK 0, `SVBGetVideoData` call took **0.01 seconds** (after 0.5-second warm-up; does not imply the exposure lasted only 0.01 s).
-- Sampled **12-bit mean intensity 133.34**. Earlier 10 ms / gain 0 test A returned actual exposure **10,007 µs** with mean **27.35**. **Measured brightness increased by 4.88× for ~5.01× longer exposure**, strong evidence exposure setting affects pixel data sensibly under approximately unchanged ambient illumination; not a laboratory calibration.
-- Frame saved: `/media/astropi-data/exposure-gain-test/test-B-retry.raw16`.
-- Capture stopped, gain and exposure control values restored and camera closed with **all SDK codes 0**. Script printed **`RESULT: PASS`**.
-- **Interpretation:** Exposure control/readback and actual light response **verified**; the earlier timeout likely involved video-stream restart/state/timing, but root cause remains unproven. Design camera module to handle bounded timeouts and avoid unnecessary stop/restart cycles.
-- **Still pending:** Gain response at same exposure, repeat baseline if desired, prolonged simultaneous capture/storage/power test.
-
-### SV705C gain-100 fresh-session capture and file verification — PASS (2026-10-27)
-
-Following the successful fresh-session gain-0 / 50 ms baseline frame, the user opened a separate camera session using the correct SDK enumeration/info/open sequence and captured at requested **50,000 µs** exposure with requested **gain 100**:
-
-- Exposure readback: **`(50148, 0)`**; gain readback: **`(100, 0)`**.
-- **First** frame retrieval returned SDK code **0**.
-- Sampled **12-bit mean 440.11**, maximum 4095; zero-valued fraction 0.0%; saturated sampled fraction **0.05%**.
-- Baseline at same exposure with gain 0 had mean **133.34**. Thus observed ~**3.30× higher** image mean with gain 100 under comparable (not externally calibrated) scene lighting.
-- SHA-256 verification of the saved RAW16 file: **PASS**, at `/media/astropi-data/exposure-gain-test/test-C-gain100-20261027-114024.raw16`.
-- `SVBStopVideoCapture`, restoration of gain and exposure, and `SVBCloseCamera` **all returned 0**. Pi `vcgencmd get_throttled` was **`throttled=0x0`**.
-- **Conclusion:** Manual gain-setting command, readback and physical gain response **PASS**. Alongside 10→50 ms exposure light-response test (~4.88× for 5× requested exposure), both primary camera controls are verified for the first AstroPi implementation. These are not precision calibrations of gain or exposure.
-- **Next:** A 20-minute combined SV705C continuous-stream / USB3 data-drive recording and periodic power/temperature check, with the mount connected but no movement commanded. Count frame retrieval timeouts and file integrity failures; monitor USB link errors.
-
-### SV705C + USB3 camera/storage endurance — 20 minutes PASS (2026-10-27)
-
-User ran `~/astropi-endurance.py` with the **SV705C**, **USB3 flash drive**, and **USB serial AM3N connected (stationary)**. Correct USB filesystem UUID `25b33cfa-b178-4b86-8a15-d00c8305cca5` was checked before saving. The test used **one continuously running camera stream** after normal enumeration and camera open, set gain **0**, requested exposure **1,000,000 µs** (actual readback **1,000,143 µs**), retrieved **one RAW16 3856×2180 frame every 2 seconds** for 600 frame reads, and saved **every fifth** retrieved frame, including `fsync`, SHA-256 readback verification, and a CSV manifest.
-
-Terminal output confirmed:
-- **600/600** frame retrievals over approximately **20 minutes**.
-- **120/120** full-resolution RAW16 files written and verified against their in-memory SHA-256 checksums; **120 distinct saved frame hashes**.
-- Total raw-file payload **2,017,459,200 bytes (~1.88 GiB)**, excluding filesystem metadata and manifest.
-- **0 SDK timeouts**, no persistent camera errors. All minute markers from 1.0 to 20.0 minutes had expected counts, advancing 30 retrieved and 6 saved frames each minute.
-- Pi temperature recorded once per minute ranged **46.7°C to 51.6°C**; last **49.6°C**.
-- Every reported `vcgencmd get_throttled` reading was **`throttled=0x0`**; no reported undervoltage or throttling flags.
-- `SVBStopVideoCapture` returned **0**, restoration of control IDs 0 and 1 returned **0**, `SVBCloseCamera` returned **0**; script printed **`ENDURANCE TEST COMPLETE`**.
-- Output folder: `/media/astropi-data/endurance-20261027-114529`.
-
-**Acceptance:** Sustained camera acquisition and selective USB3 writes **PASS**, with frame integrity, temperature and firmware throttle status verified throughout. This test was representative of low-cadence DSO acquisition, not maximum-rate camera streaming and not literal simultaneous mount slewing. **Kernel log follow-up checked:** The filtered kernel log showed **one** `usb 2-2: reset SuperSpeed USB device number 3 using xhci_hcd` event at **2026-10-27 11:45:29**, precisely matching the creation/start timestamp of `endurance-20261027-114529`. Earlier USB tree mapping identifies **bus 002 port 002 (usb 2-2)** as the SV705C vendor-specific USB3 device, while storage is bus 002 port 001. The reset may be related to camera initialization, but **cause not proven**. There were no additional matching reset/disconnect/error lines in the supplied filtered log output, and no corresponding SDK timeouts or frame/storage errors across the 20-minute run. The log is therefore **not completely clean**, but the test remains **PASS with one startup-time reset to monitor**. Follow-up `df -h /media/astropi-data`: `/dev/sda1` **59G total, 2.2G used, 57G available (4%)**. Offline field start and long exposure/tracking accuracy remain outside this acceptance test.
-
-## Pre-development integrated hardware acceptance checklist (planned 2026-10-27)
-
-The core camera and mount interfaces have passed their **individual** smoke tests. Before substantial application coding, test the complete field configuration in the following order. Statuses below distinguish **known**, **planned**, and **not yet verified**.
-
-| Priority | Test | Evidence for acceptance | Status |
-| --- | --- | --- | --- |
-| P0 | 64 GB USB 3 acquisition drive | Identify correct USB device and filesystem **before any formatting**, inspect capacity/UUID, mount persistently by UUID, perform non-destructive write/read integrity and sustained throughput test, verify clean unmount/remount and reboot persistence | **PASS:** USB3 5000M, UUID mount after reboot, 512 MiB checksum test, 20.2 MiB/s write, 16 MiB retention after reboot, **1.88 GiB verified during 20-minute camera/drive run** |
-| P0 | Camera capture to target storage | Verify explicit manual gain/exposure control, multiple consecutive RAW16 frames, nontrivial image statistics, preview of ordinary scene, proper frame format/12-bit alignment, and checksums/file sizes on the new drive | **PASS:** 10/10 RAW16 files, grayscale/colour preview, exposure 5×→4.88× brightness, gain 0→100 gives 3.30× brightness; **600/600 camera frame retrievals and 120/120 verified saves over 20 minutes**. Precision exposure/colour calibration still pending |
-| P0 | Realistic whole-system load & power | SV705C + AM3N + USB3 recording drive (+ intended Wi-Fi if needed) active together; monitor `vcgencmd get_throttled`, supply/buck ratings and voltage under load, `dmesg` USB disconnects/resets, `journalctl` and temperatures for ~20–30 minutes | **20-minute combined camera/USB-drive endurance PASS**: 600 reads, 120 verified files, 0 camera timeouts, Pi 46.7–51.6°C, throttled=0x0. AM3N attached/stationary; **one SV705C USB3 reset at startup** in kernel log, no other matching errors; full physical field-power setup still pending |
-| P1 | Offline startup / time / network | Reboot on real field power without Internet; verify local browser accessibility, Wi-Fi/AP behaviour, reliable clock acquisition or clock fallback, mount clock synchronization, stable devices and writable data path | **NTP synchronized while online; offline untested, no hardware RTC** |
-| P1 | Mount with actual optical payload | Confirm cables, camera/OTA clearance and power branches during native Home path (including near zenith); confirm external physical stop/power access and usable normal-stop/deadman behaviour | **Home and normal stops tested with existing configuration; full field cable/safety layout pending** |
-| P2 | Repeatability and recovery | Restart services, remove/reconnect devices **only while capture/motors are safely idle**, validate camera rediscovery, serial port by-id, readable files and predictable failure handling; reboot/power cycle time/location retention | **Not yet systematically tested** |
-
-**Technical notes:**
-- Raspberry Pi 4 documentation gives **1.2 A total downstream USB power budget** (shared across all ports), not 1.2 A per port. A powered USB hub is an option **only if actual tests show a power issue**. Source: `https://www.raspberrypi.com/documentation/computers/raspberry-pi.html`.
-- USB 3 cabling can degrade nearby 2.4 GHz reception; try a properly positioned dongle/5 GHz when testing actual field-network configuration.
-- SV705C SDK property readback reported supported bin values 1, 2, 3, 4, whereas the public SV705C specification explicitly lists 1× and 2×. Treat bin 3 and 4 as **unverified** until acquiring frames; do not assume that an advertised SDK field guarantees physical support. Product source: `https://www.svbony.com/products/sv705c-color-planetary-camera-imx585`.
-- Current success is a single saved RAW16 full-frame file from a dark, severely defocused optical setup. A file with correct size is not sufficient proof of correct debayering, pixel alignment, proper exposures or write reliability.
-- **Not a pre-coding blocker:** actual sky alignment, target GoTo accuracy, sustained sidereal/AltAz tracking, refined focusing and browser UI. They should be tested iteratively as the related modules are implemented, before real observing sessions.
-- Do not purchase additional hardware (RTC, powered hub, new storage) until the relevant acceptance test establishes a real need.
-
-## Configuration still to record
-
-- Telescope and focal length, including any reducer or Barlow (for image scale and field-of-view estimates).
-- Reconfirm the historical AM3N USB cable/port connection and stable `/dev/serial/by-id/` alias once the mount is reconnected; map the remaining USB devices.
-- Connect and verify 64 GB USB 3 thumb drive; choose filesystem and configure persistent mount by UUID (e.g., `/media/astropi-data`) as FITS/raw capture destination. No formatting or filesystem changes approved yet.
-- Power-supply capacity, connector polarity, buck-converter ratings and cable layout.
-- Query the SDK-reported version and supported exposure controls, validate RAW16 pixel interpretation and produce a viewable preview; later verify exposure sequences and saving to the USB 3 data drive. Recheck AM3N-reported version (historically `1.8.8#`) and test motion/stop/tracking/GoTo safely.
-
-## Rules
-
-1. Record **owned**, **planned**, **connected**, and **tested** separately; never call something working merely because the specification says it should work.
-2. Keep passwords, Wi-Fi passphrases, API tokens and private keys **out of Git**. Store secrets locally in configuration excluded by `.gitignore`.
-3. Update this file alongside commits when hardware assumptions or configurations change.
+| Frame retrieval | **600/600** successful; **0 SDK timeouts** |
+| Saved files | **120/120**, individually SHA-256 readback verified; **120 distinct digests** |
+| Raw payload | **2,017,459,200 bytes (~1.88 GiB)** |
+| Pi temperature | **46.7–51.6°C** over twenty 1-minute readings |
+| Power flags | `vcgencmd get_throttled` **`0x0`** throughout |
+| SDK shutdown | Stop, restore gain/exposure and Close all returned **0** |
+| Directory | `/media/astropi-data/endurance-20261027-114529/` |
+
+**One kernel USB3 reset**: `2026-10-27 11:45:29 usb 2-2: reset SuperSpeed USB device number 3 using xhci_hcd`, on the camera's USB port around capture startup. Cause unknown; *no subsequent matching USB/storage errors in the user's filtered log*, no lost frames or timeouts. Monitor for future resets, especially during recording; don't call the kernel log completely clean. This test is representative of low-cadence DSO exposures, **not maximal USB3 throughput or simultaneous mount slewing**.
+
+## AM3N: protocol, current settings and motion evidence
+
+- Preferred path: **`/dev/serial/by-id/usb-ZWO_Systems_ZWO_Device_123456-if00`** (currently points to `/dev/ttyACM0`). `pyserial 3.5`; **9600 8N1**, no flow control, ~2 s serial read timeout, ASCII LX200-like `:` commands, `#` reply terminator for queries.
+- Model `:GVP#` → `AM3N#`; firmware `:GV#` → `1.8.8#`. Query `:GU#` reports status flags (third-party protocol interpretation): **`n` not tracking, `N` not slewing, `H` at Home, `Z` Alt/Az**. The remaining `M...` suffix is **not decoded**. **`:GAT#` returned `e7#`**, inconsistent with some third-party tracking examples; **do not rely on it** for tracking status.
+- **Owner-selected observing site:** latitude **+45.2933°** (mount `+45*17:36#`), longitude **−75.8571° east-positive** (mount uses **west-positive** `+075*51:26#`). Setter `:St+45*17:36#` for latitude; `:Sg+075*51:26#` for longitude. Both replied **`1`**, verified by `:Gt#`/`:Gg#` readbacks. Owner believes site survives power cycles because the old stored coordinates matched their former home; **nonvolatility not independently power-cycle-tested**. Reapply site on connect.
+- **Clock (manually demonstrated):** `:SG+00:00#` sets UTC offset 0; `:SC10/27/26#` date; `:SL13:37:03#` time—each setter acknowledged `1`. `:GG#`, `:GC#`, `:GL#` readbacks matched; clock advanced correctly, and `:GS#` local sidereal time agreed to ~0.5 s with independent calculation at the then-stored longitude. **Example commands contain historical times; use live UTC.** **Automatic startup/reconnect synchronization does NOT exist yet**. Pi lacks RTC, so offline field boot needs trusted time before sky GoTo.
+- **Read-only position:** `:GA#` altitude, `:GZ#` azimuth, `:GR#` RA, `:GD#` Dec; **reported** coordinates are not proven pointing accuracy until alignment. `:GS#` sidereal time. No command should be treated as proof of sky alignment.
+- **Manual motion verified:** `:Rv120.00#` (~120× sidereal) followed by `:Me#` east caused **visibly observed** azimuth movement; `:Mn#` up caused positive altitude telemetry change. Preset `:R5#` also moved azimuth (2 arcmin in 1 s, 6 arcmin in 3 s). Directional stops e.g. `:Qe#`, `:Qn#`, plus `:Q#` all-stop are accepted.
+- **Important stop behaviour:** after high-speed `:Qe#`/`:Qn#` and `:Q#`, each tested axis showed another **1′28″ reported position change** before a later stable reading; it may be deceleration or telemetry latency. Always treat a stop as **requested**, then poll `:GU#` and both axes repeatedly for stationary readings. The normal-operation stop-settling tests passed; **abnormal USB disconnect/process crash/fail-safe stopping have not been tested**.
+- **Native Home verified:** sent **`:hC#`** via USB, hand controller disconnected, and observed actual motorized Home sequence. Start altitude **+01°30′50″**, azimuth **013°43′10″**; final **altitude 0°, azimuth 0°** with status **`nNHZM040400990#`** stable across four polls. Owner confirms its **near-zenith, azimuth-wrap route** is the same native route taken via hand controller. **Do not attempt to “fix” this path**. Confirm payload/cable clearance in each physical setup.
+- **Park is separate and not tested** (third-party driver uses `:hP#`; firmware 1.8.8 reportedly defaults to horizontal Park). Unpark, tracking commands, sky GoTo and alignment have **not been validated**. Use protocol sources as hypotheses and verify in controlled stages; e.g. [INDI AM-series driver](https://github.com/indilib/indi/blob/master/drivers/telescope/lx200am5.cpp).
+- User's physical warning: AM3N's **M12 counterweight-bolt hole can reach internal wiring**. **Never insert an overlong M12 bolt.** Mount/Home movements also require physical clearance and a reachable hardware Cancel/power fallback; software stop is not fail-safe if Pi/USB dies.
+
+## USB flash data drive
+
+- USB3 at **5000M**, ~59.8 GiB. USB stick was an old Pi OS image; the user explicitly approved its erasure. ext4 label **`astropi-data`**, UUID **`25b33cfa-b178-4b86-8a15-d00c8305cca5`**.
+- `/etc/fstab`: `UUID=25b33cfa-b178-4b86-8a15-d00c8305cca5 /media/astropi-data ext4 defaults,nofail,x-systemd.device-timeout=10s 0 2`. Mounted `rw`; mount root `arn:arn`. `nofail` permits boot without USB drive.
+- Storage benchmark: **512 MiB write at 20.2 MiB/s**, checksum readback **PASS**; measured read **146.5 MiB/s** likely inflated by Linux cache. A **16 MiB file survived reboot** with SHA-256 `OK`; filesystem auto-mounted after reboot; no undervoltage.
+- Crucial: **require a mounted filesystem with this UUID** before writing captures. **Never** silently fill `/dev/mmcblk0` if flash drive is absent. Check free space, write via `.partial` → `fsync` → atomic rename, and verify/capture errors.
+- Last tested drive occupancy was **2.2 GiB used / 57 GiB available** (4%), after endurance; do not assume this remains current.
+
+## What remains unresolved (not pre-development blockers)
+
+1. **Application code is not yet in GitHub.** All current success comes from shell/Python probe scripts run on the Pi. Design/deployment and systemd auto-start belong to development.
+2. **Mount:** sky-pointing alignment model, Alt/Az GoTo, tracking/stop control and Park; offline location/time recovery; abnormal link-failure safety. Home works but does not establish pointing accuracy.
+3. **Camera:** long-exposure/scientific FITS metadata, colour calibration, live-preview performance, valid ROI/binning modes beyond proven full-frame 1×, predictable recovery after capture restart or USB faults.
+4. **Physical field deployment:** actual optical tube and 12 V battery/buck wiring, cable clearance on Home/GoTo, safe physical Cancel, offline network and trusted time, sustained battery runtime. The successful test was with connected but **stationary** AM3N.
+5. **Service:** one process owns camera SDK; one serialized mount command queue; capture sequences must survive browser disconnect; one operator lease; timestamps/site/UUID validated before scientific recordings.
+
+**Use [REQUIREMENTS.md](REQUIREMENTS.md) for what to build and [DEVELOPMENT.md](DEVELOPMENT.md) for how to begin.** Current facts here supersede historical probe entries; keep detailed diagnosis in Git history rather than turning this file back into a daily console log.
