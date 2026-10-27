@@ -367,3 +367,29 @@ def test_emergency_stop_from_idle_is_explicit_serial_stop(tmp_path):
     wait_until(lambda: worker.status()["stop_stable"], timeout=5)
     worker.disconnect()
     worker._thread.join(timeout=3)
+
+
+
+def test_hard_jog_time_limit_with_ongoing_heartbeats(tmp_path):
+    alias = tmp_path / "port"
+    alias.touch()
+    factory = MotionFactory()
+    worker = MountWorker(alias, serial_factory=factory, poll_interval=0.07)
+    worker.connect()
+    wait_until(lambda: worker.status()["connected"])
+    worker.arm()
+    worker.jog("east")
+    wait_until(lambda: ":Me#" in factory.ports[0].commands)
+    # Periodic renewals do not allow unlimited movement.
+    began = time.monotonic()
+    while time.monotonic() - began < 4 and ":Q#" not in factory.ports[0].commands:
+        try:
+            worker.heartbeat("east")
+        except RuntimeError:
+            pass
+        time.sleep(0.15)
+    assert ":Q#" in factory.ports[0].commands
+    assert worker.status()["last_stop_reason"] == "Maximum jog duration reached"
+    assert not worker.status()["motion_armed"]
+    worker.disconnect()
+    worker._thread.join(timeout=3)

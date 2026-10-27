@@ -23,6 +23,7 @@ JOG_COMMANDS = {"north": ":Mn#", "south": ":Ms#", "east": ":Me#", "west": ":Mw#"
 JOG_RATE = ":R5#"
 STOP_COMMAND = ":Q#"
 DEADMAN_SECONDS = 0.6
+MAX_JOG_SECONDS = 3.0  # independent cap even when client keeps heartbeating
 STILL_TOLERANCE_DEG = 0.0006  # ~2 arcsec
 
 _ANGLE = re.compile(r"^([+-]?)(\d{1,3})\*(\d{2}):(\d{2}(?:\.\d+)?)$")
@@ -95,6 +96,7 @@ class MountWorker:
         self._direction = None
         self._pending_direction = None
         self._motion_deadline = 0.0
+        self._hard_deadline = 0.0
         self._stop_pending = False
         self._stop_reason = None
         self._ever_moved = False
@@ -127,6 +129,7 @@ class MountWorker:
             self._armed = False
             self._direction = self._pending_direction = None
             self._motion_deadline = 0.0
+            self._hard_deadline = 0.0
             self._stop_pending = False
             self._ever_moved = False
             self._stop_sent_at = None
@@ -184,6 +187,7 @@ class MountWorker:
                 raise RuntimeError("A Stop or disconnect is pending")
             self._pending_direction = direction
             self._motion_deadline = self._clock() + DEADMAN_SECONDS
+            self._hard_deadline = self._clock() + MAX_JOG_SECONDS
             self._state.update(motion_phase="starting", motion_direction=direction)
             return direction
 
@@ -194,6 +198,9 @@ class MountWorker:
             if self._state["motion_phase"] not in ("starting", "moving"):
                 raise RuntimeError("No active manual jog")
             # A delayed keepalive cannot revive an expired jog.
+            if self._clock() >= self._hard_deadline:
+                self._queue_stop_locked("Maximum jog duration reached")
+                raise RuntimeError("Three-second jog limit reached; Stop requested")
             if self._clock() >= self._motion_deadline:
                 self._queue_stop_locked("Deadman heartbeat expired")
                 raise RuntimeError("Manual jog expired and Stop was requested")
@@ -204,6 +211,7 @@ class MountWorker:
         self._armed = False
         self._pending_direction = None
         self._motion_deadline = 0.0
+        self._hard_deadline = 0.0
         self._stop_pending = True
         self._stop_reason = reason
         self._state.update(
@@ -229,9 +237,11 @@ class MountWorker:
         """Serial-owner only; no Flask thread may call serial.write()."""
         now = self._clock()
         with self._lock:
-            if (self._state["motion_phase"] in ("starting", "moving") and
-                    now >= self._motion_deadline):
-                self._queue_stop_locked("Deadman heartbeat expired")
+            if self._state["motion_phase"] in ("starting", "moving"):
+                if now >= self._hard_deadline:
+                    self._queue_stop_locked("Maximum jog duration reached")
+                elif now >= self._motion_deadline:
+                    self._queue_stop_locked("Deadman heartbeat expired")
             stop = self._stop_pending
             if stop:
                 self._stop_pending = False

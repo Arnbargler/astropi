@@ -79,6 +79,7 @@ function harness() {
       return {ok:true,json:async()=>({ok:true})};
     }
     if (url === "/api/control/take") return {ok:true,json:async()=>({token:"test-token"})};
+    if (url === "/api/control/release") return {ok:true,json:async()=>({ok:true})};
     if (url === "/api/control/heartbeat") return {ok:true,json:async()=>({ok:true})};
     if (url === "/api/capture/sequence") {
       capture = {phase:"waiting",id:"sequence-mock",total_frames:payload.count,
