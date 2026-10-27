@@ -138,3 +138,23 @@ running:
 If the connection fails, provide that output and the current UI error
 before we add ANY controls that could move the mount. Do not launch a
 second serial-monitor process against the same mount port simultaneously.
+
+
+## AM3N first Pi read-only status verified (2026-10-27)
+
+User screenshot confirmed **USB detected**, **serial alias available**,
+**Connection: connected**, model **AM3N** firmware **1.8.8**,
+altitude **+00*00:00**, azimuth **000*00:00**, reported
+RA **13:13:45** and Dec **+44*42:24**.
+Mount raw `:GU#` was `nNZM0000000000`: not tracking, not
+slewing, with Alt/Az marker `Z`. This differs from earlier
+`nNHZM040400990` by having no `H` flag. The original code
+incorrectly assumed `Z` was at one fixed position, displaying the
+mode as unknown. Code now recognizes known optional flags by presence
+before the `M` suffix; this parser correction awaits Pi redeployment.
+
+Next safe on-Pi check: click **Disconnect**, confirm coordinates clear
+and the serial port closes, then **Connect Mount** again. The mount
+must remain stationary throughout; do not send movement/Home commands.
+Neither disconnect/reconnect nor simulated cable loss has yet been
+observed working on the actual mount through this browser.

@@ -48,16 +48,20 @@ def ra_hours(value):
 
 
 def known_flags(value):
-    """Only interpret flag positions confirmed for this specific mount.
+    """Recognize known *present* AM3N flags, never assume fixed offsets.
 
-    Unknown flags are None, not assumed motion/accuracy information. :GU#
-    has an undocumented suffix; always preserve it verbatim for diagnosis.
+    The real Pi reported nNZM... when H (Home) was absent and nNHZM...
+    when H was present. Optional flags shift subsequent characters.
+    Only positive observations are decoded; absent flags remain unknown
+    except for the explicitly reported "n" / "N" negative-state markers.
+    M starts an undocumented suffix, which is still preserved verbatim.
     """
+    flags = value.split("M", 1)[0]
     return {
-        "tracking": False if value[:1] == "n" else None,
-        "slewing": False if value[1:2] == "N" else None,
-        "at_home": True if value[2:3] == "H" else None,
-        "altaz_mode": True if value[3:4] == "Z" else None,
+        "tracking": False if "n" in flags else None,
+        "slewing": False if "N" in flags else None,
+        "at_home": True if "H" in flags else None,
+        "altaz_mode": True if "Z" in flags else None,
     }
 
 

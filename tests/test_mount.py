@@ -85,6 +85,16 @@ def test_parser_and_verified_status_only():
         "tracking": False, "slewing": False, "at_home": True,
         "altaz_mode": True,
     }
+    # Real Pi screenshot: with the optional H missing, Z moves one position.
+    assert known_flags("nNZM0000000000") == {
+        "tracking": False, "slewing": False, "at_home": None,
+        "altaz_mode": True,
+    }
+    # Never interpret unknown M-suffix characters as mount state flags.
+    assert known_flags("nNMZ99") == {
+        "tracking": False, "slewing": False, "at_home": None,
+        "altaz_mode": None,
+    }
     assert known_flags("?XY?") == {
         "tracking": None, "slewing": None, "at_home": None,
         "altaz_mode": None,
