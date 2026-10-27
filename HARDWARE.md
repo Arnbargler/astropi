@@ -201,6 +201,15 @@ The user reported that rate preset `:R7#` still produced barely perceptible move
 - **Engineering requirement for AstroPi:** Treat sending `:Q#` as a **stop request**, not immediate proof of halt; poll status and repeated altitude/azimuth samples to confirm stability before claiming stopped or allowing new movements. Implement deadman limits and provide independent physical cancel/power access.
 - No tracking, park, two-star alignment or GoTo behavior has been validated yet. The mount clock was previously found uninitialized.
 
+### Repeat high-speed post-stop stationary polling (2026-10-27)
+
+Following the visually confirmed east/azimuth movement at variable `120×` speed and the initial `1′28″` post-stop change, the user performed an additional **five consecutive read-only position/status samples** (one-second intervals). All five were identical:
+
+- `:GZ#` → `013*43:10#`
+- `:GU#` → `nNZM000000800#`
+
+**Conclusion:** The mount's reported azimuth was stable (zero change across five polls) and the status consistently indicated no active slew. Combined with the user's visual movement confirmation, this **passes the initial azimuth manual-motion and normal stop-settling probes**. The exact deceleration duration and physical emergency stop during software/USB failure remain **unverified**. Next proposed step: brief, moderate-speed altitude-axis movement (`:Mn#` then `:Qn#` / `:Q#`) with ample clearance and physical cancel access.
+
 ## ZWO AM3N serial connection — earlier AstroPi tests (2026-08-31)
 
 The following were recovered from earlier mount-control work on the Raspberry Pi; these are **historical results**, not tests on the disconnected mount during the 2026-10-27 hardware baseline.
