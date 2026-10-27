@@ -21,9 +21,12 @@ The SDK distribution is already extracted **on the AstroPi**, separate from the 
 - **SDK root:** `/home/arn/svbony-sdk/SVBCameraSDK/`
 - **Original archive:** `/home/arn/svbony-sdk/linux-SVBCameraSDK-v1.13.4.zip` (archive filename indicates SDK **v1.13.4**)
 - **Directories/files observed:** `include/`, `lib/`, `demo/`, `readme.txt`, `90-ckusb.rules`
-- **Status:** Paths and file listing supplied from `arn@astropi`; SDK shared-library architecture, dependency loading, udev-rule installation, and SV705C detection/capture **not yet verified**.
+- **Library builds seen:** `lib/armv6/`, `lib/armv7/`, `lib/armv8/`, `lib/x86/`, `lib/x64/`; these include `libSVBCameraSDK.so`, a static `.a` archive, and bundled `libusb-1.0` files.
+- **Likely native ARM64 library:** `/home/arn/svbony-sdk/SVBCameraSDK/lib/armv8/libSVBCameraSDK.so` (for host `aarch64`). **Architecture must still be checked with `file`;** directory naming alone does not verify the ELF build.
+- **Likely bundled USB library:** `/home/arn/svbony-sdk/SVBCameraSDK/lib/armv8/libusb-1.0.so.0` (assess actual shared-library dependencies before choosing system versus bundled libusb).
+- **Status:** Paths and file listing supplied from `arn@astropi`; actual ELF architecture, dependency loading, udev-rule installation, and SV705C detection/capture **not yet verified**.
 
-For implementation, locate and inspect the compatible **ARM64/aarch64** shared library within `lib/` rather than assuming an x86 library or hard-coding a guessed filename. Don't commit vendor SDK binaries to this repository.
+For implementation, use the confirmed ARM64 SDK library once validated; do not use the x86 builds. Don't commit vendor SDK binaries to this repository.
 
 ## Verified running-system baseline (2026-10-27)
 
