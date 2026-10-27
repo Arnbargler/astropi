@@ -6,10 +6,12 @@ SV705C live preview, gain/exposure response and RAW/FITS/JPG/PNG single
 capturing are verified on the Pi. Four real USB capture directories produced
 11 image files; all 11 passed size and SHA-256 readback checks.
 
-Counted **2–100-frame sequences and Cancel** are new, code-tested features
-that still need their first real Raspberry Pi hardware test. A read-only
-independent FITS/RAW16 Bayer pixel checker is also included; it passed
-synthetic tests but has not yet checked the real files.
+**A five-frame exposure sequence has now completed on the real Pi**, with five
+completed frame folders reported by the browser. Longer runs and the actual
+Cancel behaviour are not yet hardware-verified. The independent FITS/RAW16
+checker passed against a real previously saved four-format camera capture:
+all four file size/hash checks passed, FITS structure and 12-bit range passed,
+and every FITS Bayer pixel matched the corresponding RAW16 sensor value.
 
 No mount movement, tracking, plate solving or fixed-interval sequence
 scheduling has been added. The camera SDK stream remains continuous.
@@ -74,13 +76,14 @@ selected file formats allow. It is NOT a fixed-second interval scheduler.
 
 ## First hardware test
 
-Use 5 frames, 100 ms exposure, gain 0, FITS+JPG only. Verify that progress
-reaches 5/5 frames saved. On AstroPi inspect the newest folders:
+**Completed:** the Pi reported 5/5 frames saved and five separate folders
+for the five-frame FITS+JPG run. To inspect the latest folders:
 
     find /media/astropi-data/captures -mindepth 1 -maxdepth 1 -type d | tail -n 12
 
-Then try a 10-frame sequence, optionally including RAW16 and PNG.
-To test Cancel, try a 10-frame sequence and cancel after 2–3 saved.
+**Next:** try a 10-frame sequence, optionally including RAW16 and PNG;
+check its file count and hashes. Test Cancel on a 10-frame sequence after
+2–3 saved and verify no incomplete frame is reported as complete.
 Don't intentionally disconnect the USB stick during writing.
 
 ## Independent FITS/RAW pixel verification
@@ -89,6 +92,6 @@ Run this read-only check on the previously saved four-format exposure:
 
     python -m astropi.capture.verify /media/astropi-data/captures/20261027T212451_166770_6a75d1
 
-This validates file lengths, SHA-256, FITS header dimensions, Bayer
-metadata, 12-bit range and, when RAW16 is included, EVERY FITS pixel
-against the original RAW16 data. No writes or SDK access.
+**Passed on Pi for this precise capture:** 4 file sizes/checksums PASS,
+FITS structure and 12-bit range PASS, and every Bayer pixel matched RAW16.
+The verifier remains read-only; no writes or SDK access.

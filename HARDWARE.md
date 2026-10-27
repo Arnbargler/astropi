@@ -92,11 +92,33 @@ The user tested independent recording format toggles and provided a Pi shell lis
 
 Thus all four format writers and independent selection combinations produced files through the Pi app on its configured USB recording path. There were no `.partial` paths in the displayed list. **Follow-up Pi verification:** all four directories passed file size and SHA-256 digest comparisons against their `metadata.json` records: 4 + 1 + 2 + 4 = **11/11 files PASS**. This confirms stored bytes match the recorded hashes, not independent FITS pixel correctness, exact mounted UUID at test time or USB-loss behaviour; those remain separately unverified. No exposure sequences yet.
 
+## Five-frame sequence and Bayer fidelity (verified on Pi, 2026-10-27)
+
+User performed the first **real** 5-frame sequence using the newly integrated browser controls. UI reported **5 / 5 frames saved** and **Sequence: Capture saved to USB drive**, listing these five completed capture directories:
+
+- `captures/20261027T214833_403289_c8ea6d`
+- `captures/20261027T214834_911017_e0d56e`
+- `captures/20261027T214836_114608_a299a1`
+- `captures/20261027T214837_324260_50a998`
+- `captures/20261027T214838_630750_0b3f85`
+
+This verifies sequence completion, five reported completed frame folders, and Pi USB recording in the tested short run. Per-frame SHA-256 recheck for this **new** five-frame sequence was not supplied; previous 11 one-shot files were validated.
+
+The user also ran the new **read-only FITS/Bayer verifier** on the previously recorded all-four-format capture `20261027T212451_166770_6a75d1`. Exact terminal results:
+
+```text
+PASS: 4 saved files match checksums and sizes.
+PASS: FITS structure and 12-bit Bayer sample range.
+PASS: All FITS pixels match the RAW16 sensor pixels.
+```
+
+Hence **all 8,406,080 pixels of that saved FITS matched the paired RAW16** after accounting for the native 12-bit left shift and FITS signed storage offset. This validates one real recorded science-data pair; it does not independently calibrate sensor response, guarantee exact exposure timestamps, establish browser-disconnect endurance, test cancellation under load or prove recovery from lost USB storage.
+
 ## What remains unresolved (not pre-development blockers)
 
-1. **Pi browser status, SV705C preview and 50ms two-thread colour/mono rates are verified.** One-shot recording produced four completed capture directories on Pi USB with different combinations of FITS/RAW16/JPG/PNG. All 11 file sizes and SHA-256 checksums verified against metadata on the Pi; FITS scientific interpretation remains unverified; counted sequences are code-tested but not yet Pi-verified; auto-start remains future work.
+1. **Pi browser status, SV705C preview and 50ms two-thread colour/mono rates are verified.** One-shot recording produced four completed capture directories on Pi USB with different combinations of FITS/RAW16/JPG/PNG. All 11 file sizes and SHA-256 checksums verified against metadata on the Pi; FITS 12-bit Bayer pixel equality against RAW16 verified for one real capture; first five-frame sequence completed and reported five saved directories on Pi USB. Longer runs, cancellation under load and auto-start still need testing/development.
 2. **Mount:** sky-pointing alignment model, Alt/Az GoTo, tracking/stop control and Park; offline location/time recovery; abnormal link-failure safety. Home works but does not establish pointing accuracy.
-3. **Camera:** independently verify real FITS headers and pixel interpretation; then test new counted sequences and read-only FITS/RAW16 checker on Pi, long-exposure metadata precision, colour calibration, ROI/binning beyond proven full-frame 1x and fault recovery. Live preview is near camera-limited speed at 50ms.
+3. **Camera:** test long sequences and in-flight cancellation on Pi, separately verify per-frame saved sequence checksums, long-exposure metadata precision, colour calibration, ROI/binning beyond proven full-frame 1x and fault recovery. Live preview is near camera-limited speed at 50ms.
 4. **Physical field deployment:** actual optical tube and 12 V battery/buck wiring, cable clearance on Home/GoTo, safe physical Cancel, offline network and trusted time, sustained battery runtime. The successful test was with connected but **stationary** AM3N.
 5. **Service:** one process owns camera SDK; one serialized mount command queue; capture sequences must survive browser disconnect; one operator lease; timestamps/site/UUID validated before scientific recordings.
 
