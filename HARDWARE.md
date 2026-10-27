@@ -9,7 +9,7 @@ This file records the hardware we have chosen for AstroPi, how it connects, and 
 | Raspberry Pi 4 Model B Rev 1.5 (4 GB RAM) | Runs headless AstroPi, camera acquisition, mount control and browser server | **Verified on `astropi` (2026-10-27):** Raspberry Pi 4 Model B Rev 1.5; Debian GNU/Linux **13.6 (Trixie)**; kernel **`6.18.39+rpt-rpi-v8`**; `free -h`: **3.7 GiB RAM total**, 188 MiB used, 3.5 GiB available; 2.0 GiB swap, unused. The separate 2 GB Pi runs the music streamer. |
 | 64 GB USB 3 thumb drive | Intended storage for saved SV705C RAW/FITS exposures and image exports | **Owned and selected for acquisition data**; not connected or tested during 2026-10-27 baseline; confirm filesystem, actual capacity, sustained writes and stable mount path when attached. |
 | SVBONY SV705C | Primary USB astronomical camera | **Detected and identified through SDK on AstroPi (2026-10-27):** USB `f266:9a0a` at **5000M**, permissions `0666`; Python SDK enumeration `1`; camera-info returned name, port `USB3.0`, ID `1`. **Full-resolution RAW16 frame successfully acquired and saved (all SDK return codes `0`); sampled pixel statistics checked, visual confirmation pending.** |
-| ZWO AM3N | Motorized telescope mount | **Connected to AstroPi, USB/CDC ACM enumerated (2026-10-27):** `03c3:4001`, `/dev/ttyACM0`, stable `/dev/serial/by-id/usb-ZWO_Systems_ZWO_Device_123456-if00`; `arn` in `dialout`. **Read-only serial protocol responses not yet retested on current setup.** Alt/Az mode exclusively; older protocol tests below. |
+| ZWO AM3N | Motorized telescope mount | **Connected to AstroPi, USB/CDC ACM enumerated (2026-10-27):** `03c3:4001`, `/dev/ttyACM0`, stable `/dev/serial/by-id/usb-ZWO_Systems_ZWO_Device_123456-if00`; `arn` in `dialout`. **Live serial queries verified** (`AM3N#`, firmware `1.8.8#`, RA/Dec responses). Motion/stop/tracking untested. Alt/Az mode exclusively; older protocol tests below. |
 | 12 V DC supply/distribution | Power to mount and accessories where appropriate | General power plan agreed; ratings, wiring and fused branches to document |
 | 12 V-to-5 V buck converter | Power for Raspberry Pi | Planned / available per owner; validate voltage, current capacity and behaviour under load |
 | N100 Linux Mint desktop | Optional development, simulation and browser access | Available; not required as an intermediary between GitHub and Pi |
@@ -74,7 +74,23 @@ For implementation, use this verified ARM64 SDK build; do not use the x86 builds
 - Persistent symlink: `/dev/serial/by-id/usb-ZWO_Systems_ZWO_Device_123456-if00 -> ../../ttyACM0`. Prefer this alias in configuration.
 - Kernel events at connection: Espressif `303a:1001` USB JTAG/serial debug unit briefly enumerated, disconnected and was replaced by `03c3:4001` ZWO USB CDC ACM within about a second; this may be a normal boot-to-application sequence, but its cause has not been established.
 - With camera and mount connected: `vcgencmd get_throttled` → `throttled=0x0`; `vcgencmd measure_temp` → **39.9°C**.
-- **Verification boundary:** Linux USB detection, serial-device creation and account permissions confirmed. **Current serial request/reply communication, motor movement and stop behaviour are not yet verified**. Prior historical responses are documented below.
+- **Verification boundary:** Linux USB detection, serial-device creation and account permissions confirmed. **Serial request/reply is now verified (see below), but motor movement, physical stop behavior, tracking and coordinate accuracy have not yet been verified**. Prior historical responses are documented below.
+
+### Current AM3N serial communication verified (2026-10-27)
+
+- `python3-serial` / `pyserial` **3.5** is already installed. Python serial port opening and queries worked as user `arn`, no `sudo` required.
+- Connected using stable `/dev/serial/by-id/usb-ZWO_Systems_ZWO_Device_123456-if00`, at **9600 baud, 8N1**, `timeout=2`, no XON/XOFF or RTS/CTS flow control.
+- Each query returned a `#`-terminated reply, and the port closed normally:
+
+| Read-only command | 2026-10-27 reply |
+| --- | --- |
+| `:GVP#` (mount model) | `AM3N#` |
+| `:GV#` (firmware version) | `1.8.8#` |
+| `:GR#` (reported right ascension) | `12:02:59#` |
+| `:GD#` (reported declination) | `+44*29:41#` |
+
+- These confirm the mount identity and live serial request/response path with the camera still connected. Coordinates are the mount's **reported** values, **not** verified pointing accuracy or an indication that alignment is complete.
+- **Still untested:** mount operational/status flags, tracking behavior, physical motion and emergency stop, park/unpark, homing and GoTo.
 
 ## ZWO AM3N serial connection — earlier AstroPi tests (2026-08-31)
 
