@@ -9,7 +9,7 @@ This file records the hardware we have chosen for AstroPi, how it connects, and 
 | Raspberry Pi 4 Model B Rev 1.5 (4 GB RAM) | Runs headless AstroPi, camera acquisition, mount control and browser server | **Verified on `astropi` (2026-10-27):** Raspberry Pi 4 Model B Rev 1.5; Debian GNU/Linux **13.6 (Trixie)**; kernel **`6.18.39+rpt-rpi-v8`**; `free -h`: **3.7 GiB RAM total**, 188 MiB used, 3.5 GiB available; 2.0 GiB swap, unused. The separate 2 GB Pi runs the music streamer. |
 | 64 GB USB 3 thumb drive | Intended storage for saved SV705C RAW/FITS exposures and image exports | **Owned and selected for acquisition data**; not connected or tested during 2026-10-27 baseline; confirm filesystem, actual capacity, sustained writes and stable mount path when attached. |
 | SVBONY SV705C | Primary USB astronomical camera | **Detected and identified through SDK on AstroPi (2026-10-27):** USB `f266:9a0a` at **5000M**, permissions `0666`; Python SDK enumeration `1`; camera-info returned name, port `USB3.0`, ID `1`. **Full-resolution RAW16 frame successfully acquired and saved (all SDK return codes `0`); sampled pixel statistics checked, visual confirmation pending.** |
-| ZWO AM3N | Motorized telescope mount | **Connected to AstroPi, USB/CDC ACM enumerated (2026-10-27):** `03c3:4001`, `/dev/ttyACM0`, stable `/dev/serial/by-id/usb-ZWO_Systems_ZWO_Device_123456-if00`; `arn` in `dialout`. **Live serial queries verified** (`AM3N#`, firmware `1.8.8#`, RA/Dec responses). Motion/stop/tracking untested. Alt/Az mode exclusively; older protocol tests below. |
+| ZWO AM3N | Motorized telescope mount | **Connected to AstroPi, USB/CDC ACM enumerated (2026-10-27):** `03c3:4001`, `/dev/ttyACM0`, stable `/dev/serial/by-id/usb-ZWO_Systems_ZWO_Device_123456-if00`; `arn` in `dialout`. **Live serial queries verified** (`AM3N#`, firmware `1.8.8#`, RA/Dec responses). A short azimuth motion was **indicated by telemetry**; full physical stop/tracking/GoTo remain unverified. Alt/Az mode exclusively; older protocol tests below. |
 | 12 V DC supply/distribution | Power to mount and accessories where appropriate | General power plan agreed; ratings, wiring and fused branches to document |
 | 12 V-to-5 V buck converter | Power for Raspberry Pi | Planned / available per owner; validate voltage, current capacity and behaviour under load |
 | N100 Linux Mint desktop | Optional development, simulation and browser access | Available; not required as an intermediary between GitHub and Pi |
@@ -122,7 +122,7 @@ Using the same working USB serial path and read-only LX200-like commands on `ast
 - Clock, offset, observing coordinates, and alignment should be managed explicitly in AstroPi before performing GoTo or interpreting sky positions. Avoid changing mount time or location until command semantics and intended observing location are confirmed.
 - **No motors moved in this test.** Next inspect configured site latitude/longitude (`:Gt#` / `:Gg#`) and consider whether the clock advances. Before any powered movement, verify a safe stop strategy and clear mechanical range.
 
-- **Still untested:** authoritative validation of all status flags, tracking behavior, physical motion and emergency stop, park/unpark, homing and GoTo. (Raw status queries do return replies.)
+- **Still untested:** authoritative validation of all status flags, independent physical motion/stop confirmation, tracking behavior, park/unpark, homing and GoTo. A 1-second eastward command changed reported azimuth by 2 arcminutes. (Raw status queries do return replies.)
 
 ### Current AM3N site coordinates and mount clock vs AstroPi clock (2026-10-27)
 
@@ -147,6 +147,17 @@ Read-only USB serial queries returned:
 - **Verified:** stop command bytes can be sent without impairing serial communication, and subsequent queries work.
 - **NOT verified:** stop acknowledgment (none expected for this command), any actual motor stop, fail-safe stop on a disconnected USB link, or physical-motion safety. Do not mark emergency stop operational until tested with actual motion.
 - Protocol cross-check: ZWO AM-series third-party implementations describe `:Q#` as stop-all, direction starts `:Me#`/`:Mw#`/`:Mn#`/`:Ms#` with per-axis stops, and numbered rates `:R0#`–`:R9#`. Before using motion, ensure clearances and access to the mount's physical cancel control.
+
+### First commanded AM3N azimuth motion — preliminary success (2026-10-27)
+
+The user ran a Python serial test at 9600 baud on the stable ZWO device alias, with mount clearance and the camera connected:
+
+1. Before motion: `:GU#` → `nNZM000000000#`, `:GA#` → `+00*00:00#`, `:GZ#` → `000*00:00#`.
+2. Transmitted rate preset `:R5#`, waited 0.2 seconds, then `:Me#` (east/azimuth direction) for 1.0 second.
+3. In a Python `finally` block, transmitted directional stop `:Qe#` followed by all-stop `:Q#`.
+4. After 0.3 seconds: `:GU#` → `nNZM000000500#`, `:GA#` → `+00*00:00#`, `:GZ#` → `000*02:00#`; script finished without error.
+
+**Interpretation:** Mount-reported azimuth increased by **0°02′00″ (2 arcminutes, ≈0.0333°)**; mount-reported altitude was unchanged. The user said the mount *may* have moved physically, but by a tiny amount. The `N` status flag is consistent with not slewing during post-stop polling; the suffix `500` is **not decoded**. This supports a successful movement command and stop sequence at the telemetry level, **but does not independently prove physical movement or a fail-safe stop**. Next test: poll `:GZ#` and `:GU#` repeatedly without issuing any movement commands, verifying azimuth remains stable; independently test physical stopping in a controlled manner before any automated GoTo.
 
 ## ZWO AM3N serial connection — earlier AstroPi tests (2026-08-31)
 
