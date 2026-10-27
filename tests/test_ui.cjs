@@ -11,6 +11,7 @@ const GAIN = [0,5,10,20,30,50,75,100];
 
 function harness() {
   const elements = new Map(), intervals = new Map(), calls = [];
+  let capture = {phase:"idle",files:[],directory:null};
   let camera = {
     phase: "running", has_frame: false, frame_number: 0,
     gain: 0, exposure_us: 100143, settings_applied_id: 0,
@@ -32,15 +33,19 @@ function harness() {
     const payload = options.body ? JSON.parse(options.body) : {};
     calls.push({url, payload});
     if (url === "/api/status") return {ok:true, json:async()=>({
-      camera:{...camera, usb_detected:true},
+      camera:{...camera, usb_detected:true}, capture:{...capture},
       mount:{usb_detected:true,serial_present:true},
       storage:{ready:true,free_bytes:1000000000},
       host:{cpu_temperature_c:42,uptime_seconds:3600},
       utc:"2026-10-27T19:00:00Z"
     })};
-    if (url === "/api/camera/progress") return {ok:true,json:async()=>({...camera})};
+    if (url === "/api/camera/progress") return {ok:true,json:async()=>({...camera,capture:{...capture}})};
     if (url === "/api/control/take") return {ok:true,json:async()=>({token:"test-token"})};
     if (url === "/api/control/heartbeat") return {ok:true,json:async()=>({ok:true})};
+    if (url === "/api/capture") {
+      capture = {phase:"waiting",id:"mock-1",formats:payload.formats,files:[]};
+      return {ok:true,json:async()=>({ok:true,id:"mock-1"})};
+    }
     if (url === "/api/camera/settings") return {ok:true,json:async()=>({
       request_id: calls.filter(c=>c.url==="/api/camera/settings").length,ok:true
     })};
@@ -62,6 +67,8 @@ function harness() {
   return {el, intervals, calls,
     updateCamera:data=>{camera={...camera,...data}},
     camera:()=>camera,
+    capture:()=>capture,
+    updateCapture:data=>{capture={...capture,...data}},
     flush:()=>new Promise(resolve=>setImmediate(resolve))
   };
 }
@@ -120,4 +127,46 @@ test("fast preview polling and frame deduplication are retained",()=>{
   const js=fs.readFileSync(path.join(__dirname,"../astropi/static/app.js"),"utf8");
   assert.match(js,/setInterval\(pollPreview, 50\)/);
   assert.match(js,/data\.frame_number !== previousFrame/);
+});
+
+
+test("independent format toggles save the selected combination and report paths", async()=>{
+  const h=harness();
+  await h.flush();
+  assert.equal(h.el("capture-now").disabled,true,"viewers cannot record");
+  h.el("capture-fits").checked=true;
+  h.el("capture-jpg").checked=true;
+  h.el("capture-raw").checked=false;
+  h.el("capture-png").checked=false;
+  await h.el("take-control").dispatch("click");
+  assert.equal(h.el("capture-now").disabled,false);
+  await h.el("capture-now").dispatch("click");
+  const submitted=h.calls.filter(call=>call.url==="/api/capture");
+  assert.equal(submitted.length,1);
+  assert.deepEqual(submitted[0].payload,{formats:["fits","jpg"]});
+  await h.intervals.get(50)();
+  assert.equal(h.el("capture-now").disabled,true,"only one capture may be pending");
+  h.updateCapture({phase:"done",directory:"captures/shot1",
+    files:[{format:"FITS",path:"captures/shot1/a.fits",bytes:16800000},
+           {format:"JPG",path:"captures/shot1/a.jpg",bytes:40000}]});
+  await h.intervals.get(50)();
+  assert.equal(h.el("capture-now").disabled,false);
+  assert.match(h.el("capture-results").textContent,/captures\/shot1\/a.fits/);
+  h.el("capture-fits").checked=false;
+  h.el("capture-jpg").checked=false;
+  h.el("capture-now").disabled=false;
+  h.el("capture-raw").checked=true;
+  h.el("capture-png").checked=true;
+  await h.el("capture-now").dispatch("click");
+  const submissions=h.calls.filter(call=>call.url==="/api/capture");
+  assert.deepEqual(submissions[1].payload,{formats:["raw","png"]});
+});
+
+test("save controls are disabled when no formats are selected",async()=>{
+  const h=harness();
+  await h.flush();
+  await h.el("take-control").dispatch("click");
+  for(const name of ["fits","raw","jpg","png"]) h.el("capture-"+name).checked=false;
+  h.el("capture-fits").dispatch("change");
+  assert.equal(h.el("capture-now").disabled,true);
 });

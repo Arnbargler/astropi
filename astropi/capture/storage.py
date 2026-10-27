@@ -93,8 +93,12 @@ class CaptureStorage:
                 if os.fstat(capture_fd).st_dev != root_stat.st_dev:
                     raise StorageError("Capture directory is not on USB filesystem")
                 folder = received_at.astimezone(timezone.utc).strftime("%Y%m%dT%H%M%S_%f") + "_" + secrets.token_hex(3)
-                os.mkdir(folder, mode=0o750, dir_fd=capture_fd)
-                shot_fd = os.open(folder, flags, dir_fd=capture_fd)
+                # Publish a complete capture set atomically. Any interrupted
+                # save stays explicitly marked '.partial' and is never shown
+                # as a complete capture.
+                working = folder + ".partial"
+                os.mkdir(working, mode=0o750, dir_fd=capture_fd)
+                shot_fd = os.open(working, flags, dir_fd=capture_fd)
                 try:
                     if os.fstat(shot_fd).st_dev != root_stat.st_dev:
                         raise StorageError("Capture shot directory left verified USB filesystem")
@@ -131,6 +135,18 @@ class CaptureStorage:
                     )
                     manifest = json.dumps(metadata, indent=2, ensure_ascii=True).encode() + b"\n"
                     self._atomic_write(shot_fd, "metadata.json", manifest)
+                    os.fsync(shot_fd)
+                    # Before publishing, verify that the root pathname still
+                    # identifies the same pinned USB filesystem.
+                    if not self._verify(self.mount, self.uuid).get("ready"):
+                        raise StorageError("USB mount no longer verified at capture commit")
+                    active_stat = os.stat(self.mount, follow_symlinks=False)
+                    if (active_stat.st_dev, active_stat.st_ino) != (
+                        root_stat.st_dev, root_stat.st_ino
+                    ):
+                        raise StorageError("USB mount changed during capture save")
+                    os.rename(working, folder, src_dir_fd=capture_fd, dst_dir_fd=capture_fd)
+                    os.fsync(capture_fd)
                     return dict(directory=relative, files=files,
                                 total_bytes=sum(item["bytes"] for item in files))
                 finally:
