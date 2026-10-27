@@ -1,20 +1,30 @@
-"""Explicitly connected, READ-ONLY ZWO AM3N telemetry worker.
+"""One serial-owning AM3N worker: telemetry and *bounded* manual jogs.
 
-Only this thread owns the 9600 8N1 serial handle; Flask only reads its cached
-status. No implicit mount connection at service startup. There are no movement,
-Home, Park, time/site, slew-rate or tracking setters in this module or API.
-USB disappearance/errors close the port and clear potentially stale pointing
-values; an operator must explicitly reconnect.
+Manual movement is opt-in on every jog. Server-enforced heartbeat (600 ms)
+and hard-stop commands remain on the serial owner thread, independent of the
+browser refresh rate. Unplug/process/power failure CANNOT guarantee a stop;
+a physical Cancel/power-disconnect remains mandatory during real tests.
+No Home, GoTo, Park, tracking, time/site setters or arbitrary serial commands.
 """
 from datetime import datetime, timezone
 from pathlib import Path
 import re
 import threading
+import time
 
 import serial
 
 # Intentional hard-coded whitelist. NEVER let a client supply serial commands.
 QUERIES = frozenset((":GVP#", ":GV#", ":GU#", ":GA#", ":GZ#", ":GR#", ":GD#"))
+# The AM3N :R5# rate was previously physically verified (~8x sidereal).
+# :Q# and each directional stop have been confirmed in manual hardware probes.
+# Never accept raw client-supplied LX200 commands.
+JOG_COMMANDS = {"north": ":Mn#", "south": ":Ms#", "east": ":Me#", "west": ":Mw#"}
+JOG_RATE = ":R5#"
+STOP_COMMAND = ":Q#"
+DEADMAN_SECONDS = 0.6
+STILL_TOLERANCE_DEG = 0.0006  # ~2 arcsec
+
 _ANGLE = re.compile(r"^([+-]?)(\d{1,3})\*(\d{2}):(\d{2}(?:\.\d+)?)$")
 _CLOCK = re.compile(r"^(\d{1,2}):(\d{2}):(\d{2}(?:\.\d+)?)$")
 
@@ -75,17 +85,33 @@ _TELEMETRY = {
 
 
 class MountWorker:
-    def __init__(self, serial_path, *, serial_factory=None, poll_interval=2.0):
+    def __init__(self, serial_path, *, serial_factory=None, poll_interval=2.0, clock=time.monotonic):
         self.path = Path(serial_path)
         self._factory = serial_factory if serial_factory is not None else serial.Serial
         self._interval = poll_interval
+        self._clock = clock
         self._lock = threading.Lock()
+        self._armed = False
+        self._direction = None
+        self._pending_direction = None
+        self._motion_deadline = 0.0
+        self._stop_pending = False
+        self._stop_reason = None
+        self._ever_moved = False
+        self._stop_sent_at = None
+        self._stop_attempts = 0
+        self._last_axes = None
+        self._stable_count = 0
         self._stop = threading.Event()
         self._thread = None
         self._state = {
             "phase": "disconnected", "connected": False,
             "serial_path": str(self.path),
             "model": None, "firmware": None, "last_error": None,
+            "motion_phase": "idle", "motion_armed": False,
+            "motion_direction": None, "last_stop_reason": None,
+            "last_stop_sent_utc": None, "stop_stable": False,
+            "motion_warning": None,
             **_TELEMETRY,
         }
 
@@ -98,9 +124,21 @@ class MountWorker:
             if self._thread is not None and self._thread.is_alive():
                 return False
             self._stop = threading.Event()
+            self._armed = False
+            self._direction = self._pending_direction = None
+            self._motion_deadline = 0.0
+            self._stop_pending = False
+            self._ever_moved = False
+            self._stop_sent_at = None
+            self._stop_attempts = 0
+            self._last_axes = None
+            self._stable_count = 0
             self._state.update(
                 phase="connecting", connected=False, model=None,
-                firmware=None, last_error=None, **_TELEMETRY
+                firmware=None, last_error=None, motion_phase="idle",
+                motion_armed=False, motion_direction=None,
+                last_stop_reason=None, last_stop_sent_utc=None,
+                stop_stable=False, motion_warning=None, **_TELEMETRY
             )
             self._thread = threading.Thread(
                 target=self._run, name="am3n-readonly", daemon=True
@@ -112,9 +150,146 @@ class MountWorker:
         with self._lock:
             if self._thread is None or not self._thread.is_alive():
                 return False
+            self._armed = False
+            self._pending_direction = None
             self._stop.set()
-            self._state.update(phase="disconnecting", connected=False, **_TELEMETRY)
+            # On disconnect, the serial-owner's finally block sends :Q#
+            # BEFORE closing if any jog or stop has been requested.
+            self._state.update(
+                phase="disconnecting", connected=False, motion_armed=False,
+                motion_phase="disconnecting", **_TELEMETRY
+            )
             return True
+
+    def arm(self):
+        """Requires operator lease at the Flask layer; one arm per jog."""
+        with self._lock:
+            if not self._state["connected"] or self._state["phase"] != "connected":
+                raise RuntimeError("Connect the mount before arming")
+            if self._state["motion_phase"] != "idle" or self._stop_pending:
+                raise RuntimeError("Mount must be idle and stable before arming")
+            self._armed = True
+            self._state["motion_armed"] = True
+            return True
+
+    def jog(self, direction):
+        if direction not in JOG_COMMANDS or type(direction) is not str:
+            raise ValueError("Unknown mount direction")
+        with self._lock:
+            if not self._state["connected"] or not self._armed:
+                raise RuntimeError("Enable manual movement first")
+            if self._state["motion_phase"] != "idle":
+                raise RuntimeError("Only one direction at a time")
+            if self._stop_pending or self._stop.is_set():
+                raise RuntimeError("A Stop or disconnect is pending")
+            self._pending_direction = direction
+            self._motion_deadline = self._clock() + DEADMAN_SECONDS
+            self._state.update(motion_phase="starting", motion_direction=direction)
+            return direction
+
+    def heartbeat(self, direction):
+        with self._lock:
+            if (direction != self._direction and direction != self._pending_direction) or not self._armed:
+                raise RuntimeError("No matching active manual jog")
+            if self._state["motion_phase"] not in ("starting", "moving"):
+                raise RuntimeError("No active manual jog")
+            # A delayed keepalive cannot revive an expired jog.
+            if self._clock() >= self._motion_deadline:
+                self._queue_stop_locked("Deadman heartbeat expired")
+                raise RuntimeError("Manual jog expired and Stop was requested")
+            self._motion_deadline = self._clock() + DEADMAN_SECONDS
+            return True
+
+    def _queue_stop_locked(self, reason):
+        self._armed = False
+        self._pending_direction = None
+        self._motion_deadline = 0.0
+        self._stop_pending = True
+        self._stop_reason = reason
+        self._state.update(
+            motion_armed=False, motion_phase="stopping",
+            last_stop_reason=reason, stop_stable=False
+        )
+
+    def emergency_stop(self, reason="Emergency Stop requested"):
+        """Available even to viewers. Request is NOT confirmation of halt."""
+        with self._lock:
+            if self._state["phase"] != "connected" or not self._state["connected"]:
+                raise RuntimeError("Mount serial port is not connected; use physical Stop")
+            self._queue_stop_locked(reason)
+            return True
+
+    def _write_motion(self, port, command):
+        if command not in (JOG_RATE, STOP_COMMAND, *JOG_COMMANDS.values()):
+            raise MountProtocolError("Refusing non-whitelisted motion command")
+        port.write(command.encode("ascii"))
+        port.flush()
+
+    def _service_motion(self, port):
+        """Serial-owner only; no Flask thread may call serial.write()."""
+        now = self._clock()
+        with self._lock:
+            if (self._state["motion_phase"] in ("starting", "moving") and
+                    now >= self._motion_deadline):
+                self._queue_stop_locked("Deadman heartbeat expired")
+            stop = self._stop_pending
+            if stop:
+                self._stop_pending = False
+                self._pending_direction = None
+                self._direction = None
+                self._armed = False
+                self._state.update(motion_armed=False, motion_direction=None)
+            direction = None
+            if not stop and self._pending_direction is not None:
+                direction = self._pending_direction
+                self._pending_direction = None
+                self._direction = direction
+                self._ever_moved = True  # arm the finally-block safety Stop
+        if stop:
+            self._write_motion(port, STOP_COMMAND)
+            with self._lock:
+                self._stop_sent_at = self._clock()
+                self._last_axes = None
+                self._stable_count = 0
+                self._stop_attempts += 1
+                self._state["last_stop_sent_utc"] = datetime.now(timezone.utc).isoformat()
+                self._state["motion_phase"] = "stopping"
+        elif direction:
+            # A new jog is accepted only while still within its deadline.
+            # _service_motion checked the watchdog under the same lock.
+            self._write_motion(port, JOG_RATE)
+            self._write_motion(port, JOG_COMMANDS[direction])
+            with self._lock:
+                self._state["motion_phase"] = "moving"
+
+    def _check_stopped(self, altitude, azimuth):
+        with self._lock:
+            if self._state["motion_phase"] != "stopping" or self._stop_sent_at is None:
+                return
+            now = self._clock()
+            if self._last_axes is not None:
+                last_alt, last_az = self._last_axes
+                # Shortest azimuth arc handles 359.999 -> 0.001 wrap.
+                az_difference = abs((azimuth - last_az + 180) % 360 - 180)
+                if abs(altitude - last_alt) < STILL_TOLERANCE_DEG and az_difference < STILL_TOLERANCE_DEG:
+                    self._stable_count += 1
+                else:
+                    self._stable_count = 0
+            self._last_axes = (altitude, azimuth)
+            if self._stable_count >= 2 and now - self._stop_sent_at >= 1.2:
+                self._state.update(motion_phase="idle", stop_stable=True,
+                                   motion_direction=None)
+                self._direction = None
+                self._ever_moved = False
+            elif now - self._stop_sent_at >= 3:
+                if self._stop_attempts < 3:
+                    self._stop_pending = True  # retry :Q# then recheck axes
+                else:
+                    self._state.update(
+                        motion_phase="uncertain", motion_warning=
+                        "Reported axes have not stabilized. Use the mount's PHYSICAL Stop/power cutoff."
+                    )
+                    # Remain disarmed and do not accept another jog.
 
     def _query(self, port, command):
         if command not in QUERIES:
@@ -137,11 +312,13 @@ class MountWorker:
     def _poll(self, port):
         # The mount reports positions whether or not it is aligned. They MUST
         # be labeled as *reported*, not proven true celestial pointing.
-        raw = self._query(port, ":GU#")
-        altitude = self._query(port, ":GA#")
-        azimuth = self._query(port, ":GZ#")
-        ra = self._query(port, ":GR#")
-        dec = self._query(port, ":GD#")
+        # Check emergency stop and heartbeat watchdog between *every* serial
+        # query. Serial reads have a 0.35s upper bound, so Stop is prioritized.
+        replies = []
+        for cmd in (":GU#", ":GA#", ":GZ#", ":GR#", ":GD#"):
+            self._service_motion(port)
+            replies.append(self._query(port, cmd))
+        raw, altitude, azimuth, ra, dec = replies
         parsed = {
             "raw_status": raw, **known_flags(raw),
             "altitude_text": altitude, "azimuth_text": azimuth,
@@ -155,6 +332,7 @@ class MountWorker:
         with self._lock:
             if not self._stop.is_set():
                 self._state.update(parsed, phase="connected", connected=True)
+        self._check_stopped(parsed["altitude_deg"], parsed["azimuth_deg"])
 
     def _run(self):
         port = None
@@ -165,7 +343,7 @@ class MountWorker:
             port = self._factory(
                 port=str(self.path), baudrate=9600, bytesize=serial.EIGHTBITS,
                 parity=serial.PARITY_NONE, stopbits=serial.STOPBITS_ONE,
-                timeout=1.0, write_timeout=1.0,
+                timeout=0.35, write_timeout=0.35,
                 xonxoff=False, rtscts=False, dsrdtr=False,
             )
             model = self._query(port, ":GVP#")
@@ -176,9 +354,17 @@ class MountWorker:
                 raise MountProtocolError("Empty mount firmware")
             with self._lock:
                 self._state.update(model=model, firmware=firmware)
+            last_poll = -float("inf")
             while not self._stop.is_set():
-                self._poll(port)
-                self._stop.wait(self._interval)
+                self._service_motion(port)
+                now = self._clock()
+                with self._lock:
+                    phase = self._state["motion_phase"]
+                interval = min(self._interval, 0.35) if phase in ("moving", "starting", "stopping") else self._interval
+                if now - last_poll >= interval:
+                    self._poll(port)
+                    last_poll = self._clock()
+                self._stop.wait(0.05)
         except InterruptedError:
             pass  # User-requested disconnect, no failure.
         except (OSError, serial.SerialException, MountProtocolError, ValueError) as exc:
@@ -188,7 +374,21 @@ class MountWorker:
             if not self._stop.is_set():
                 problem = f"Mount read-only polling failed: {exc}"
         finally:
+            # Best effort only. If serial is physically lost, Python dies, or
+            # the motor controller is unresponsive, physical Stop is mandatory.
+            with self._lock:
+                needs_stop = (self._ever_moved or self._stop_pending or
+                              self._state["motion_phase"] in ("moving","starting","stopping"))
+                self._armed = False
+                self._pending_direction = self._direction = None
             if port is not None:
+                if needs_stop:
+                    try:
+                        self._write_motion(port, STOP_COMMAND)
+                    except Exception as exc:
+                        problem = (problem or "Mount Stop not confirmed") + (
+                            f"; final physical Stop required ({exc})"
+                        )
                 try:
                     port.close()
                 except (OSError, serial.SerialException):
@@ -196,5 +396,7 @@ class MountWorker:
             with self._lock:
                 self._state.update(
                     phase="error" if problem else "disconnected",
-                    connected=False, last_error=problem, **_TELEMETRY,
+                    connected=False, last_error=problem, motion_armed=False,
+                    motion_direction=None, motion_phase="idle",
+                    stop_stable=False, **_TELEMETRY,
                 )
