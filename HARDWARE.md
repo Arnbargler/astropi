@@ -136,9 +136,28 @@ Read-only USB serial queries returned:
 
 - West-positive convention supported by third-party ZWO AM mount serial driver documentation: `https://pkg.go.dev/github.com/mikefsq/lx200@v0.2.2/am5`. Do not use the raw sign as east-positive when communicating with map/astronomy libraries.
 - User-supplied Pi `timedatectl`: **Tue 2026-10-27 09:07:37 EDT**, UTC **13:07:37**, timezone **America/Toronto (EDT, UTC−4)**, `System clock synchronized: yes`, `NTP service: active`, no hardware RTC.
-- Earlier mount date/time/zone readback was `01/01/00#`, `00:07:12#`, `+00:00#`, so its clock appears **unset/unsynchronized** despite Pi synchronization. No mount clock or site settings changed.
+- Earlier mount date/time/zone readback was `01/01/00#`, `00:07:12#`, `+00:00#`, so its clock **was unset/unsynchronized** at that moment despite Pi synchronization. The UTC clock was **subsequently set and read back successfully** on 2026-10-27 (see below); site coordinates were not modified.
 - **Do not equate the Pi time zone with mount `:GG#` sign convention without verifying the ZWO protocol.** Also confirm that the stored mount latitude/longitude are the user's intended observing site before assigning them to AstroPi configuration.
 - No motor or set commands issued; next test should establish an emergency-stop path and cautious physical motion before GoTo.
+
+### AM3N mount UTC clock configured successfully (2026-10-27)
+
+Using the persistent USB serial port, Python `pyserial` and the Raspberry Pi's NTP-synchronized UTC clock, the user successfully set **UTC offset 0** and current date/time on the mount. This was a clock configuration test only; **no motion or site-coordinate changes** were commanded.
+
+| Operation | Command or query | Observed |
+| --- | --- | --- |
+| Initial timezone read | `:GG#` | `+00:00#` |
+| Initial date read | `:GC#` | `01/01/00#` |
+| Initial clock read | `:GL#` | `00:38:30#` |
+| Set UTC offset zero | `:SG+00:00#` | acknowledgment `1` |
+| Set date | `:SC10/27/26#` | acknowledgment `1` |
+| Set time | `:SL13:37:03#` | acknowledgment `1` |
+| Final UTC offset | `:GG#` | `+00:00#` |
+| Final date | `:GC#` | `10/27/26#` |
+| Final time | `:GL#` | `13:37:04#` |
+| Time 3 seconds later | `:GL#` | `13:37:07#` |
+
+**Result:** All setters acknowledged success and the readback reflected the intended **2026-10-27 UTC time**, advancing three seconds over the three-second delay. Mount-to-Pi clock synchronization is **verified at the time of test**, but clock retention across mount power cycles and long-term drift **remain untested**. AstroPi should synchronize the mount after connection once system time is trustworthy (NTP or a validated offline clock). Set mount and software time zones consistently; retain explicit observing-site latitude/longitude and verify before GoTo.
 
 ### Stop-all communication probe (2026-10-27)
 
