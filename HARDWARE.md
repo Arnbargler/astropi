@@ -449,6 +449,18 @@ Using the corrected SDK order **enumerate → `SVBGetCameraInfo(index=0)` → `S
 - All ten RAW16 files remain saved in the above directory; initial failed capture attempt's separate folder may remain empty.
 - **Next useful camera checks:** inspect actual pixel distributions / 12-bit packing, make a displayable debayered preview under proper lighting, verify gain/exposure control readback and effect, and perform a longer capture/storage/USB reliability run. Full-on-sky alignment, GoTo, tracking and focusing remain future application development work.
 
+### SV705C first illuminated light frame and basic grayscale PNG preview (2026-10-27)
+
+With the **lens cap removed** and camera pointed at an ordinary illuminated scene, the user ran a 10 ms requested exposure with full 3856×2180 RAW16 output, after proper SDK enumerate → info → open initialization and confirming the UUID-mounted USB storage. The capture finished with `CAPTURE COMPLETE`, producing:
+
+- **Full-resolution RAW:** `/media/astropi-data/light-test-20261027-111913.raw16`.
+- **Downscaled grayscale preview:** `/media/astropi-data/light-test-20261027-111913.png`, **964×545**. The preview is an intensity-stretched, averaged Bayer-cell image, **not yet debayered colour** and **not yet visually inspected by user**. Its 12-bit interpreted stretch bounds were `0–118`.
+- Sampled RAW16 pixel statistics: **minimum 0, maximum 5,328, average 317.22**, **3.77% zero**, **100.0% multiples of 16**, **0.0% near saturation** (all based on sampled pixel stride).
+- Compared with lens-cap-on dark frames (means **4.52** and **1.75**, many more zeros), light responsiveness is **strongly indicated**, and the absence of sampled saturated pixels is encouraging.
+- Pixel encoding is strongly **consistent with 12-bit values left-shifted by four bits** inside RAW16: e.g., maximum sampled raw 5,328 corresponds to 333 after shifting right four bits. Do not claim conclusively validated bit alignment without complete sensor/full-dynamic-range tests.
+- **Open question:** Inspect PNG on the user's Linux desktop to confirm visible scene features and sane orientation; check exposure/gain response and then colour debayering before building browser preview.
+- **Not proved:** optical focusing, scientific calibration, requested exposure timing accuracy or long-duration load reliability.
+
 ## Pre-development integrated hardware acceptance checklist (planned 2026-10-27)
 
 The core camera and mount interfaces have passed their **individual** smoke tests. Before substantial application coding, test the complete field configuration in the following order. Statuses below distinguish **known**, **planned**, and **not yet verified**.
@@ -456,7 +468,7 @@ The core camera and mount interfaces have passed their **individual** smoke test
 | Priority | Test | Evidence for acceptance | Status |
 | --- | --- | --- | --- |
 | P0 | 64 GB USB 3 acquisition drive | Identify correct USB device and filesystem **before any formatting**, inspect capacity/UUID, mount persistently by UUID, perform non-destructive write/read integrity and sustained throughput test, verify clean unmount/remount and reboot persistence | **PASS:** USB3 5000M, UUID mount after reboot, 512 MiB SHA-256 test, 20.2 MiB/s write, 16 MiB SHA-256 retention after reboot. Long-duration mixed camera/drive load still pending |
-| P0 | Camera capture to target storage | Verify explicit manual gain/exposure control, multiple consecutive RAW16 frames, nontrivial image statistics, preview of ordinary scene, proper frame format/12-bit alignment, and checksums/file sizes on the new drive | **10/10 full-resolution RAW16 captures directly to USB3, all SHA-256 readbacks PASS, 10 unique frames**; pixel encoding, optical preview and exposure/gain validation pending |
+| P0 | Camera capture to target storage | Verify explicit manual gain/exposure control, multiple consecutive RAW16 frames, nontrivial image statistics, preview of ordinary scene, proper frame format/12-bit alignment, and checksums/file sizes on the new drive | **10/10 full-resolution RAW16 files on USB3 SHA-256 PASS; illuminated 10 ms frame recorded with light-responsive sampled statistics, grayscale 964×545 PNG generated; pixel shift 4 strongly supported.** Visual scene inspection, colour and exposure/gain accuracy still pending |
 | P0 | Realistic whole-system load & power | SV705C + AM3N + USB3 recording drive (+ intended Wi-Fi if needed) active together; monitor `vcgencmd get_throttled`, supply/buck ratings and voltage under load, `dmesg` USB disconnects/resets, `journalctl` and temperatures for ~20–30 minutes | **Single camera frame and mount tests verified, combined sustained test pending** |
 | P1 | Offline startup / time / network | Reboot on real field power without Internet; verify local browser accessibility, Wi-Fi/AP behaviour, reliable clock acquisition or clock fallback, mount clock synchronization, stable devices and writable data path | **NTP synchronized while online; offline untested, no hardware RTC** |
 | P1 | Mount with actual optical payload | Confirm cables, camera/OTA clearance and power branches during native Home path (including near zenith); confirm external physical stop/power access and usable normal-stop/deadman behaviour | **Home and normal stops tested with existing configuration; full field cable/safety layout pending** |
