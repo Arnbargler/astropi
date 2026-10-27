@@ -80,7 +80,7 @@ class CameraWorker:
             return {"phase": "idle", "id": None, "formats": [], "files": []}
         return self._captures.status()
 
-    def request_capture(self, formats):
+    def request_capture(self, formats, count=1):
         with self._lock:
             if self._phase != "running":
                 raise RuntimeError("Start the camera before saving a frame")
@@ -88,8 +88,13 @@ class CameraWorker:
                 raise RuntimeError("Wait for exposure/gain settings to finish applying")
             if self._captures is None:
                 raise RuntimeError("Capture storage not configured")
-            # The manager acquires its own lock and verifies USB storage.
-            return self._captures.request(formats)
+            # No SDK calls here; capture is queued for the next RAW frame.
+            return self._captures.request(formats, count=count)
+
+    def cancel_capture(self):
+        if self._captures is None:
+            raise RuntimeError("Capture storage not configured")
+        return self._captures.cancel()
 
     def start(self):
         with self._lock:
@@ -127,6 +132,8 @@ class CameraWorker:
         with self._lock:
             if self._phase not in ("connecting", "running"):
                 raise RuntimeError("Start the camera first")
+            if self._captures is not None and self._captures.active_sequence():
+                raise RuntimeError("Exposure and gain are locked during a capture sequence")
             # Coalesce rapid button clicks; only the latest desired values
             # survive until the next SDK frame boundary.
             self._settings_request_id += 1

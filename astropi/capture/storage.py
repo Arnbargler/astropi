@@ -30,9 +30,9 @@ class CaptureStorage:
         self.uuid = settings.storage_uuid
         self._verify = verifier
 
-    def preflight(self, formats):
+    def preflight(self, formats, *, count=1):
         status = self._verify(self.mount, self.uuid)
-        needed = _RESERVE_BYTES + sum(_ESTIMATED[k] for k in formats)
+        needed = _RESERVE_BYTES + count * sum(_ESTIMATED[k] for k in formats)
         if not status.get("ready"):
             raise StorageError("Recording refused: USB drive " + status.get("state", "unavailable"))
         if status.get("free_bytes") is None or status["free_bytes"] < needed:
@@ -76,7 +76,7 @@ class CaptureStorage:
         os.fsync(dir_fd)
         return len(payload), hashlib.sha256(payload).hexdigest()
 
-    def save(self, raw, formats, *, gain, exposure_us, received_at, stretch):
+    def save(self, raw, formats, *, gain, exposure_us, received_at, stretch, sequence=None):
         self.preflight(formats)  # Repeat check after capture and before writes.
         # Pin the verified mounted filesystem by opening its root; no fallback
         # to the same pathname on microSD if the USB device disappears.
@@ -133,6 +133,8 @@ class CaptureStorage:
                         fits_data="unsigned 12-bit ADU with FITS BZERO=32768",
                         files=files,
                     )
+                    if sequence is not None:
+                        metadata["sequence"] = dict(sequence)
                     manifest = json.dumps(metadata, indent=2, ensure_ascii=True).encode() + b"\n"
                     self._atomic_write(shot_fd, "metadata.json", manifest)
                     os.fsync(shot_fd)
