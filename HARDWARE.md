@@ -429,6 +429,14 @@ After the above ten-frame attempt returned SDK error 2 at `SVBOpenCamera(1)`, th
 
 **Diagnosis:** The likely cause of the earlier open failure is **skipping the camera-information discovery call/initialization sequence**, rather than a changed CameraID (it remained 1). Avoid assuming the camera works when opened with hardcoded ID alone; always perform SDK enumeration, `SVBGetCameraInfo`, use returned CameraID, and open/close cleanly. It is not yet proven whether the information API call alone is strictly required by all SDK versions or a transient timing effect contributed. **This was resolved in the subsequent successful ten-frame test below.**
 
+### SV705C dark-frame pixel sample and lens-cap clarification (2026-10-27)
+
+A read-only sample of **83,229 pixel values** (stride 101) from saved `camera-test-20261027-110857` images reported:
+- `frame-01.raw16`: minimum 0, maximum **128**, mean **4.52**, 8 unique sampled values, **78.73% zeros**, **100% divisible by 16**.
+- `frame-10.raw16`: minimum 0, maximum **160**, mean **1.75**, 10 unique sampled values, **91.62% zeros**, **100% divisible by 16**.
+
+**Owner clarified the lens cap was ON during these captures.** The low intensity and high percentage of zeros are therefore **expected dark-frame behavior**, not evidence of a light sensitivity or exposure malfunction. All sampled 16-bit words being multiples of 16 is consistent with 12-bit data left-aligned by four bits, but this is **not yet conclusively verified across the full images / illuminated dynamic range**. Next optical test should remove the cap, use a short exposure and a safe diffused illuminated scene (**never point at the Sun**), and inspect range, clipping and proper preview/debayering.
+
 ### SV705C ten consecutive RAW16 frames saved to USB3 storage — PASS (2026-10-27)
 
 Using the corrected SDK order **enumerate → `SVBGetCameraInfo(index=0)` → `SVBOpenCamera(info.CameraID)`**, user successfully performed **10 consecutive frame retrievals** from the SV705C, configured for **3856×2180 RAW16**, requested exposure **200,000 µs** via SDK control ID 1, and saved them with `fsync` to `/media/astropi-data/camera-test-20261027-110857`. The script first verified the mounted data-drive UUID was `25b33cfa-b178-4b86-8a15-d00c8305cca5` and checked free space. This proves camera-to-removable-storage end-to-end capture and file persistence within the test session, **not** exposure-timing accuracy, optical image quality or prolonged uptime.
