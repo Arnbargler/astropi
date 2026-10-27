@@ -13,6 +13,24 @@ This file records the hardware we have chosen for AstroPi, how it connects, and 
 | 12 V-to-5 V buck converter | Power for Raspberry Pi | Planned / available per owner; validate voltage, current capacity and behaviour under load |
 | N100 Linux Mint desktop | Optional development, simulation and browser access | Available; not required as an intermediary between GitHub and Pi |
 
+## Verified running-system baseline (2026-10-27)
+
+Measurements below are from **`arn@astropi`**, not the separate N100 desktop. These are idle-state measurements; camera and mount were **not connected**.
+
+| Check | Observed value |
+| --- | --- |
+| Power / throttling | `vcgencmd get_throttled` → `throttled=0x0` (no undervoltage or throttling reported since boot) |
+| CPU temperature | `vcgencmd measure_temp` → **34.0°C** |
+| SD card | `mmcblk0` **29 GiB**, ~32 GB marketed capacity; 512 MiB firmware boot partition plus 28.5 GiB ext4 root partition |
+| Filesystem space | Root filesystem **28 GiB total, 5.6 GiB used, 22 GiB available** (21% used); recording destination not yet chosen |
+| USB | 5 Gbit/s USB 3 root hub present with **no USB 3 devices connected**; VIA Labs USB 2 hub detected (480 Mbit/s); no SV705C observed in scan |
+| Network | `wlan0` up; `eth0` down, no carrier |
+| Clock | NTP active and synchronized; **Europe/London (GMT)** time zone as of test; RTC unavailable (`n/a`) |
+| Runtime | **Python 3.13.5**, `aarch64` |
+| Swap | `zram0` 2 GiB swap; earlier `free -h` reported no swap usage |
+
+**Follow-ups:** Test 5V power and `get_throttled` under sustained camera load; decide on storage for FITS sequences; verify the SV705C enumerates on a USB 3 port. Configure the Pi's time zone to the observing region if desired; astronomy calculations should use synchronized UTC plus explicitly configured observing latitude/longitude, not infer coordinates from time zone. Offline operation needs a way to acquire accurate time after boot (e.g. browser-provided clock or an RTC).
+
 ## Configuration still to record
 
 - Telescope and focal length, including any reducer or Barlow (for image scale and field-of-view estimates).
