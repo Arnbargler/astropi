@@ -475,6 +475,22 @@ The user inspected and shared the PNG, reporting **“perfect”**. The image vi
 
 **Result:** First GRBG → RGB preview **visual acceptance PASS**. No new exposure, original RAW16 preserved. This proves a practical browser-preview processing path on Pi 4 hardware, **not full-resolution debayering**, measured colour accuracy, or optimized throughput. Potential future improvements are proper demosaicing at higher resolution, white balance controls and realtime preview performance measurements; those can be implemented as software features rather than further hardware-blocking probes.
 
+### Exposure/gain sweep interrupted by camera frame timeout (2026-10-27)
+
+User began a four-condition test with full resolution RAW16 `3856×2180`, distinct short recordings for each setting (SDK `SVBStartVideoCapture`/`SVBStopVideoCapture` per condition), and readback via `SVBGetControlValue`.
+
+| Test | Requested | Actual SDK readback | Result |
+| --- | --- | --- | --- |
+| A | 10,000 µs exposure; gain 0 | **10,007 µs**, gain **0**, auto flags 0 | **PASS**: saved `/media/astropi-data/exposure-gain-test/test-A.raw16`, sampled 12-bit average **27.35**, max 444, zeros 1.08%, saturated 0% |
+| B | 50,000 µs exposure; gain 0 | **50,148 µs**, gain **0**, auto flags 0 | **FAILED at first discarded frame**: `SVBGetVideoData` returned **11**, i.e. `SVB_ERROR_TIMEOUT`, after opening the second video capture stream; no B file saved |
+| C / D | Planned gain increase / return to baseline | — | Not reached |
+
+The script successfully stopped recording after the error (`Stop: 0`), restored both control values (`Restore control 0 result: 0`, `Restore control 1 result: 0`), and closed the camera (`Close: 0`). **This does not establish gain or exposure response.** It demonstrates 50 ms was accepted on write/readback but **no frame was delivered before the 5-second SDK wait timeout**. The code had stopped the first video stream and restarted a second on the same open camera handle; stream restart/state timing is a plausible cause, **not yet proven**. The camera/USB/power should not be pronounced faulty based on this alone.
+
+SDK definitions: `SVB_ERROR_TIMEOUT = 11`; `SVBGetVideoData` `iWaitms` controls wait time in milliseconds. Source `https://docs.rs/svbony-sys/latest/svbony_sys/constant.SVB_ERROR_TIMEOUT.html`, `https://docs.rs/svbony-sys/latest/svbony_sys/fn.SVBGetVideoData.html`. INDI user discussions describe transient camera frame timeouts as a real SDK integration concern: `https://forum.indilib.org/t/indi-svbony-ccd-driver-monochrome-reimplementation/12036`.
+
+**Next focused diagnosis:** Open a fresh camera session, set 50 ms / gain 0, start one video stream, and attempt a frame with bounded timeout retries (no immediate stop/start within the same session). Compare output and camera cleanup. Only once this works resume gain comparison; postpone long endurance capture until camera restart behavior is understood.
+
 ## Pre-development integrated hardware acceptance checklist (planned 2026-10-27)
 
 The core camera and mount interfaces have passed their **individual** smoke tests. Before substantial application coding, test the complete field configuration in the following order. Statuses below distinguish **known**, **planned**, and **not yet verified**.
