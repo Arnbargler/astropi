@@ -159,3 +159,33 @@ Alt/Az and reported RA/Dec, `nNZM...` decoded Alt/Az), Disconnect
 The mount remained in the stationary zero-altitude/azimuth reported state.
 This proves intentional browser connection lifecycle; it does NOT verify
 forced USB-loss safety or any motion controls. Those remain separate gates.
+
+
+## First AM3N manual Stop and short-jog trial (new, hardware NOT yet tested)
+
+This is a **controlled movement trial**. Keep cables, cameras and people
+clear of the path. Have the mount's physical Cancel or a safe 12V power
+cutoff immediately accessible. Do not deliberately pull USB or kill Python
+while moving; the software cannot guarantee a Stop when communications die.
+
+1. Update AstroPi and run Python and browser tests; stop/restart Flask
+   only while the mount is stationary, then hard refresh the browser.
+2. Take Control and Connect Mount. Confirm fresh altitude and azimuth.
+3. **Click the prominent STOP MOUNT button BEFORE moving anything.**
+   Expect "Stop requested" then "Reported axes stable after Stop".
+   If it shows uncertain/errors, DO NOT arm or move; provide diagnostics.
+4. With physical Stop at hand, click **Enable one low-speed jog**, then
+   press and hold **E** for only ~0.3–0.5 seconds and release.
+   The mount should move a small amount and then stop; wait for reported
+   position stability. Small additional movement after Stop may occur.
+5. One jog requires one explicit arm. No second direction, longer jog,
+   deliberate network loss or cable-unplug test until this first test
+   passes. Each jog has a Pi-enforced 600ms missing-heartbeat deadline
+   and a 3-second absolute maximum, but neither is fail-safe against
+   severed USB or crashed hardware.
+6. Send the visible status, or run this read-only diagnostic:
+
+       curl -s http://127.0.0.1:8080/api/mount/status | python3 -m json.tool
+
+Only rate `:R5#`, manual `:Mn#/:Ms#/:Me#/:Mw#`, and Stop `:Q#`
+are available in this milestone. No automated Home, GoTo or tracking.
