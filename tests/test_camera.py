@@ -149,7 +149,7 @@ def test_worker_setting_command_is_acknowledged_only_when_applied(monkeypatch):
     worker = CameraWorker(driver_factory=FakeDriver)
     assert worker.start()
     assert active.wait(timeout=3)
-    id1 = worker.configure(25, 200_000)
+    id1 = worker.configure(25, 250_000)
     assert id1 == 1
     deadline = time.monotonic() + 3
     while worker.status()["settings_applied_id"] < id1 and time.monotonic() < deadline:
@@ -157,8 +157,8 @@ def test_worker_setting_command_is_acknowledged_only_when_applied(monkeypatch):
     state = worker.status()
     assert state["settings_applied_id"] == id1
     assert state["gain"] == 25
-    assert state["exposure_us"] == 200_000
-    assert observed[-2:] == [(EXPOSURE, 200_000), (GAIN, 25)]
+    assert state["exposure_us"] == 250_000
+    assert observed[-2:] == [(EXPOSURE, 250_000), (GAIN, 25)]
     worker.stop()
     worker._thread.join(timeout=3)
     assert not worker._thread.is_alive()
