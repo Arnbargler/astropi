@@ -349,3 +349,41 @@ def test_sequence_metadata_is_recorded_in_each_frame(tmp_path):
         stretch="auto",sequence={"id":"sequence123","index":1,"count":5})
     manifest=json.loads((tmp_path / save["directory"] / "metadata.json").read_text())
     assert manifest["sequence"] == {"id":"sequence123","index":1,"count":5}
+
+
+
+def test_independent_read_only_fits_and_raw16_verifier(tmp_path):
+    from astropi.capture.verify import check_capture
+    raw = sample_raw()
+    result = verified_storage(tmp_path).save(
+        raw, ("raw", "fits"), gain=0, exposure_us=100000,
+        stretch="fixed", received_at=WHEN,
+    )
+    folder = tmp_path / result["directory"]
+    outcome = check_capture(folder)
+    assert outcome["files"] == 2
+    assert outcome["fits_checked"]
+    assert outcome["raw_pixels_equal"]
+    # Corrupt the scientific FITS pixel data: metadata hash must fail.
+    with (folder / "sv705c.fits").open("r+b") as handle:
+        handle.seek(-100, os.SEEK_END)
+        handle.write(b"\x08")
+    with pytest.raises(ValueError, match="SHA-256 mismatch"):
+        check_capture(folder)
+
+
+def test_capture_worker_freezes_gain_exposure_during_active_sequence():
+    from astropi.camera.worker import CameraWorker
+    import threading
+
+    class NoDisk:
+        def __init__(self):
+            self.active = True
+        def active_sequence(self):
+            return self.active
+
+    worker = CameraWorker(capture=NoDisk())
+    worker._phase = "running"
+    with pytest.raises(RuntimeError, match="locked"):
+        worker.configure(10, 100_000)
+    assert worker._settings_request_id == 0
