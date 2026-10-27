@@ -9,7 +9,7 @@ This file records the hardware we have chosen for AstroPi, how it connects, and 
 | Raspberry Pi 4 Model B Rev 1.5 (4 GB RAM) | Runs headless AstroPi, camera acquisition, mount control and browser server | **Verified on `astropi` (2026-10-27):** Raspberry Pi 4 Model B Rev 1.5; Debian GNU/Linux **13.6 (Trixie)**; kernel **`6.18.39+rpt-rpi-v8`**; `free -h`: **3.7 GiB RAM total**, 188 MiB used, 3.5 GiB available; 2.0 GiB swap, unused. The separate 2 GB Pi runs the music streamer. |
 | 64 GB USB 3 thumb drive | Intended storage for saved SV705C RAW/FITS exposures and image exports | **Owned and selected for acquisition data**; not connected or tested during 2026-10-27 baseline; confirm filesystem, actual capacity, sustained writes and stable mount path when attached. |
 | SVBONY SV705C | Primary USB astronomical camera | Owned; planned first camera implementation using SVBONY SDK on Linux |
-| ZWO AM3 | Motorized telescope mount | Owned; **Alt/Az mode exclusively**; serial-control integration planned |
+| ZWO AM3N | Motorized telescope mount | Owned; **Alt/Az mode exclusively**. Prior Raspberry Pi USB serial communication verified in August 2026 (see details below). Previously listed in this file as AM3; mount reported model `AM3N#` to `:GVP#`. |
 | 12 V DC supply/distribution | Power to mount and accessories where appropriate | General power plan agreed; ratings, wiring and fused branches to document |
 | 12 V-to-5 V buck converter | Power for Raspberry Pi | Planned / available per owner; validate voltage, current capacity and behaviour under load |
 | N100 Linux Mint desktop | Optional development, simulation and browser access | Available; not required as an intermediary between GitHub and Pi |
@@ -28,6 +28,36 @@ The SDK distribution is already extracted **on the AstroPi**, separate from the 
 - **Status:** ARM64 binary architecture and shared-library dependencies **verified on AstroPi (2026-10-27)**. SDK loading in an application, USB permissions/udev installation, and successful SV705C detection/capture **not yet verified**.
 
 For implementation, use this verified ARM64 SDK build; do not use the x86 builds. Don't commit vendor SDK binaries to this repository.
+
+## ZWO AM3N serial connection — earlier AstroPi tests (2026-08-31)
+
+The following were recovered from earlier mount-control work on the Raspberry Pi; these are **historical results**, not tests on the disconnected mount during the 2026-10-27 hardware baseline.
+
+| Detail | Earlier observed result |
+| --- | --- |
+| USB enumeration | ZWO Systems **VID:PID `03c3:4001`**; Linux **CDC ACM** serial device |
+| Device path | `/dev/ttyACM0` |
+| Persistent device alias | `/dev/serial/by-id/usb-ZWO_Systems_ZWO_Device_123456-if00` (prefer to a changing `ttyACM` number; reconfirm on reconnection) |
+| Serial settings | **9600 baud, 8N1, no hardware/software flow control** |
+| User permissions | `/dev/ttyACM0` previously `root:dialout`, mode `0660`; user `arn` was in `dialout` |
+| Connection routes tested | USB serial replies were obtained from an AM3N connection at the **saddle USB-C** port; subsequent diagnostic replies were obtained using the **head USB-B** port. Recheck the preferred physical control connection when wired up again. |
+| Protocol | **LX200-style ASCII commands** ending in `#`, used directly over serial; INDI not required for this interface |
+
+**Actually observed serial replies in earlier tests:**
+
+- `:GR#` → `12:03:12#` (reported RA); `:GD#` → `+44*29:41#` (reported Dec).
+- `:GVP#` → `AM3N#` (mount product/model identification).
+- `:GV#` → `1.8.8#` (**reported version at the time**; recheck firmware later).
+- `:GU#` → `nNZM000000000#` and `:GAT#` → `e7#` (raw replies recorded; their meaning is **not** inferred here).
+
+**Earlier controller design / movement probe (requires renewed validation):**
+
+- Controller commands used/proposed: `:hR#` unpark; speed presets `:R0#`, `:R3#`, `:R6#`, `:R9#`; directions `:Mn#`, `:Ms#`, `:Me#`, `:Mw#`; stops `:Qn#`, `:Qs#`, `:Qe#`, `:Qw#` and `:Q#` (all-stop).
+- Previous diagnostics included `:hR#`, `:R6#`, and `:Me#` during a movement test. The precise physical-motion/stop outcomes were not fully recoverable in this review, so **do not mark the entire slew-control or safety behavior verified**.
+- A prototype browser/Flask AM3N controller was drafted with press-and-hold movement, speed selection, stop-all, and a timeout watchdog. Existence of code does **not** prove these behaviors are hardware-tested.
+- **Still to test:** command acceptance, physical stop response, all speed levels, tracking start/stop, parking, GoTo, and manual two-/multi-star alignment, all in Alt/Az mode.
+
+**Physical caution previously reported by owner:** The mount's M12 counterweight-hole path can extend into internal wiring. **Do not insert an excessively long M12 bolt.** Confirm mounting hardware clearance before use.
 
 ## Verified running-system baseline (2026-10-27)
 
@@ -50,10 +80,10 @@ Measurements below are from **`arn@astropi`**, not the separate N100 desktop. Th
 ## Configuration still to record
 
 - Telescope and focal length, including any reducer or Barlow (for image scale and field-of-view estimates).
-- Exact USB and serial port topology; persistent device identification.
+- Reconfirm the historical AM3N USB cable/port connection and stable `/dev/serial/by-id/` alias once the mount is reconnected; map the remaining USB devices.
 - Connect and verify 64 GB USB 3 thumb drive; choose filesystem and configure persistent mount by UUID (e.g., `/media/astropi-data`) as FITS/raw capture destination. No formatting or filesystem changes approved yet.
 - Power-supply capacity, connector polarity, buck-converter ratings and cable layout.
-- Confirm runtime SDK loading and reported SDK version; validate udev rules, camera detection and a successful SV705C capture. Record AM3 firmware version and hardware tests.
+- Confirm runtime SDK loading and reported SDK version; validate udev rules, camera detection and a successful SV705C capture. Recheck AM3N-reported version (historically `1.8.8#`) and test motion/stop/tracking/GoTo safely.
 
 ## Rules
 
