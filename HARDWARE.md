@@ -7,7 +7,7 @@ This file records the hardware we have chosen for AstroPi, how it connects, and 
 | Device | Purpose | Status / notes |
 | --- | --- | --- |
 | Raspberry Pi 4 Model B Rev 1.5 (4 GB RAM) | Runs headless AstroPi, camera acquisition, mount control and browser server | **Verified on `astropi` (2026-10-27):** Raspberry Pi 4 Model B Rev 1.5; Debian GNU/Linux **13.6 (Trixie)**; kernel **`6.18.39+rpt-rpi-v8`**; `free -h`: **3.7 GiB RAM total**, 188 MiB used, 3.5 GiB available; 2.0 GiB swap, unused. The separate 2 GB Pi runs the music streamer. |
-| 64 GB USB 3 thumb drive | Intended storage for saved SV705C RAW/FITS exposures and image exports | **User-approved 2026-10-27 reformat successful:** `Flash Drive FIT` at USB 3.0 **5000M**, 59.8 GiB. Old Pi OS image erased; now a single **ext4** GPT partition `sda1` labelled `astropi-data`, filesystem UUID **`25b33cfa-b178-4b86-8a15-d00c8305cca5`**. Confirmed independently with `blkid -p`, `wipefs -n`, and `lsblk` after `udevadm settle`. **Mount configuration and write tests still pending.** Operating-system root is separately on `/dev/mmcblk0`. |
+| 64 GB USB 3 thumb drive | Intended storage for saved SV705C RAW/FITS exposures and image exports | **User-approved 2026-10-27 reformat successful:** `Flash Drive FIT` at USB 3.0 **5000M**, 59.8 GiB. Old Pi OS image erased; now a single **ext4** GPT partition `sda1` labelled `astropi-data`, filesystem UUID **`25b33cfa-b178-4b86-8a15-d00c8305cca5`**. Confirmed independently with `blkid -p`, `wipefs -n`, and `lsblk` after `udevadm settle`. **UUID-based ext4 mount verified**, with 512 MiB random-write test at **20.2 MiB/s**, readback SHA-256 PASS and **16 MiB test file checksum PASS after reboot**. Automatic `/media/astropi-data` mount and USB 3 5000M reconnection verified post-reboot. Operating-system root remains separately on `/dev/mmcblk0`. |
 | SVBONY SV705C | Primary USB astronomical camera | **Detected and identified through SDK on AstroPi (2026-10-27):** USB `f266:9a0a` at **5000M**, permissions `0666`; Python SDK enumeration `1`; camera-info returned name, port `USB3.0`, ID `1`. **Full-resolution RAW16 frame successfully acquired and saved (all SDK return codes `0`); sampled pixel statistics checked, visual confirmation pending.** |
 | ZWO AM3N | Motorized telescope mount | **Connected to AstroPi, USB/CDC ACM enumerated (2026-10-27):** `03c3:4001`, `/dev/ttyACM0`, stable `/dev/serial/by-id/usb-ZWO_Systems_ZWO_Device_123456-if00`; `arn` in `dialout`. **Live serial queries verified** (`AM3N#`, firmware `1.8.8#`, RA/Dec responses). **User visually confirmed** commanded azimuth movement at 120× sidereal; instantaneous/fail-safe stop, tracking and GoTo remain unverified. Alt/Az mode exclusively; older protocol tests below. |
 | 12 V DC supply/distribution | Power to mount and accessories where appropriate | General power plan agreed; ratings, wiring and fused branches to document |
@@ -397,7 +397,18 @@ User ran a Python acquisition-storage probe on **`/media/astropi-data`** after g
 - Calculated SHA-256 while writing and reading; **data integrity PASS**, equal digests.
 - The temporary benchmark file was deleted.
 - SV705C full-frame RAW16 data size is **16,812,160 bytes (~16.03 MiB)**, equivalent to roughly **0.79 seconds/frame** at measured sustained write speed, not including camera exposure, SDK transfer, file-format processing, metadata, or future throughput variability. This is sufficient for low-cadence DSO captures but **not** an independently measured end-to-end capture pipeline.
-- **Remaining checks:** retention and automatic mount after reboot; prolonged writes and actual consecutive camera captures while all peripherals are connected.
+- **Subsequent confirmation:** Retention and automatic mount **passed the reboot test** below. Longer-running write tests and actual consecutive camera captures while all peripherals are connected remain pending.
+
+### USB acquisition drive — persistence and peripherals across reboot VERIFIED (2026-10-27)
+
+The user wrote a persistent **16 MiB random file** to the mounted `/media/astropi-data/.reboot-test.bin` with `conv=fsync`, stored its SHA-256 manifest on the Pi, and **rebooted**. Subsequent outputs:
+
+- `findmnt /media/astropi-data` → `/dev/sda1`, **ext4**, `rw,relatime`: automatic mount after boot is **verified**.
+- `sha256sum -c ~/astropi-usb-reboot.sha256` → `/media/astropi-data/.reboot-test.bin: OK`: **content persisted and matched SHA-256 across reboot**.
+- `lsusb -t` → USB3 mass-storage device at **5000M**, vendor-specific **SV705C** at **5000M**, **AM3N** using `cdc_acm` at **12M** over USB2: **all three device connections enumerated after reboot**.
+- `vcgencmd get_throttled` → **`throttled=0x0`**, no currently/lifetime recorded Pi under-voltage or throttle flags reported at that check.
+- **Conclusion:** Basic USB acquisition storage setup, automatic mount, 512 MiB benchmark/checksum and reboot persistence **PASS**. The benchmark's 146.5 MiB/s read result might include page caching. Further tests still required for **long-duration mixed camera/USB load, actual end-to-end SDK camera captures to this drive, and offline network/time recovery**.
+- The 16 MiB `.reboot-test.bin` file was not reported removed; can be deleted after the confirmation if desired, after verifying the correct mounted filesystem.
 
 ## Pre-development integrated hardware acceptance checklist (planned 2026-10-27)
 
@@ -405,7 +416,7 @@ The core camera and mount interfaces have passed their **individual** smoke test
 
 | Priority | Test | Evidence for acceptance | Status |
 | --- | --- | --- | --- |
-| P0 | 64 GB USB 3 acquisition drive | Identify correct USB device and filesystem **before any formatting**, inspect capacity/UUID, mount persistently by UUID, perform non-destructive write/read integrity and sustained throughput test, verify clean unmount/remount and reboot persistence | **UUID mount, 512 MiB write/read checksum PASS, 20.2 MiB/s write verified**; reboot persistence and longer tests pending |
+| P0 | 64 GB USB 3 acquisition drive | Identify correct USB device and filesystem **before any formatting**, inspect capacity/UUID, mount persistently by UUID, perform non-destructive write/read integrity and sustained throughput test, verify clean unmount/remount and reboot persistence | **PASS:** USB3 5000M, UUID mount after reboot, 512 MiB SHA-256 test, 20.2 MiB/s write, 16 MiB SHA-256 retention after reboot. Long-duration mixed camera/drive load still pending |
 | P0 | Camera capture to target storage | Verify explicit manual gain/exposure control, multiple consecutive RAW16 frames, nontrivial image statistics, preview of ordinary scene, proper frame format/12-bit alignment, and checksums/file sizes on the new drive | **One RAW16 frame saved to SD**; further work pending |
 | P0 | Realistic whole-system load & power | SV705C + AM3N + USB3 recording drive (+ intended Wi-Fi if needed) active together; monitor `vcgencmd get_throttled`, supply/buck ratings and voltage under load, `dmesg` USB disconnects/resets, `journalctl` and temperatures for ~20–30 minutes | **Single camera frame and mount tests verified, combined sustained test pending** |
 | P1 | Offline startup / time / network | Reboot on real field power without Internet; verify local browser accessibility, Wi-Fi/AP behaviour, reliable clock acquisition or clock fallback, mount clock synchronization, stable devices and writable data path | **NTP synchronized while online; offline untested, no hardware RTC** |
