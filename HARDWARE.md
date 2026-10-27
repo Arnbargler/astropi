@@ -8,7 +8,7 @@ This file records the hardware we have chosen for AstroPi, how it connects, and 
 | --- | --- | --- |
 | Raspberry Pi 4 Model B Rev 1.5 (4 GB RAM) | Runs headless AstroPi, camera acquisition, mount control and browser server | **Verified on `astropi` (2026-10-27):** Raspberry Pi 4 Model B Rev 1.5; Debian GNU/Linux **13.6 (Trixie)**; kernel **`6.18.39+rpt-rpi-v8`**; `free -h`: **3.7 GiB RAM total**, 188 MiB used, 3.5 GiB available; 2.0 GiB swap, unused. The separate 2 GB Pi runs the music streamer. |
 | 64 GB USB 3 thumb drive | Intended storage for saved SV705C RAW/FITS exposures and image exports | **Owned and selected for acquisition data**; not connected or tested during 2026-10-27 baseline; confirm filesystem, actual capacity, sustained writes and stable mount path when attached. |
-| SVBONY SV705C | Primary USB astronomical camera | **Detected and identified through SDK on AstroPi (2026-10-27):** USB `f266:9a0a` at **5000M**, permissions `0666`; Python SDK enumeration `1`; camera-info returned name, port `USB3.0`, ID `1`. **Opening, property retrieval and closing verified (all returned `0`); image capture not yet tested.** |
+| SVBONY SV705C | Primary USB astronomical camera | **Detected and identified through SDK on AstroPi (2026-10-27):** USB `f266:9a0a` at **5000M**, permissions `0666`; Python SDK enumeration `1`; camera-info returned name, port `USB3.0`, ID `1`. **Full-resolution RAW16 frame successfully acquired and saved (all SDK return codes `0`); pixel-content validation still pending.** |
 | ZWO AM3N | Motorized telescope mount | Owned; **Alt/Az mode exclusively**. Prior Raspberry Pi USB serial communication verified in August 2026 (see details below). Previously listed in this file as AM3; mount reported model `AM3N#` to `:GVP#`. |
 | 12 V DC supply/distribution | Power to mount and accessories where appropriate | General power plan agreed; ratings, wiring and fused branches to document |
 | 12 V-to-5 V buck converter | Power for Raspberry Pi | Planned / available per owner; validate voltage, current capacity and behaviour under load |
@@ -20,11 +20,32 @@ This file records the hardware we have chosen for AstroPi, how it connects, and 
 - **Verified negotiated link:** `lsusb -t` shows Bus 002, Port 002, device `Vendor Specific Class` at **5000M** (USB 3 SuperSpeed). Bus and device numbers can change on reconnect.
 - **Verified permissions:** `/dev/bus/usb/002/002` is `crw-rw-rw-` (`0666`, `root:root`); `arn` can access the node. Vendor rule `90-ckusb.rules` specifies `f266:9a0a` and `MODE="0666"`; installed at `/etc/udev/rules.d/90-ckusb.rules`. Appropriate for this trusted local setup; reconsider if exposed to untrusted local users.
 - **Verified SDK dynamic loading:** `ctypes.CDLL('/home/arn/svbony-sdk/SVBCameraSDK/lib/armv8/libSVBCameraSDK.so')` succeeded under normal user `arn`.
-- **Verified SDK camera enumeration:** Python `ctypes` call `SVBGetNumOfConnectedCameras()` returned **1** (as normal user `arn`, camera attached, 2026-10-27). This confirms SDK-level detection; successful camera opening and actual frame transfer remain untested.
+- **Verified SDK camera enumeration:** Python `ctypes` call `SVBGetNumOfConnectedCameras()` returned **1** (as normal user `arn`, camera attached, 2026-10-27). This confirmed SDK-level detection, followed by successful camera opening and RAW16 capture described below.
 - **Verified camera identity:** `SVBGetCameraInfo(..., index=0)` returned success (`0`), name `SVBONY SV705C`, port `USB3.0`, `DeviceID=4865`, and `CameraID=1`. The SDK's camera index and its returned camera ID are distinct.
 - **Verified SDK initialization and sensor capabilities:** A fresh process called `SVBGetNumOfConnectedCameras()` → `1`, `SVBGetCameraInfo(index=0)` → success (`0`, `CameraID=1`), `SVBOpenCamera(1)` → `0`, `SVBGetCameraProperty(1, ...)` → `0`, and `SVBCloseCamera(1)` → `0`. Reported maximum resolution **3856 × 2180** (8,406,080 pixels), **colour sensor**, **maximum bit depth 12**, supported binning **1, 2, 3, 4**, raw **Bayer enum 2**, and supported image-format enum values **0, 4, 5, 10** (`-1` appears to terminate the list; additional zero-filled array slots follow). Decode enum meaning from exact SDK header before using it. The earlier error `2` happened when the property query was attempted before opening the camera; this sequencing issue is now resolved.
 - **Power/thermal after connection:** `vcgencmd get_throttled` → `throttled=0x0`; `vcgencmd measure_temp` → **33.6°C**. This is connected/idle, **not a sustained camera-capture load test**.
-- **Outstanding tests:** Decode Bayer and image-format enums from SDK header, configure exposure and capture an actual frame; retest throttling/power during continuous use.
+- **Outstanding tests:** Check actual pixel-value distribution and render a recognizable preview, verify exposure/gain settings and RAW16 byte ordering/value alignment, then retest throttling/power during continuous use.
+
+## First successful SV705C RAW16 capture (2026-10-27)
+
+**Verified on `arn@astropi`, using Python `ctypes` and the native `armv8/libSVBCameraSDK.so` library:**
+
+| Capture step | Observed SDK return code |
+| --- | --- |
+| `SVBGetCameraInfo` | `0` |
+| `SVBOpenCamera` | `0` |
+| `SVBGetCameraProperty` | `0` |
+| `SVBSetROIFormat(id, 0, 0, 3856, 2180, 1)` | `0` |
+| `SVBSetOutputImageType(id, 4)` (RAW16) | `0` |
+| `SVBStartVideoCapture` | `0` |
+| `SVBGetVideoData` (20-second wait limit) | `0` |
+| `SVBStopVideoCapture` | `0` |
+| `SVBCloseCamera` | `0` |
+
+- **First saved image:** `/home/arn/sv705c-first-frame.raw16` on the Pi's microSD root filesystem, **16,812,160 bytes** (3856 × 2180 × 2 bytes/pixel). No FITS header or color processing; this is an unprocessed raw pixel buffer. The configured exposure was the camera's existing setting, not explicitly set by the test.
+- **SDK headers decode reported enums:** Bayer `2` = **GRBG**; supported formats `0` = RAW8, `4` = RAW16, `5` = Y8, `10` = RGB24. The sensor reports maximum 12-bit depth; RAW16 is a 16-bit output container.
+- **Verification boundary:** The SDK reported a successful full-resolution frame transfer and a file was written at exactly the expected size. **Pixel statistics, visual image validity, exposure controls, repeated captures, FITS packaging and sustained power have not yet been tested.** Do not claim these are complete.
+- **Implementation detail:** Successful call sequence was enumerate → get camera info → open → set ROI → set RAW16 → start video capture → get frame → stop → close. The SDK's “video” functions can be used to retrieve individual image frames.
 
 ## SVBONY Linux SDK location (reported 2026-10-27)
 
@@ -37,7 +58,7 @@ The SDK distribution is already extracted **on the AstroPi**, separate from the 
 - **Verified native ARM64 SDK library:** `/home/arn/svbony-sdk/SVBCameraSDK/lib/armv8/libSVBCameraSDK.so`. `file` reports **ELF 64-bit LSB shared object, ARM aarch64**, dynamically linked.
 - **Verified dependency resolution:** `ldd` resolves every dependency with **no missing libraries**: `libstdc++.so.6`, `libusb-1.0.so.0`, `libm.so.6`, `libgcc_s.so.1`, `libc.so.6`, `libudev.so.1`, and `libcap.so.2`.
 - **USB dependency:** `libusb-1.0.so.0` resolves to the installed system library at `/lib/aarch64-linux-gnu/libusb-1.0.so.0`; the SDK-bundled libusb is not currently necessary for dependency resolution.
-- **Status:** ARM64 binary architecture and shared-library dependencies **verified on AstroPi (2026-10-27)**. SDK loading through Python ctypes, USB-node permissions and installed udev rule **verified on AstroPi (2026-10-27)**. SDK enumeration **verified (1 device)**; camera open/close and sensor-property retrieval **verified (success return codes)**. Successful frame capture **not yet verified**.
+- **Status:** ARM64 binary architecture and shared-library dependencies **verified on AstroPi (2026-10-27)**. SDK loading through Python ctypes, USB-node permissions and installed udev rule **verified on AstroPi (2026-10-27)**. SDK enumeration **verified (1 device)**; camera open/close and sensor-property retrieval **verified (success return codes)**. A single SDK RAW16 frame acquisition and expected-sized file write **verified**; image content still requires validation.
 
 For implementation, use this verified ARM64 SDK build; do not use the x86 builds. Don't commit vendor SDK binaries to this repository.
 
@@ -87,7 +108,7 @@ Measurements below are from **`arn@astropi`**, not the separate N100 desktop. Th
 | Runtime | **Python 3.13.5**, `aarch64` |
 | Swap | `zram0` 2 GiB swap; earlier `free -h` reported no swap usage |
 
-**Follow-ups:** Test 5V power and `get_throttled` under sustained camera load; verify the planned 64 GB USB 3 recording drive and mount it persistently; verify first frame capture and sustained power stability. Configure the Pi's time zone to the observing region if desired; astronomy calculations should use synchronized UTC plus explicitly configured observing latitude/longitude, not infer coordinates from time zone. Offline operation needs a way to acquire accurate time after boot (e.g. browser-provided clock or an RTC).
+**Follow-ups:** Test 5V power and `get_throttled` under sustained camera load; verify the planned 64 GB USB 3 recording drive and mount it persistently; validate first frame pixel content and sustained camera power stability. Configure the Pi's time zone to the observing region if desired; astronomy calculations should use synchronized UTC plus explicitly configured observing latitude/longitude, not infer coordinates from time zone. Offline operation needs a way to acquire accurate time after boot (e.g. browser-provided clock or an RTC).
 
 ## Configuration still to record
 
@@ -95,7 +116,7 @@ Measurements below are from **`arn@astropi`**, not the separate N100 desktop. Th
 - Reconfirm the historical AM3N USB cable/port connection and stable `/dev/serial/by-id/` alias once the mount is reconnected; map the remaining USB devices.
 - Connect and verify 64 GB USB 3 thumb drive; choose filesystem and configure persistent mount by UUID (e.g., `/media/astropi-data`) as FITS/raw capture destination. No formatting or filesystem changes approved yet.
 - Power-supply capacity, connector polarity, buck-converter ratings and cable layout.
-- Decode the SDK's Bayer/image-format enums, query the SDK-reported version and obtain a successful SV705C frame capture. Recheck AM3N-reported version (historically `1.8.8#`) and test motion/stop/tracking/GoTo safely.
+- Query the SDK-reported version and supported exposure controls, validate the RAW16 frame content and produce a viewable preview; later verify exposure sequences and saving to the USB 3 data drive. Recheck AM3N-reported version (historically `1.8.8#`) and test motion/stop/tracking/GoTo safely.
 
 ## Rules
 
