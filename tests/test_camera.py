@@ -64,6 +64,10 @@ class FakeCamera:
         if mode not in ("auto", "fixed"):
             raise ValueError("Invalid preview mode")
         return mode
+    def set_debayer(self, enabled):
+        if type(enabled) is not bool:
+            raise ValueError("Debayer must be boolean")
+        return enabled
 
 
 def test_http_requires_lease(tmp_path):
@@ -129,7 +133,11 @@ def test_worker_setting_command_is_acknowledged_only_when_applied(monkeypatch):
     from astropi.camera import worker as module
     from astropi.camera.sdk import EXPOSURE, GAIN
 
-    monkeypatch.setattr(module, "raw16_to_jpeg", lambda raw, stretch="auto": b"\xff\xd8test")
+    monkeypatch.setattr(module, "raw16_to_jpeg",
+                        lambda raw, stretch="auto", debayer=True: b"\xff\xd8test")
+    monkeypatch.setattr(module, "raw16_statistics",
+                        lambda raw: dict(raw_mean_adu=100, raw_p99_adu=200,
+                                         raw_saturated_percent=0))
     active = threading.Event()
     observed = []
 
@@ -149,16 +157,16 @@ def test_worker_setting_command_is_acknowledged_only_when_applied(monkeypatch):
     worker = CameraWorker(driver_factory=FakeDriver)
     assert worker.start()
     assert active.wait(timeout=3)
-    id1 = worker.configure(25, 250_000)
+    id1 = worker.configure(30, 250_000)
     assert id1 == 1
     deadline = time.monotonic() + 3
     while worker.status()["settings_applied_id"] < id1 and time.monotonic() < deadline:
         time.sleep(0.01)
     state = worker.status()
     assert state["settings_applied_id"] == id1
-    assert state["gain"] == 25
+    assert state["gain"] == 30
     assert state["exposure_us"] == 250_000
-    assert observed[-2:] == [(EXPOSURE, 250_000), (GAIN, 25)]
+    assert observed[-2:] == [(EXPOSURE, 250_000), (GAIN, 30)]
     worker.stop()
     worker._thread.join(timeout=3)
     assert not worker._thread.is_alive()
@@ -225,8 +233,7 @@ def test_exposure_presets_and_long_exposure_wait_time():
     worker._phase = "running"
     for duration in EXPOSURE_PRESETS_US:
         assert isinstance(worker.configure(0, duration), int)
-        # The hardware worker normally drains the bounded queue; simulate it here.
-        worker._commands.get_nowait()
+        assert worker._pending_settings[2] == duration
 
     for invalid in (999, 1_500, 35_000_000, 500_000.0, "1000", True):
         try:
@@ -235,3 +242,52 @@ def test_exposure_presets_and_long_exposure_wait_time():
             pass
         else:
             raise AssertionError(f"Invalid exposure preset accepted: {invalid!r}")
+
+
+
+def test_monochrome_preview_is_grayscale_and_does_not_mutate_RAW():
+    pixels = np.empty((HEIGHT, WIDTH), dtype="<u2")
+    pixels[0::2, 0::2] = 1200 << 4
+    pixels[0::2, 1::2] = 3000 << 4
+    pixels[1::2, 0::2] = 900 << 4
+    pixels[1::2, 1::2] = 1600 << 4
+    before = pixels.copy()
+    for stretch in ("auto", "fixed"):
+        mono = Image.open(io.BytesIO(raw16_to_jpeg(pixels, stretch=stretch, debayer=False)))
+        colour = Image.open(io.BytesIO(raw16_to_jpeg(pixels, stretch=stretch, debayer=True)))
+        assert mono.mode == "L"
+        assert colour.mode == "RGB"
+        assert mono.size == colour.size == (WIDTH // 4, HEIGHT // 4)
+    assert np.array_equal(before, pixels)
+
+
+def test_backend_debayer_selection_requires_operator(tmp_path):
+    config = Settings(tmp_path, "expected", tmp_path / "missing-serial", tmp_path / "missing-usb")
+    client = create_app(settings=config, camera=FakeCamera()).test_client()
+    assert client.post("/api/camera/debayer", json={"enabled": False}).status_code == 403
+    token = client.post("/api/control/take").get_json()["token"]
+    headers = {"X-AstroPi-Control": token}
+    assert client.post("/api/camera/debayer", headers=headers,
+                       json={"enabled": False}).get_json()["enabled"] is False
+    assert client.post("/api/camera/debayer", headers=headers,
+                       json={"enabled": "false"}).status_code == 400
+
+
+def test_rapid_preset_clicks_coalesce_to_latest_request():
+    from astropi.camera.worker import GAIN_PRESETS
+    assert GAIN_PRESETS == (0, 5, 10, 20, 30, 50, 75, 100)
+    worker = CameraWorker()
+    worker._phase = "running"
+    for i, gain in enumerate(GAIN_PRESETS, start=1):
+        assert worker.configure(gain, 100_000) == i
+    assert worker._pending_settings == (len(GAIN_PRESETS), 100, 100_000)
+    assert worker.status()["settings_applied_id"] == 0
+    assert worker.set_debayer(False) is False
+    assert worker.status()["debayer"] is False
+    for invalid in (0, "off", None):
+        try:
+            worker.set_debayer(invalid)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("Nonboolean debayer was accepted")

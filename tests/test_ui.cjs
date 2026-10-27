@@ -5,123 +5,119 @@ const fs = require("node:fs");
 const vm = require("node:vm");
 const path = require("node:path");
 
-test("status polling never overwrites either unapplied camera input", async () => {
-  const elements = new Map();
-  const intervals = new Map();
-  const calls = [];
+const EX = [1000,2000,5000,10000,25000,50000,100000,250000,500000,750000,
+  1000000,2000000,5000000,10000000,15000000,20000000,25000000,30000000];
+const GAIN = [0,5,10,20,30,50,75,100];
+
+function harness() {
+  const elements = new Map(), intervals = new Map(), calls = [];
   let camera = {
     phase: "running", has_frame: false, frame_number: 0,
     gain: 0, exposure_us: 100143, settings_applied_id: 0,
-    preview_fps: 1.0, preview_processing_ms: 100,
-    preview_mode: "auto", raw_mean_adu: 150, raw_p99_adu: 300, raw_saturated_percent: 0
+    preview_fps: 6.0, capture_fps: 20, preview_processing_ms: 60,
+    preview_mode: "auto", debayer: true,
+    raw_mean_adu: 150, raw_p99_adu: 300, raw_saturated_percent: 0
   };
   function el(id) {
-    if (!elements.has(id)) {
-      elements.set(id, {
-        value: "", textContent: "", hidden: false, disabled: false,
-        className: "", src: "", handlers: {}, attributes: {},
-        setAttribute(name, value) { this.attributes[name] = value; },
-        addEventListener(name, cb) { this.handlers[name] = cb; },
-        dispatch(name) { return this.handlers[name](); }
-      });
-    }
+    if (!elements.has(id)) elements.set(id, {
+      value: "", textContent: "", checked: false, hidden: false,
+      disabled: false, className: "", src: "", attributes: {}, handlers: {},
+      setAttribute(name, value) { this.attributes[name] = value; },
+      addEventListener(name, cb) { this.handlers[name] = cb; },
+      dispatch(name) { return this.handlers[name](); }
+    });
     return elements.get(id);
   }
-  const document = { getElementById: el, activeElement: null };
-  const fetch = async (url, options = {}) => {
-    calls.push(url);
-    if (url === "/api/status") {
-      return { ok: true, json: async () => ({
-        camera: { ...camera, usb_detected: true },
-        mount: { usb_detected: true, serial_present: true },
-        storage: { ready: true, free_bytes: 1000000000 },
-        host: { cpu_temperature_c: 40, uptime_seconds: 400 },
-        utc: "2026-10-27T19:00:00Z"
-      }) };
-    }
-    if (url === "/api/camera/progress") {
-      return { ok: true, json: async () => ({...camera}) };
-    }
-    if (url === "/api/control/take") {
-      return {ok: true, json: async () => ({token:"local-test"})};
-    }
-    if (url === "/api/camera/settings") {
-      return {ok: true, json: async () => ({ok: true, request_id: 1})};
-    }
+  const fetch = async (url, options={}) => {
+    const payload = options.body ? JSON.parse(options.body) : {};
+    calls.push({url, payload});
+    if (url === "/api/status") return {ok:true, json:async()=>({
+      camera:{...camera, usb_detected:true},
+      mount:{usb_detected:true,serial_present:true},
+      storage:{ready:true,free_bytes:1000000000},
+      host:{cpu_temperature_c:42,uptime_seconds:3600},
+      utc:"2026-10-27T19:00:00Z"
+    })};
+    if (url === "/api/camera/progress") return {ok:true,json:async()=>({...camera})};
+    if (url === "/api/control/take") return {ok:true,json:async()=>({token:"test-token"})};
+    if (url === "/api/control/heartbeat") return {ok:true,json:async()=>({ok:true})};
+    if (url === "/api/camera/settings") return {ok:true,json:async()=>({
+      request_id: calls.filter(c=>c.url==="/api/camera/settings").length,ok:true
+    })};
     if (url === "/api/camera/preview-mode") {
-      camera = {...camera, preview_mode: JSON.parse(options.body).mode};
-      return {ok: true, json: async () => ({ok:true, mode:camera.preview_mode})};
+      camera = {...camera,preview_mode:payload.mode};
+      return {ok:true,json:async()=>({ok:true,mode:payload.mode})};
     }
-    throw Error("Unexpected request " + url);
+    if (url === "/api/camera/debayer") {
+      camera = {...camera,debayer:payload.enabled};
+      return {ok:true,json:async()=>({ok:true,enabled:payload.enabled})};
+    }
+    throw Error("Unexpected request: "+url);
   };
-  const source = fs.readFileSync(path.join(__dirname, "../astropi/static/app.js"), "utf8");
-  vm.runInNewContext(source, {
-    document, fetch, setInterval: (fn, interval) => intervals.set(interval, fn),
-    Date, Number, Math, Promise
+  const code = fs.readFileSync(path.join(__dirname,"../astropi/static/app.js"),"utf8");
+  vm.runInNewContext(code, {
+    document:{getElementById:el},
+    fetch, setInterval:(fn,ms)=>intervals.set(ms,fn),Date,Number,Math,Promise
   });
-  const flush = () => new Promise(resolve => setImmediate(resolve));
-  await flush();
-  assert.equal(el("gain").value, 0);
-  assert.equal(el("exposure-us").value, "100000");
-  await el("take-control").dispatch("click");
+  return {el, intervals, calls,
+    updateCamera:data=>{camera={...camera,...data}},
+    camera:()=>camera,
+    flush:()=>new Promise(resolve=>setImmediate(resolve))
+  };
+}
 
-  document.activeElement = el("exposure-us");
-  el("exposure-us").value = "250000";
-  el("exposure-us").dispatch("change");
-  document.activeElement = el("gain");
-  el("gain").value = "30";
-  el("gain").dispatch("input");
-  document.activeElement = el("apply-settings");
-
-  await intervals.get(3000)();
-  await intervals.get(200)();
-  assert.equal(el("exposure-us").value, "250000");
-  assert.equal(el("gain").value, "30");
-  assert.match(el("settings-message").textContent, /Unsaved/);
-
-  await el("apply-settings").dispatch("click");
-  await intervals.get(3000)();
-  assert.equal(el("exposure-us").value, "250000");
-  assert.equal(el("gain").value, "30");
-  assert.match(el("settings-message").textContent, /Applying/);
-
-  camera = {...camera, gain: 30, exposure_us: 250143, settings_applied_id: 1};
-  await intervals.get(200)();
-  assert.equal(el("gain").value, 30);
-  assert.equal(el("exposure-us").value, "250000");
-  assert.match(el("settings-message").textContent, /applied/);
-  assert.match(el("raw-metrics").textContent, /RAW mean: 150/);
-  await el("stretch-fixed").dispatch("click");
-  await intervals.get(200)();
-  assert.equal(camera.preview_mode, "fixed");
-  assert.equal(el("stretch-fixed").attributes["aria-pressed"], "true");
-  assert.equal(el("stretch-auto").attributes["aria-pressed"], "false");
-  assert.match(el("stretch-indicator").className, /fixed/);
-  await el("stretch-auto").dispatch("click");
-  await intervals.get(200)();
-  assert.equal(camera.preview_mode, "auto");
-  assert.equal(el("stretch-auto").attributes["aria-pressed"], "true");
+test("18 exposure and 8 gain native radio buttons have correct values", () => {
+  const html=fs.readFileSync(path.join(__dirname,"../astropi/templates/index.html"),"utf8");
+  const input=(name)=>[...html.matchAll(new RegExp('id="'+name+'-(\\d+)" name="'+name+'" value="(\\d+)"','g'))]
+    .map(x=>Number(x[1]));
+  assert.deepEqual(input("exposure"),EX);
+  assert.deepEqual(input("gain"),GAIN);
+  assert.doesNotMatch(html,/id="apply-settings"/);
+  assert.match(html,/id="debayer-off"/);
+  assert.match(html,/id="debayer-on"/);
 });
 
-test("preview checks run more often than old 1200ms timer and avoid duplicate JPEG loads", async () => {
-  const js = fs.readFileSync(path.join(__dirname, "../astropi/static/app.js"), "utf8");
-  assert.match(js, /setInterval\(pollPreview, 200\)/);
-  assert.doesNotMatch(js, /setInterval\(updateFrame, 1200\)/);
-  assert.match(js, /data\.frame_number !== previousFrame/);
+test("selecting exposure or gain immediately sends matching settings", async()=>{
+  const h=harness();
+  await h.flush();
+  assert.equal(h.el("exposure-100000").checked,true);
+  assert.equal(h.el("gain-0").checked,true);
+  await h.el("take-control").dispatch("click");
+  assert.equal(h.el("gain-100").disabled,false);
+  await h.el("exposure-250000").dispatch("change");
+  let posts=h.calls.filter(c=>c.url==="/api/camera/settings");
+  assert.deepEqual(posts[0].payload,{gain:0,exposure_us:250000});
+  assert.equal(h.el("exposure-250000").checked,true);
+  await h.intervals.get(3000)();
+  assert.equal(h.el("exposure-250000").checked,true,"poll must not undo unacknowledged choice");
+  await h.el("gain-75").dispatch("change");
+  posts=h.calls.filter(c=>c.url==="/api/camera/settings");
+  assert.deepEqual(posts[1].payload,{gain:75,exposure_us:250000});
+  assert.equal(h.el("gain-75").checked,true);
+  h.updateCamera({gain:75,exposure_us:250143,settings_applied_id:2});
+  await h.intervals.get(200)();
+  assert.equal(h.el("exposure-250000").checked,true);
+  assert.equal(h.el("gain-75").checked,true);
+  assert.match(h.el("settings-message").textContent,/applied/);
 });
 
+test("stretch and debayer toggles send operator-only mode changes",async()=>{
+  const h=harness();
+  await h.flush();
+  await h.el("take-control").dispatch("click");
+  await h.el("debayer-off").dispatch("click");
+  assert.equal(h.camera().debayer,false);
+  assert.equal(h.el("debayer-off").attributes["aria-pressed"],"true");
+  assert.equal(h.el("debayer-on").attributes["aria-pressed"],"false");
+  await h.el("stretch-fixed").dispatch("click");
+  assert.equal(h.camera().preview_mode,"fixed");
+  await h.el("debayer-on").dispatch("click");
+  assert.equal(h.camera().debayer,true);
+  assert.equal(h.el("debayer-on").attributes["aria-pressed"],"true");
+});
 
-test("preset menu provides precisely the 18 requested exposures", () => {
-  const html = fs.readFileSync(path.join(__dirname, "../astropi/templates/index.html"), "utf8");
-  const matches = [...html.matchAll(/<option value="(\d+)"(?: selected)?>([^<]+)<\/option>/g)];
-  assert.deepEqual(matches.map(m => Number(m[1])), [
-    1000,2000,5000,10000,25000,50000,100000,250000,500000,
-    750000,1000000,2000000,5000000,10000000,15000000,
-    20000000,25000000,30000000
-  ]);
-  assert.deepEqual(matches.map(m => m[2]), [
-    "1 ms","2 ms","5 ms","10 ms","25 ms","50 ms","100 ms",
-    "250 ms","500 ms","750 ms","1 s","2 s","5 s","10 s",
-    "15 s","20 s","25 s","30 s"
-  ]);
+test("fast preview polling and frame deduplication are retained",()=>{
+  const js=fs.readFileSync(path.join(__dirname,"../astropi/static/app.js"),"utf8");
+  assert.match(js,/setInterval\(pollPreview, 200\)/);
+  assert.match(js,/data\.frame_number !== previousFrame/);
 });

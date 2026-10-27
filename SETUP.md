@@ -53,3 +53,16 @@ Exposure is now a single preset drop-down (18 choices): 1, 2, 5, 10, 25, 50, 100
 The old stretch drop-down has been replaced with the compact **Stretch** A/F switch with a selected-state indicator. **A** = auto percentile stretch, **F** = fixed scale. The backend remains authoritative and only the controlling browser can change it. Stretch switches immediately; exposure/gain still require Apply.
 
 **Important:** The previous 8000 ms SDK frame-wait cap would cause long exposures to time out. The camera worker now waits for the full requested exposure plus a 4 s transfer margin, so 30 s can block for about 34 s before a timeout. Stop is cooperative and might not finish until an in-flight exposure ends. Long exposures beyond previously verified tests are **not yet hardware-proven**, so begin at 1–2 s, then try 5–10 s before testing 30 s. No automatic mount action or RAW/FITS file recording is enabled.
+
+
+## Faster preview and radio-style camera controls (2026-10-27, hardware retest needed)
+
+- Removed the old 250ms processing throttle. The camera SDK retains exclusive ownership in its acquisition thread; a separate image-processing thread converts the freshest RAW16 frame available to a JPEG, dropping stale images using a bounded **one-frame mailbox**. No queue growth, no RAW science-data recording.
+- Debayer **On** uses lightweight GRBG colour sampling. Debayer **Off** uses one green photosite per 4x4 Bayer cell to produce a faster greyscale JPEG. This is a display optimisation, not a sensor mode change or a scientific monochrome conversion.
+- Auto and Fixed stretch remain independent of Debayer On/Off. Lookup tables remove repeated high-resolution floating-point exponentiation.
+- Exposure and gain now appear as **native radio controls styled as buttons**, with the same 18 exposure presets and eight gain presets **0, 5, 10, 20, 30, 50, 75, 100**. Selecting either automatically sends both current choices to the Pi; there is **no Apply button**.
+- Rapid clicks are coalesced to the newest desired pair before the SDK is called. The single-owner camera thread applies settings between frames, so applying a change while a 30-second exposure is in progress can take that long. The selected button stays highlighted while awaiting acknowledgement, with an actual SDK readback below each row.
+- Browser checks for new JPEG frames every 200ms. This may limit browser-displayed FPS to about five, even if backend JPEG production is faster; the backend FPS metrics distinguish acquisition from preview generation. The next speed measurement should be observed for Debayer On and Off with **50 or 100 ms exposure**, watching CPU temperature.
+- Stop may take up to an active long-exposure SDK wait; the mount remains untouched. Hardware speedup is not yet measured.
+
+From the Pi: stop the currently running Flask service with Ctrl+C, `git pull --ff-only`, activate `.venv`, run `python -m pytest -q` and `python run.py --host 0.0.0.0 --port 8080`. Hard-refresh the web browser (Ctrl+Shift+R) to pick up the new JS/CSS.
