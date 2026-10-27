@@ -22,7 +22,7 @@
     <section class="intro">
       <div class="eyebrow">DEVELOPMENT BUILD · CAMERA CAPTURE</div>
       <h2>Observatory</h2>
-      <p>Live SV705C preview and one-shot recording to the verified USB drive. One browser controls the camera; others can view. Mount commands remain disabled.</p>
+      <p>Live SV705C preview, single-frame captures and counted exposure sequences saved to the verified USB drive. The Pi continues recording without the browser. Mount commands remain disabled.</p>
     </section>
     <section class="preview-layout">
       <article class="card preview-card">
@@ -124,8 +124,8 @@
     </section>
     <section class="card save-panel" aria-label="Capture and save">
       <div class="save-header">
-        <div><h3>Save next camera frame</h3>
-          <p>Choose any combination. All files come from the same fresh, full-resolution RAW16 frame.</p>
+        <div><h3>Capture &amp; exposure sequence</h3>
+          <p>Choose output formats independently. Single capture saves the next frame; sequence saves consecutive fresh full-resolution frames, one at a time.</p>
         </div>
         <button id="capture-now" disabled>Capture &amp; Save</button>
       </div>
@@ -135,7 +135,14 @@
         <label class="format-option"><input id="capture-jpg" type="checkbox" checked><span><strong>JPG</strong><small>Colour quick-look · lossy</small></span></label>
         <label class="format-option"><input id="capture-png" type="checkbox"><span><strong>PNG</strong><small>Colour quick-look · lossless 8-bit</small></span></label>
       </div>
-      <p class="hint">FITS/RAW16: 3856 × 2180, untouched Bayer mosaic. JPG/PNG: colour 1928 × 1090 convenience images. Captures also include metadata and SHA-256 checksums.</p>
+      <div class="sequence-controls">
+        <label for="sequence-count">Frames in sequence</label>
+        <input id="sequence-count" type="number" min="2" max="100" step="1" value="10" inputmode="numeric">
+        <button id="start-sequence" disabled>Start Sequence</button>
+        <button id="cancel-sequence" disabled>Cancel Sequence</button>
+      </div>
+      <p class="hint">FITS/RAW16: 3856 × 2180, untouched Bayer mosaic. JPG/PNG: colour 1928 × 1090 convenience images. Each sequence frame is independently saved with metadata, sequence ID, position and SHA-256 checksums. Gain/exposure remain fixed during the run.</p>
+      <div id="sequence-progress" role="status" aria-live="polite"></div>
       <p id="capture-state" role="status" aria-live="polite">Ready to capture when the camera and recording drive are available.</p>
       <p id="capture-error" role="alert"></p>
       <div id="capture-results"></div>

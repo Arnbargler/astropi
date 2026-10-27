@@ -17,6 +17,7 @@ let progressBusy = false;
 let storageReady = false;
 let captureBusy = false;
 let captureRequestPending = false;
+let sequenceActive = false;
 const saveFormats = ["fits", "raw", "jpg", "png"];
 const $ = id => document.getElementById(id);
 const write = (id, value) => { $(id).textContent = value; };
@@ -48,12 +49,19 @@ function updateButtons() {
   $("release-control").hidden = !owner;
   $("start-camera").disabled = !owner || !["stopped", "error"].includes(currentPhase);
   $("stop-camera").disabled = !owner || !["running", "connecting"].includes(currentPhase);
-  $("capture-now").disabled = !owner || currentPhase !== "running" ||
-    !storageReady || captureBusy || captureRequestPending ||
-    !saveFormats.some(fmt => $("capture-" + fmt).checked);
+  const saveReady = owner && currentPhase === "running" &&
+    storageReady && !captureBusy && !captureRequestPending &&
+    saveFormats.some(fmt => $("capture-" + fmt).checked);
+  $("capture-now").disabled = !saveReady;
+  const count = Number($("sequence-count").value);
+  $("start-sequence").disabled = !saveReady || !Number.isInteger(count) ||
+    count < 2 || count > 100;
+  $("sequence-count").disabled = !owner || captureBusy || captureRequestPending;
+  $("cancel-sequence").disabled = !owner || !sequenceActive;
+
   const active = owner && currentPhase === "running";
-  for (const v of exposurePresets) $("exposure-" + v).disabled = !active;
-  for (const v of gainPresets) $("gain-" + v).disabled = !active;
+  for (const v of exposurePresets) $("exposure-" + v).disabled = !active || sequenceActive;
+  for (const v of gainPresets) $("gain-" + v).disabled = !active || sequenceActive;
   for (const id of ["stretch-auto", "stretch-fixed"])
     $(id).disabled = !owner || stretchChangePending;
   for (const id of ["debayer-on", "debayer-off"])
@@ -204,6 +212,41 @@ $("debayer-off").addEventListener("click", () => changeDebayer(false));
 for (const fmt of saveFormats) {
   $("capture-" + fmt).addEventListener("change", updateButtons);
 }
+$("sequence-count").addEventListener("input", updateButtons);
+$("start-sequence").addEventListener("click", async () => {
+  if (captureBusy || captureRequestPending) return;
+  const count = Number($("sequence-count").value);
+  const formats = saveFormats.filter(fmt => $("capture-" + fmt).checked);
+  if (!Number.isInteger(count) || count < 2 || count > 100 || !formats.length) {
+    write("capture-error", "Choose 2–100 frames and at least one format");
+    return;
+  }
+  captureRequestPending = true;
+  updateButtons();
+  write("capture-error", "");
+  write("capture-results", "");
+  write("sequence-progress", "Starting sequence…");
+  try {
+    const reply = await post("/api/capture/sequence", {count, formats});
+    write("capture-state", "Sequence " + reply.id + " accepted");
+    write("sequence-progress", "0 / " + count + " frames saved");
+  } catch(error) {
+    write("capture-error", error.message);
+    write("sequence-progress", "Sequence was not started");
+  } finally {
+    captureRequestPending = false;
+    updateButtons();
+  }
+});
+$("cancel-sequence").addEventListener("click", async () => {
+  try {
+    await post("/api/capture/cancel");
+    write("capture-state", "Cancellation requested; finishing any active write…");
+    write("capture-error", "");
+  } catch(error) {
+    write("capture-error", error.message);
+  }
+});
 $("capture-now").addEventListener("click", async () => {
   if (captureBusy || captureRequestPending) return;
   const formats = saveFormats.filter(fmt => $("capture-" + fmt).checked);
@@ -230,17 +273,29 @@ $("capture-now").addEventListener("click", async () => {
 function showCapture(job) {
   if (!job) return;
   captureBusy = job.phase === "waiting" || job.phase === "saving";
+  sequenceActive = captureBusy && job.total_frames > 1;
+  const total = Number(job.total_frames || 0);
+  const completed = Number(job.completed_frames || 0);
   const stages = {idle: "No capture requested", waiting: "Waiting for next camera frame…",
     saving: "Saving files on USB drive…", done: "Capture saved to USB drive",
-    error: "Capture failed"};
-  write("capture-state", stages[job.phase] || job.phase);
+    cancelled: "Capture sequence cancelled", error: "Capture failed"};
+  write("capture-state", (total > 1 ? "Sequence: " : "") +
+    (stages[job.phase] || job.phase));
+  write("sequence-progress", total > 1 ? completed + " / " + total +
+    " frames saved" + (job.cancel_requested ? " · stopping after current write" : "") :
+    "");
   if (job.phase === "error" && job.error) write("capture-error", job.error);
-  if (job.phase === "done" && Array.isArray(job.files)) {
-    write("capture-error", "");
-    const lines = ["Saved: " + job.directory, "metadata.json (settings and checksums)",
-      ...job.files.map(file => file.format + ": " + file.path +
-        " (" + (file.bytes / 1048576).toFixed(1) + " MiB)")];
-    write("capture-results", lines.join("\n"));
+  if (["done", "cancelled", "error"].includes(job.phase)) {
+    if (job.phase === "done") write("capture-error", "");
+    if (total > 1 && Array.isArray(job.directories)) {
+      write("capture-results", job.directories.length + " completed frame folders:\n" +
+        job.directories.join("\n"));
+    } else if (Array.isArray(job.files) && job.files.length) {
+      const lines = ["Saved: " + job.directory, "metadata.json (settings and checksums)",
+        ...job.files.map(file => file.format + ": " + file.path +
+          " (" + (file.bytes / 1048576).toFixed(1) + " MiB)")];
+      write("capture-results", lines.join("\n"));
+    }
   }
   updateButtons();
 }

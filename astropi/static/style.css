@@ -79,3 +79,11 @@ button:hover:not(:disabled){background:#2a5669}button:disabled{opacity:.38;curso
 #capture-results{font-family:ui-monospace,monospace;font-size:12px;white-space:pre-wrap;overflow-wrap:anywhere;color:#9cb3c2}
 @media(max-width:800px){.save-formats{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:500px){.save-header{flex-direction:column;align-items:stretch}}
+
+
+.sequence-controls{display:flex;align-items:center;flex-wrap:wrap;gap:10px}
+.sequence-controls label{font-size:12px;color:#afc0ce}
+.sequence-controls input{max-width:90px;padding:9px;background:#0b141d;color:#eef3f6;border:1px solid #385167;border-radius:7px;font:inherit}
+.sequence-controls input:disabled{opacity:.45}
+#cancel-sequence{border-color:#8d5a5a;color:#f2bdb4;background:#3b262a}
+#sequence-progress{color:#a0d6c8;font-weight:600;font-size:13px;min-height:20px;font-variant-numeric:tabular-nums}
