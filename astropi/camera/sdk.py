@@ -65,7 +65,11 @@ class SVBDriver:
         return value.value, auto.value
 
     def set_control(self, control, value):
-        self._ok("SVBSetControlValue", self.camera_id, control, int(value), 0)
+        try:
+            self._ok("SVBSetControlValue", self.camera_id, control, int(value), 0)
+        except SDKError as exc:
+            label = {GAIN: "gain", EXPOSURE: "exposure_us"}.get(control, str(control))
+            raise SDKError(f"SVBSetControlValue({label}={value})", exc.code) from exc
         return self.read_control(control)[0]
 
     def open(self):
@@ -104,7 +108,11 @@ class SVBDriver:
             except SDKError:
                 pass
             self.streaming = False
-        for control, (value, automatic) in self.original_controls.items():
+        # Exposure first on cleanup too; preserve the original auto-mode flag.
+        for control in (EXPOSURE, GAIN):
+            if control not in self.original_controls:
+                continue
+            value, automatic = self.original_controls[control]
             try:
                 self._ok("SVBSetControlValue", self.camera_id, control, value, automatic)
             except SDKError:

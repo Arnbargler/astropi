@@ -84,3 +84,36 @@ def test_worker_input_validation_without_sdk():
             pass
         else:
             raise AssertionError("Accepted invalid camera settings")
+
+
+def test_worker_initializes_exposure_before_gain():
+    import threading
+    import time
+    from astropi.camera.sdk import GAIN, EXPOSURE
+
+    events = []
+    running = threading.Event()
+
+    class OrderedDriver:
+        def open(self):
+            events.append("open")
+        def set_control(self, control, value):
+            events.append(("control", control, value))
+            return value
+        def start(self):
+            events.append("start")
+            running.set()
+        def get_frame(self, buffer, wait_ms):
+            time.sleep(0.01)
+        def close(self):
+            events.append("close")
+
+    worker = CameraWorker(driver_factory=OrderedDriver)
+    assert worker.start()
+    assert running.wait(timeout=3)
+    assert worker.stop()
+    worker._thread.join(timeout=3)
+    assert not worker._thread.is_alive()
+    controls = [ev[1] for ev in events if isinstance(ev, tuple)]
+    assert controls[:2] == [EXPOSURE, GAIN]
+    assert worker.status()["phase"] == "stopped"

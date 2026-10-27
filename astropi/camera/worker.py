@@ -76,8 +76,9 @@ class CameraWorker:
             driver.open()
             with self._lock:
                 gain, exposure_us = self._gain, self._exposure_us
-            gain = driver.set_control(GAIN, gain)
+            # Initialize exposure first; some SVBONY SDK versions reject gain otherwise.
             exposure_us = driver.set_control(EXPOSURE, exposure_us)
+            gain = driver.set_control(GAIN, gain)
             with self._lock:
                 self._gain, self._exposure_us = gain, exposure_us
             driver.start()  # only ONE stream start per camera open session
@@ -90,8 +91,8 @@ class CameraWorker:
                 try:
                     while True:
                         requested_gain, requested_exposure = self._commands.get_nowait()
-                        gain = driver.set_control(GAIN, requested_gain)
                         exposure_us = driver.set_control(EXPOSURE, requested_exposure)
+                        gain = driver.set_control(GAIN, requested_gain)
                         with self._lock:
                             self._gain, self._exposure_us = gain, exposure_us
                 except Empty:

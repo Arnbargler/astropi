@@ -21,3 +21,9 @@ Preview is display-only: percentile stretch and simple 4x4 GRBG block averaging,
 When using the dark lens cap, expect a mostly dark preview. Try the previously tested Canon lens under indoor lighting, starting around **100 ms exposure, gain 0**, rather than pointing the bare sensor at bright sunlight.
 
 If tests fail, do not start the new service; copy the failing traceback. Hardware SDK bindings are based on the project's tested v1.13.4 integration notes and still need first live verification.
+
+## 2026-10-27 SDK control-order correction
+
+The first integrated SV705C browser test encountered SDK error code 16 from SVBSetControlValue before a preview appeared. The follow-up commit sets exposure before gain (a published SVBONY workaround) and makes control-setting errors identify which control/value failed. This is an unverified hypothesis until retested on AstroPi, not a confirmed root cause. The mock unit test checks order, not actual camera behavior.
+
+Stop Flask using Ctrl+C, pull changes, run pytest, restart, and attempt Take Control -> Start preview. If a new error occurs, report its exact message. Do not repeatedly unplug or reset equipment.

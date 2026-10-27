@@ -1,6 +1,6 @@
 # AstroPi development guide (read-only browser skeleton present)
 
-**Status: read-only service verified on Pi (2026-10-27); experimental single-owner camera SDK preview, colour JPEG and lease control are implemented but untested on the Pi.** Read [REQUIREMENTS.md](REQUIREMENTS.md) for authoritative scope and [HARDWARE.md](HARDWARE.md) for **actually verified** devices and quirks. This file is a recommended route to implementation, **not a claim that the proposed hardware-control modules or system services already exist**. Keep implementation modular and modest; avoid one enormous `app.py`.
+**Status: read-only browser service verified on Pi (2026-10-27); first integrated SV705C preview failed in control initialization with SDK code 16. Exposure-before-gain fix is coded and awaiting Pi verification.** Read [REQUIREMENTS.md](REQUIREMENTS.md) for authoritative scope and [HARDWARE.md](HARDWARE.md) for **actually verified** devices and quirks. This file is a recommended route to implementation, **not a claim that the proposed hardware-control modules or system services already exist**. Keep implementation modular and modest; avoid one enormous `app.py`.
 
 ## First working milestone
 
