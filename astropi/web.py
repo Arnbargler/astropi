@@ -2,6 +2,9 @@
 from queue import Full
 from flask import Flask, abort, jsonify, make_response, render_template, request
 from .camera.worker import CameraWorker
+from .capture.manager import CaptureManager, CaptureBusy
+from .capture.formats import validate_formats
+from .capture.storage import CaptureStorage, StorageError
 from .config import Settings
 from .control import ControlLease
 from .status import snapshot
@@ -10,7 +13,9 @@ from .status import snapshot
 def create_app(settings: Settings | None = None, camera=None, lease=None) -> Flask:
     app = Flask(__name__)
     config = settings if settings is not None else Settings.from_environment()
-    worker = camera if camera is not None else CameraWorker()
+    worker = camera if camera is not None else CameraWorker(
+        capture=CaptureManager(CaptureStorage(config))
+    )
     control = lease if lease is not None else ControlLease()
 
     def require_operator():
@@ -29,6 +34,7 @@ def create_app(settings: Settings | None = None, camera=None, lease=None) -> Fla
         data["camera"].update(camera_state)
         data["camera"]["sdk_connected"] = camera_state["phase"] in ("running", "stopping")
         data["controller_held"] = control.held()
+        data["capture"] = worker.capture_status()
         return jsonify(data)
 
     @app.post("/api/control/take")
@@ -98,10 +104,33 @@ def create_app(settings: Settings | None = None, camera=None, lease=None) -> Fla
             return jsonify(error=str(exc)), 400
         return jsonify(ok=True, enabled=enabled)
 
+    @app.post("/api/capture")
+    def capture():
+        require_operator()
+        body = request.get_json(silent=True) or {}
+        try:
+            formats = validate_formats(body.get("formats"))
+            capture_id = worker.request_capture(list(formats))
+        except ValueError as exc:
+            return jsonify(error=str(exc)), 400
+        except CaptureBusy as exc:
+            return jsonify(error=str(exc)), 409
+        except RuntimeError as exc:
+            return jsonify(error=str(exc)), 409
+        except StorageError as exc:
+            return jsonify(error=str(exc)), 503
+        return jsonify(ok=True, id=capture_id), 202
+
+    @app.get("/api/capture/status")
+    def capture_status():
+        return jsonify(worker.capture_status())
+
     @app.get("/api/camera/progress")
     def camera_progress():
         # Cheap polling path; avoids findmnt and USB scans on every frame check.
-        return jsonify(worker.status())
+        data = worker.status()
+        data["capture"] = worker.capture_status()
+        return jsonify(data)
 
     @app.get("/api/camera/frame.jpg")
     def frame():

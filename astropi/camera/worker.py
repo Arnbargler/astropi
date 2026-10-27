@@ -28,8 +28,9 @@ def frame_wait_ms(exposure_us):
 
 
 class CameraWorker:
-    def __init__(self, driver_factory=SVBDriver):
+    def __init__(self, driver_factory=SVBDriver, capture=None):
         self._driver_factory = driver_factory
+        self._captures = capture
         self._lock = threading.Lock()
         self._thread = None
         self._preview_thread = None
@@ -73,6 +74,22 @@ class CameraWorker:
     def frame(self):
         with self._lock:
             return self._image, self._sequence
+
+    def capture_status(self):
+        if self._captures is None:
+            return {"phase": "idle", "id": None, "formats": [], "files": []}
+        return self._captures.status()
+
+    def request_capture(self, formats):
+        with self._lock:
+            if self._phase != "running":
+                raise RuntimeError("Start the camera before saving a frame")
+            if self._settings_applied_id < self._settings_request_id:
+                raise RuntimeError("Wait for exposure/gain settings to finish applying")
+            if self._captures is None:
+                raise RuntimeError("Capture storage not configured")
+            # The manager acquires its own lock and verifies USB storage.
+            return self._captures.request(formats)
 
     def start(self):
         with self._lock:
@@ -217,6 +234,12 @@ class CameraWorker:
                         prior = self._capture_fps
                         self._capture_fps = round(rate if prior == 0 else 0.25 * rate + 0.75 * prior, 2)
                 last_capture = now
+                if self._captures is not None and not self._stop.is_set():
+                    with self._lock:
+                        preview_stretch = self._preview_mode
+                    self._captures.accept_frame(
+                        raw, gain=gain, exposure_us=exposure_us, stretch=preview_stretch
+                    )
                 # No artificial 250ms throttle, no full-frame backlog.
                 # Copy raw bytes only when the JPEG thread is ready to accept.
                 if not self._stop.is_set() and self._raw_mailbox.empty():
@@ -228,6 +251,8 @@ class CameraWorker:
             error = str(exc)
         finally:
             self._stop.set()
+            if self._captures is not None:
+                self._captures.fail_waiting("Camera stopped before the requested frame arrived")
             preview = self._preview_thread
             if preview is not None and preview.is_alive():
                 preview.join(timeout=5)
