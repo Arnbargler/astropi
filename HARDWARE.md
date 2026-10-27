@@ -224,9 +224,21 @@ The user ran a cautious 3-second north/up test at variable rate **120× sidereal
 | Three seconds later altitude | `+01*30:50#` |
 | Three seconds later status | `nNZM000000880#` |
 
-**Interpretation:** Reported altitude increased **1°30′50″** total while azimuth was unchanged. The command-period change to the initial post-stop query was **1°29′22″**; another **1′28″** accrued before the three-second-later query, exactly the same post-stop positional difference seen in the azimuth 120× test. This supports commanded altitude-axis movement and repeatable **non-instantaneous stopping/settling**; do not assume a stop command instantaneously ends motion. The `N` status flag appears only in the settled sample; remaining suffix is not decoded. **Independent visual confirmation of altitude motion was not explicitly reported.** Long-term stationary stability after this test, physical stop under fault conditions, tracking and GoTo remain untested.
+**Interpretation:** Reported altitude increased **1°30′50″** total while azimuth was unchanged. The command-period change to the initial post-stop query was **1°29′22″**; another **1′28″** accrued before the three-second-later query, exactly the same post-stop positional difference seen in the azimuth 120× test. This supports commanded altitude-axis movement and repeatable **non-instantaneous stopping/settling**; do not assume a stop command instantaneously ends motion. The `N` status flag appears only in the settled sample; remaining suffix is not decoded. **Independent visual confirmation of altitude motion was not explicitly reported.** Subsequent five-sample position polling verified both axes stationary (see below). Physical stop under fault conditions, tracking and GoTo remain untested.
 
 **Next:** Perform a no-motion, five-sample `:GA#`/`:GZ#`/`:GU#` polling check; then move to configuration of mount time/site and alignment once command semantics are verified.
+
+### Both-axes stationary verification following movement (2026-10-27)
+
+After the 3-second 120× north/up movement and subsequent stop/settling, the user executed **five read-only** serial sampling rounds (one-second intervals) of `:GA#`, `:GZ#` and `:GU#` via the persistent ZWO serial path. Every round returned:
+
+- **Altitude:** `+01*30:50#`
+- **Azimuth:** `013*43:10#`
+- **Status:** `nNZM000000880#`
+
+**Result:** No reported motion on either axis across the samples and a stable non-slewing status after stopping. Alongside prior successful and visually confirmed azimuth motion and the altitude telemetry changes, **initial normal-operation motion and stop-settling tests are complete on both axes**. The user's visual confirmation applied explicitly to the azimuth high-speed test; visual confirmation of altitude motion was not separately stated.
+
+**Important boundary:** Stop was not instantaneous in the 120× tests: each axis showed **1′28″** of additional reported travel between the immediate post-stop and three-second-later samples. Exact stop timing, behaviour after abnormal software failure/USB disconnection, and tracking / GoTo / alignment remain unverified. Future mount controller must treat `:Q#` as a request to stop, poll status and both axes for stability, and provide operator physical cancel/power fallback.
 
 ## ZWO AM3N serial connection — earlier AstroPi tests (2026-08-31)
 
