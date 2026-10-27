@@ -163,6 +163,14 @@ forced USB-loss safety or any motion controls. Those remain separate gates.
 
 ## First AM3N manual Stop and short-jog trial (new, hardware NOT yet tested)
 
+First Pi motion screenshot pair (2026-10-27): azimuth was reported as
+000°00′00″ before and 000°05′57″ afterward, with unchanged altitude
++00°17′26″. Both panels displayed `Reported axes stable after Stop`.
+This shows a real manual movement and reported settling, but the actual
+button-hold duration and visually observed release-to-stop response have
+NOT been established. The observed 5′57″ is approximately 3s at the
+previously tested ~2′/s R5 rate; confirm the hold time before further tests.
+
 This is a **controlled movement trial**. Keep cables, cameras and people
 clear of the path. Have the mount's physical Cancel or a safe 12V power
 cutoff immediately accessible. Do not deliberately pull USB or kill Python
