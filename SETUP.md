@@ -1,68 +1,73 @@
-# AstroPi — v0.2 experimental SV705C browser preview
+# AstroPi — current camera preview setup (2026-10-27)
 
-Hardware v0.1 read-only status checks passed in the browser on 2026-10-27. This update integrates the existing SVBONY SDK into a single-thread worker to show a browser JPEG preview and set exposure/gain. **SDK camera integration has not yet been verified on the Pi**. No RAW/FITS saving, mount movement or telescope tracking is implemented.
+## Verified state
 
-Run on AstroPi (while physically present or able to monitor its terminal):
+AstroPi uses a Raspberry Pi 4 (4 GiB), SVBONY SV705C (USB3), and ZWO AM3N
+(Alt/Az). The Pi has already run the browser status UI and live colour preview.
+Fixed stretch showed that gain and exposure both affect the camera as expected.
+
+This newer preview-performance and controls iteration is **software-tested but
+not yet Pi-tested**. Mount motion/GoTo/tracking and full RAW/FITS recording are
+not implemented. The browser is for a trusted local network only.
+
+## Updating and running
+
+In the currently running Flask terminal, stop the old server with **Ctrl+C**.
 
     cd ~/astropi
-    # Stop the old Flask service first (Ctrl+C in its terminal).
     git pull --ff-only
     source .venv/bin/activate
     python -m pip install -r requirements-dev.txt
     python -m pytest -q
     python run.py --host 0.0.0.0 --port 8080
 
-From the trusted LAN, open http://192.168.0.29:8080/ or http://astropi.local:8080/. Select **Take Control**, then **Start preview**. The camera worker opens the SV705C once, uses full 3856x2180 RAW16 frames from the SDK and sends a reduced ~964x545 8-bit colour JPEG to the page. It never saves those buffers. Change gain and exposure in the browser, then use **Apply settings**. Multiple browsers can see the same preview, but only one control lease can change settings.
+Browse to http://astropi.local:8080/ or the Pi's LAN address. Hard-refresh
+with **Ctrl+Shift+R** to ensure the latest JavaScript/CSS loads. The server
+still runs as a foreground development process, not a systemd service. Do not
+forward the port to the Internet.
 
-Use **Stop** before Ctrl+C or before changing devices. Normal Stop may finish an in-progress exposure before closing the SDK. If restart fails, report the on-screen SDK error and Pi terminal output; previous hardware probes observed SDK error 11 on some stream restarts. This release does not attempt blind automatic resets. The Flask server is still a temporary development server without auto-start; do not forward the port to the Internet.
+Choose **Take Control**, then **Start preview**. Other browser viewers can
+watch the same JPEG but cannot change camera settings without the operator
+lease.
 
-Preview is display-only: percentile stretch and simple 4x4 GRBG block averaging, not a calibrated demosaic. The original 12-bit-in-RAW16 data is not modified, but no science FITS output is implemented yet. Do not infer exact exposure calibration from SDK readback.
+## Controls
 
-When using the dark lens cap, expect a mostly dark preview. Try the previously tested Canon lens under indoor lighting, starting around **100 ms exposure, gain 0**, rather than pointing the bare sensor at bright sunlight.
+- Exposure uses 18 native radio inputs styled as buttons: 1, 2, 5, 10, 25,
+  50, 100, 250, 500, 750 milliseconds, then 1, 2, 5, 10, 15, 20, 25, 30
+  seconds.
+- Gain buttons: 0, 5, 10, 20, 30, 50, 75, 100.
+- Clicking EITHER an exposure or gain button automatically submits both current
+  selected values. No **Apply** button. Requested selections stay highlighted
+  while waiting for the SDK. The "Actual" fields report SDK readbacks.
+- **Stretch A/F**: Auto adaptive brightness stretch, or Fixed brightness scale.
+- **Debayer On/Off**: On = sampled GRBG colour JPEG, Off = faster grayscale JPEG
+  using the green photosites of the raw Bayer mosaic. Both modes still acquire
+  original full 3856×2180 RAW16 frames. Neither saves or modifies source RAW16.
 
-If tests fail, do not start the new service; copy the failing traceback. Hardware SDK bindings are based on the project's tested v1.13.4 integration notes and still need first live verification.
+## Performance design
 
-## 2026-10-27 SDK control-order correction
+There is no longer any 250-ms artificial preview delay. One thread exclusively
+owns the SVBONY SDK and acquires RAW16 frames. A second thread reads immutable
+copies from a one-frame mailbox and produces reduced-resolution JPEGs. It
+drops outdated frames whenever processing falls behind, bounding memory use.
+Preview colour uses simplified GRBG averaging and precomputed stretch lookup
+tables; monochrome bypasses colour reconstruction entirely.
 
-The first integrated SV705C browser test encountered SDK error code 16 from SVBSetControlValue before a preview appeared. The follow-up commit sets exposure before gain (a published SVBONY workaround) and makes control-setting errors identify which control/value failed. This is an unverified hypothesis until retested on AstroPi, not a confirmed root cause. The mock unit test checks order, not actual camera behavior.
+The browser checks for new preview sequence numbers every **50 ms**, retrieving
+only newly generated JPEGs. The displayed RAW FPS, JPEG FPS and processing
+time are separate metrics. The Pi's actual CPU, USB and exposure time determine
+the achievable rates; no speed guarantee until measured on hardware.
 
-Stop Flask using Ctrl+C, pull changes, run pytest, restart, and attempt Take Control -> Start preview. If a new error occurs, report its exact message. Do not repeatedly unplug or reset equipment.
+The backend coalesces rapid exposure/gain clicks, retaining only the newest
+pending pair. A 30-second in-flight exposure may delay applying the next
+setting or honoring Stop by up to its exposure/read timeout plus margin.
+Start performance testing at **50 ms or 100 ms** exposure and compare Debayer
+On versus Off, including the Pi temperature.
 
-## Preview responsiveness and input-draft fix (2026-10-27)
+The camera may show SDK code 11 on some stop/restart cycles, as previously
+observed in the separate hardware tests. Do not repeatedly unplug/reset it
+without checking the error. The mount is NEVER moved by this web application
+at its current development stage.
 
-The SV705C live colour preview was confirmed working on AstroPi. Two UI/performance bugs were found: the three-second polling cycle replaced unsaved exposure/gain inputs after focus moved, and the browser's 1200ms image timer plus 750ms backend frame throttle prevented a fast preview. This update independently preserves dirty values until **Apply settings**, acknowledges a settings command only when the single SDK worker has applied it, and checks for new camera frames at 200ms intervals (downloading the JPEG only when its sequence number changes). Backend preview cap is now 250ms and it reports **measured JPEG preview FPS**, **measured camera read FPS**, and **JPEG-processing milliseconds**. There is no promise of a particular frame rate: full-frame RAW16 exposure, USB read time and Pi CPU processing still determine it.
-
-Stop the Flask server (Ctrl+C), pull, run `python -m pytest -q`, then restart. Refresh the browser (Ctrl+Shift+R). Try 50ms or 100ms exposure first, edit BOTH exposure and gain without pressing Apply, wait >3 seconds to verify edits remain unchanged, then click Apply once. Report the measured FPS and processing time displayed below the preview. There is no RAW/FITS recording and no mount action in this update.
-
-
-## Gain visibility diagnosis — new preview controls (2026-10-27)
-
-AstroPi's full-frame SV705C colour preview works, but changing gain was not visually obvious. The initial JPEG processing uses a different low/high percentile for **each frame and colour channel**, cancelling many brightness changes. This does **not** prove gain is ineffective: earlier separate hardware probes measured the raw mean rising about 3.3x from gain 0 to 100 at the same exposure.
-
-The new **Preview brightness** selector has two options:
-- **Auto stretch — faint detail:** current per-frame adaptive preview for astronomy. Brightness changes can be disguised.
-- **Fixed stretch — compare gain:** one gamma-adjusted 0–4095 mapping for every frame. Use this for gain/exposure comparisons; the image may look darker.
-
-The panel now displays **RAW mean / 4095 ADU**, **99th-percentile ADU** and **% saturated**, computed from a small subset of unmodified RAW16 frame pixels (12-bit values obtained with >>4). These are indicative, not sensor calibration. Use an evenly lit scene and constant exposure. Test gain 0 and gain 100, waiting for Applied and for at least two fresh JPEG frames each time. The RAW mean should change if gain is taking effect. If it does not, report the displayed mean, gain and exposure; then check the SDK control path. All adjustments are display-only except the existing explicit camera gain/exposure controls. No RAW/FITS data is saved.
-
-
-## Compact Stretch toggle and exposure presets (2026-10-27)
-
-Exposure is now a single preset drop-down (18 choices): 1, 2, 5, 10, 25, 50, 100, 250, 500, 750 ms; 1, 2, 5, 10, 15, 20, 25 and 30 seconds. It is sent to the SDK in **microseconds**; the worker still reports the quantized actual readback separately. Choose a preset and gain, then click **Apply settings**. Until then, both are drafts that must not be rewritten by polling.
-
-The old stretch drop-down has been replaced with the compact **Stretch** A/F switch with a selected-state indicator. **A** = auto percentile stretch, **F** = fixed scale. The backend remains authoritative and only the controlling browser can change it. Stretch switches immediately; exposure/gain still require Apply.
-
-**Important:** The previous 8000 ms SDK frame-wait cap would cause long exposures to time out. The camera worker now waits for the full requested exposure plus a 4 s transfer margin, so 30 s can block for about 34 s before a timeout. Stop is cooperative and might not finish until an in-flight exposure ends. Long exposures beyond previously verified tests are **not yet hardware-proven**, so begin at 1–2 s, then try 5–10 s before testing 30 s. No automatic mount action or RAW/FITS file recording is enabled.
-
-
-## Faster preview and radio-style camera controls (2026-10-27, hardware retest needed)
-
-- Removed the old 250ms processing throttle. The camera SDK retains exclusive ownership in its acquisition thread; a separate image-processing thread converts the freshest RAW16 frame available to a JPEG, dropping stale images using a bounded **one-frame mailbox**. No queue growth, no RAW science-data recording.
-- Debayer **On** uses lightweight GRBG colour sampling. Debayer **Off** uses one green photosite per 4x4 Bayer cell to produce a faster greyscale JPEG. This is a display optimisation, not a sensor mode change or a scientific monochrome conversion.
-- Auto and Fixed stretch remain independent of Debayer On/Off. Lookup tables remove repeated high-resolution floating-point exponentiation.
-- Exposure and gain now appear as **native radio controls styled as buttons**, with the same 18 exposure presets and eight gain presets **0, 5, 10, 20, 30, 50, 75, 100**. Selecting either automatically sends both current choices to the Pi; there is **no Apply button**.
-- Rapid clicks are coalesced to the newest desired pair before the SDK is called. The single-owner camera thread applies settings between frames, so applying a change while a 30-second exposure is in progress can take that long. The selected button stays highlighted while awaiting acknowledgement, with an actual SDK readback below each row.
-- Browser checks for new JPEG frames every 200ms. This may limit browser-displayed FPS to about five, even if backend JPEG production is faster; the backend FPS metrics distinguish acquisition from preview generation. The next speed measurement should be observed for Debayer On and Off with **50 or 100 ms exposure**, watching CPU temperature.
-- Stop may take up to an active long-exposure SDK wait; the mount remains untouched. Hardware speedup is not yet measured.
-
-From the Pi: stop the currently running Flask service with Ctrl+C, `git pull --ff-only`, activate `.venv`, run `python -m pytest -q` and `python run.py --host 0.0.0.0 --port 8080`. Hard-refresh the web browser (Ctrl+Shift+R) to pick up the new JS/CSS.
+Read README.md, REQUIREMENTS.md, HARDWARE.md, and DEVELOPMENT.md for scope,
+exact hardware setup, important tested behaviour, and remaining work.

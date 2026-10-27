@@ -277,5 +277,5 @@ async function heartbeat() {
 }
 refresh();
 setInterval(refresh, 3000);
-setInterval(pollPreview, 200);
+setInterval(pollPreview, 50);
 setInterval(heartbeat, 5000);

@@ -95,7 +95,7 @@ test("selecting exposure or gain immediately sends matching settings", async()=>
   assert.deepEqual(posts[1].payload,{gain:75,exposure_us:250000});
   assert.equal(h.el("gain-75").checked,true);
   h.updateCamera({gain:75,exposure_us:250143,settings_applied_id:2});
-  await h.intervals.get(200)();
+  await h.intervals.get(50)();
   assert.equal(h.el("exposure-250000").checked,true);
   assert.equal(h.el("gain-75").checked,true);
   assert.match(h.el("settings-message").textContent,/applied/);
@@ -118,6 +118,6 @@ test("stretch and debayer toggles send operator-only mode changes",async()=>{
 
 test("fast preview polling and frame deduplication are retained",()=>{
   const js=fs.readFileSync(path.join(__dirname,"../astropi/static/app.js"),"utf8");
-  assert.match(js,/setInterval\(pollPreview, 200\)/);
+  assert.match(js,/setInterval\(pollPreview, 50\)/);
   assert.match(js,/data\.frame_number !== previousFrame/);
 });
