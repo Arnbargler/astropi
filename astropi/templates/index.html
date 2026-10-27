@@ -39,17 +39,40 @@
           <button id="start-camera" disabled>Start preview</button>
           <button id="stop-camera" disabled>Stop</button>
         </div>
-        <label for="exposure-ms">Exposure (ms)</label>
-        <input id="exposure-ms" type="number" min="10" max="5000" step="10" value="100" disabled>
+        <label for="exposure-us">Exposure</label>
+        <select id="exposure-us" disabled>
+          <option value="1000">1 ms</option>
+          <option value="2000">2 ms</option>
+          <option value="5000">5 ms</option>
+          <option value="10000">10 ms</option>
+          <option value="25000">25 ms</option>
+          <option value="50000">50 ms</option>
+          <option value="100000" selected>100 ms</option>
+          <option value="250000">250 ms</option>
+          <option value="500000">500 ms</option>
+          <option value="750000">750 ms</option>
+          <option value="1000000">1 s</option>
+          <option value="2000000">2 s</option>
+          <option value="5000000">5 s</option>
+          <option value="10000000">10 s</option>
+          <option value="15000000">15 s</option>
+          <option value="20000000">20 s</option>
+          <option value="25000000">25 s</option>
+          <option value="30000000">30 s</option>
+        </select>
+        <p class="hint" id="exposure-readback">Applied: —</p>
         <label for="gain">Gain</label>
         <input id="gain" type="number" min="0" max="100" step="1" value="0" disabled>
         <button id="apply-settings" disabled>Apply settings</button>
-        <label for="preview-mode">Preview brightness</label>
-        <select id="preview-mode" disabled>
-          <option value="auto">Auto stretch — faint detail</option>
-          <option value="fixed">Fixed stretch — compare gain</option>
-        </select>
-        <p class="hint">Auto stretch normalizes every frame and can hide gain changes. Fixed stretch uses the same brightness scale on every frame.</p>
+        <div class="stretch-row">
+          <span id="stretch-label">Stretch</span>
+          <div class="stretch-switch" role="group" aria-labelledby="stretch-label">
+            <button type="button" id="stretch-auto" class="stretch-choice selected" aria-label="Auto stretch" title="Auto stretch" aria-pressed="true" disabled>A</button>
+            <span id="stretch-indicator" class="stretch-indicator auto" aria-hidden="true"></span>
+            <button type="button" id="stretch-fixed" class="stretch-choice" aria-label="Fixed stretch" title="Fixed stretch" aria-pressed="false" disabled>F</button>
+          </div>
+        </div>
+        <p class="hint">A = Auto stretch for faint detail · F = Fixed brightness to compare gain/exposure.</p>
         <p id="raw-metrics">Raw sensor signal: waiting for frames…</p>
         <p id="settings-message" role="status" class="settings-message"></p>
         <p id="camera-error" role="alert"></p>

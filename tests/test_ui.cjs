@@ -19,7 +19,8 @@ test("status polling never overwrites either unapplied camera input", async () =
     if (!elements.has(id)) {
       elements.set(id, {
         value: "", textContent: "", hidden: false, disabled: false,
-        className: "", src: "", handlers: {},
+        className: "", src: "", handlers: {}, attributes: {},
+        setAttribute(name, value) { this.attributes[name] = value; },
         addEventListener(name, cb) { this.handlers[name] = cb; },
         dispatch(name) { return this.handlers[name](); }
       });
@@ -61,12 +62,12 @@ test("status polling never overwrites either unapplied camera input", async () =
   const flush = () => new Promise(resolve => setImmediate(resolve));
   await flush();
   assert.equal(el("gain").value, 0);
-  assert.equal(el("exposure-ms").value, 100);
+  assert.equal(el("exposure-us").value, "100000");
   await el("take-control").dispatch("click");
 
-  document.activeElement = el("exposure-ms");
-  el("exposure-ms").value = "250";
-  el("exposure-ms").dispatch("input");
+  document.activeElement = el("exposure-us");
+  el("exposure-us").value = "250000";
+  el("exposure-us").dispatch("change");
   document.activeElement = el("gain");
   el("gain").value = "30";
   el("gain").dispatch("input");
@@ -74,27 +75,32 @@ test("status polling never overwrites either unapplied camera input", async () =
 
   await intervals.get(3000)();
   await intervals.get(200)();
-  assert.equal(el("exposure-ms").value, "250");
+  assert.equal(el("exposure-us").value, "250000");
   assert.equal(el("gain").value, "30");
   assert.match(el("settings-message").textContent, /Unsaved/);
 
   await el("apply-settings").dispatch("click");
   await intervals.get(3000)();
-  assert.equal(el("exposure-ms").value, "250");
+  assert.equal(el("exposure-us").value, "250000");
   assert.equal(el("gain").value, "30");
   assert.match(el("settings-message").textContent, /Applying/);
 
   camera = {...camera, gain: 30, exposure_us: 250143, settings_applied_id: 1};
   await intervals.get(200)();
   assert.equal(el("gain").value, 30);
-  assert.equal(el("exposure-ms").value, 250);
+  assert.equal(el("exposure-us").value, "250000");
   assert.match(el("settings-message").textContent, /applied/);
   assert.match(el("raw-metrics").textContent, /RAW mean: 150/);
-  el("preview-mode").value = "fixed";
-  await el("preview-mode").dispatch("change");
+  await el("stretch-fixed").dispatch("click");
   await intervals.get(200)();
   assert.equal(camera.preview_mode, "fixed");
-  assert.equal(el("preview-mode").value, "fixed");
+  assert.equal(el("stretch-fixed").attributes["aria-pressed"], "true");
+  assert.equal(el("stretch-auto").attributes["aria-pressed"], "false");
+  assert.match(el("stretch-indicator").className, /fixed/);
+  await el("stretch-auto").dispatch("click");
+  await intervals.get(200)();
+  assert.equal(camera.preview_mode, "auto");
+  assert.equal(el("stretch-auto").attributes["aria-pressed"], "true");
 });
 
 test("preview checks run more often than old 1200ms timer and avoid duplicate JPEG loads", async () => {
@@ -102,4 +108,20 @@ test("preview checks run more often than old 1200ms timer and avoid duplicate JP
   assert.match(js, /setInterval\(pollPreview, 200\)/);
   assert.doesNotMatch(js, /setInterval\(updateFrame, 1200\)/);
   assert.match(js, /data\.frame_number !== previousFrame/);
+});
+
+
+test("preset menu provides precisely the 18 requested exposures", () => {
+  const html = fs.readFileSync(path.join(__dirname, "../astropi/templates/index.html"), "utf8");
+  const matches = [...html.matchAll(/<option value="(\d+)"(?: selected)?>([^<]+)<\/option>/g)];
+  assert.deepEqual(matches.map(m => Number(m[1])), [
+    1000,2000,5000,10000,25000,50000,100000,250000,500000,
+    750000,1000000,2000000,5000000,10000000,15000000,
+    20000000,25000000,30000000
+  ]);
+  assert.deepEqual(matches.map(m => m[2]), [
+    "1 ms","2 ms","5 ms","10 ms","25 ms","50 ms","100 ms",
+    "250 ms","500 ms","750 ms","1 s","2 s","5 s","10 s",
+    "15 s","20 s","25 s","30 s"
+  ]);
 });

@@ -44,3 +44,12 @@ The new **Preview brightness** selector has two options:
 - **Fixed stretch — compare gain:** one gamma-adjusted 0–4095 mapping for every frame. Use this for gain/exposure comparisons; the image may look darker.
 
 The panel now displays **RAW mean / 4095 ADU**, **99th-percentile ADU** and **% saturated**, computed from a small subset of unmodified RAW16 frame pixels (12-bit values obtained with >>4). These are indicative, not sensor calibration. Use an evenly lit scene and constant exposure. Test gain 0 and gain 100, waiting for Applied and for at least two fresh JPEG frames each time. The RAW mean should change if gain is taking effect. If it does not, report the displayed mean, gain and exposure; then check the SDK control path. All adjustments are display-only except the existing explicit camera gain/exposure controls. No RAW/FITS data is saved.
+
+
+## Compact Stretch toggle and exposure presets (2026-10-27)
+
+Exposure is now a single preset drop-down (18 choices): 1, 2, 5, 10, 25, 50, 100, 250, 500, 750 ms; 1, 2, 5, 10, 15, 20, 25 and 30 seconds. It is sent to the SDK in **microseconds**; the worker still reports the quantized actual readback separately. Choose a preset and gain, then click **Apply settings**. Until then, both are drafts that must not be rewritten by polling.
+
+The old stretch drop-down has been replaced with the compact **Stretch** A/F switch with a selected-state indicator. **A** = auto percentile stretch, **F** = fixed scale. The backend remains authoritative and only the controlling browser can change it. Stretch switches immediately; exposure/gain still require Apply.
+
+**Important:** The previous 8000 ms SDK frame-wait cap would cause long exposures to time out. The camera worker now waits for the full requested exposure plus a 4 s transfer margin, so 30 s can block for about 34 s before a timeout. Stop is cooperative and might not finish until an in-flight exposure ends. Long exposures beyond previously verified tests are **not yet hardware-proven**, so begin at 1–2 s, then try 5–10 s before testing 30 s. No automatic mount action or RAW/FITS file recording is enabled.

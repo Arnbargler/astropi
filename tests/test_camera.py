@@ -210,3 +210,26 @@ def test_preview_statistics_reject_short_buffer():
         pass
     else:
         raise AssertionError("Short raw buffer accepted")
+
+
+
+def test_exposure_presets_and_long_exposure_wait_time():
+    from astropi.camera.worker import EXPOSURE_PRESETS_US, frame_wait_ms
+    assert len(EXPOSURE_PRESETS_US) == 18
+    assert EXPOSURE_PRESETS_US[0] == 1_000
+    assert EXPOSURE_PRESETS_US[-1] == 30_000_000
+    assert frame_wait_ms(1_000) >= 2_500
+    assert frame_wait_ms(30_000_000) >= 34_000
+
+    worker = CameraWorker()
+    worker._phase = "running"
+    for duration in EXPOSURE_PRESETS_US:
+        assert isinstance(worker.configure(0, duration), int)
+
+    for invalid in (999, 1_500, 35_000_000, 500_000.0, "1000", True):
+        try:
+            worker.configure(0, invalid)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(f"Invalid exposure preset accepted: {invalid!r}")

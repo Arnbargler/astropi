@@ -8,6 +8,20 @@ from .sdk import SVBDriver, SDKError, RAW_BYTES, GAIN, EXPOSURE
 from .preview import raw16_to_jpeg, raw16_statistics
 
 
+# Exactly the choices displayed in the browser, in microseconds.
+EXPOSURE_PRESETS_US = (
+    1_000, 2_000, 5_000, 10_000, 25_000, 50_000, 100_000,
+    250_000, 500_000, 750_000, 1_000_000, 2_000_000,
+    5_000_000, 10_000_000, 15_000_000, 20_000_000,
+    25_000_000, 30_000_000,
+)
+
+
+def frame_wait_ms(exposure_us):
+    """Allow SDK frame wait to span an entire long exposure plus transfer margin."""
+    return max(2_500, exposure_us // 1_000 + 4_000)
+
+
 class CameraWorker:
     def __init__(self, driver_factory=SVBDriver):
         self._driver_factory = driver_factory
@@ -82,8 +96,8 @@ class CameraWorker:
     def configure(self, gain, exposure_us):
         if type(gain) is not int or not 0 <= gain <= 100:
             raise ValueError("Gain must be an integer from 0 to 100")
-        if type(exposure_us) is not int or not 10_000 <= exposure_us <= 5_000_000:
-            raise ValueError("Exposure must be between 10 and 5000 ms")
+        if type(exposure_us) is not int or exposure_us not in EXPOSURE_PRESETS_US:
+            raise ValueError("Exposure must be one of the supported presets (1 ms to 30 s)")
         with self._lock:
             if self._phase not in ("connecting", "running"):
                 raise RuntimeError("Start the camera first")
@@ -134,7 +148,8 @@ class CameraWorker:
                             self._settings_applied_id = request_id
                 except Empty:
                     pass
-                wait_ms = min(8_000, max(2_500, int(exposure_us / 1000) + 1_500))
+                # An 8-second cap timed out legitimate 10–30 second exposures.
+                wait_ms = frame_wait_ms(exposure_us)
                 try:
                     driver.get_frame(raw, wait_ms)
                 except SDKError as exc:

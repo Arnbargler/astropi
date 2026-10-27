@@ -6,7 +6,26 @@ let previousFrame = -1;
 let progressBusy = false;
 // Track each field independently. A 3-second status poll must NEVER erase
 // unsubmitted edits when the operator switches between exposure and gain.
-const dirty = {"gain": false, "exposure-ms": false};
+const dirty = {"gain": false, "exposure-us": false};
+// Match SDK quantized exposure readbacks back to the nearest preset.
+const exposurePresets = [1000, 2000, 5000, 10000, 25000, 50000, 100000, 250000, 500000, 750000, 1000000, 2000000, 5000000, 10000000, 15000000, 20000000, 25000000, 30000000];
+let stretchChangePending = false;
+function nearestPreset(us) {
+  return exposurePresets.reduce((best, candidate) =>
+    Math.abs(candidate - us) < Math.abs(best - us) ? candidate : best);
+}
+function formatExposure(us) {
+  return us >= 1000000 ? (us / 1000000).toFixed(3) + " s" :
+    (us / 1000).toFixed(3) + " ms";
+}
+function showStretch(mode) {
+  const fixed = mode === "fixed";
+  $("stretch-auto").className = "stretch-choice" + (!fixed ? " selected" : "");
+  $("stretch-fixed").className = "stretch-choice" + (fixed ? " selected" : "");
+  $("stretch-auto").setAttribute("aria-pressed", String(!fixed));
+  $("stretch-fixed").setAttribute("aria-pressed", String(fixed));
+  $("stretch-indicator").className = "stretch-indicator " + (fixed ? "fixed" : "auto");
+}
 const $ = id => document.getElementById(id);
 function write(id, value) { $(id).textContent = value; }
 function freeSpace(bytes) {
@@ -19,20 +38,24 @@ function updateButtons() {
   $("start-camera").disabled = !owner || !["stopped", "error"].includes(currentPhase);
   $("stop-camera").disabled = !owner || !["running", "connecting"].includes(currentPhase);
   const editEnabled = owner && currentPhase === "running" && pendingSettingsId === null;
-  for (const id of ["gain", "exposure-ms", "apply-settings"]) {
+  for (const id of ["gain", "exposure-us", "apply-settings"]) {
     $(id).disabled = !editEnabled;
   }
-  $("preview-mode").disabled = !owner;
+  for (const id of ["stretch-auto", "stretch-fixed"]) {
+    $(id).disabled = !owner || stretchChangePending;
+  }
 }
-for (const id of ["gain", "exposure-ms"]) {
-  $(id).addEventListener("input", () => {
-    dirty[id] = true;
-    write("settings-message", "Unsaved changes · click Apply settings");
-  });
-}
+$("gain").addEventListener("input", () => {
+  dirty.gain = true;
+  write("settings-message", "Unsaved changes · click Apply settings");
+});
+$("exposure-us").addEventListener("change", () => {
+  dirty["exposure-us"] = true;
+  write("settings-message", "Unsaved changes · click Apply settings");
+});
 function discardEdits() {
   dirty.gain = false;
-  dirty["exposure-ms"] = false;
+  dirty["exposure-us"] = false;
   pendingSettingsId = null;
   write("settings-message", "");
 }
@@ -42,7 +65,7 @@ function syncSettings(data) {
       // SDK readbacks are authoritative only after its worker acknowledges the request.
       pendingSettingsId = null;
       dirty.gain = false;
-      dirty["exposure-ms"] = false;
+      dirty["exposure-us"] = false;
       write("settings-message", "Settings applied");
     } else if (data.phase === "error" || data.phase === "stopped") {
       pendingSettingsId = null;
@@ -52,8 +75,11 @@ function syncSettings(data) {
   if (!dirty.gain && pendingSettingsId === null && document.activeElement !== $("gain")) {
     $("gain").value = data.gain;
   }
-  if (!dirty["exposure-ms"] && pendingSettingsId === null && document.activeElement !== $("exposure-ms")) {
-    $("exposure-ms").value = Math.round(data.exposure_us / 1000);
+  if (!dirty["exposure-us"] && pendingSettingsId === null && document.activeElement !== $("exposure-us")) {
+    $("exposure-us").value = String(nearestPreset(data.exposure_us));
+  }
+  if (typeof data.exposure_us === "number") {
+    write("exposure-readback", "Applied: " + formatExposure(data.exposure_us));
   }
 }
 async function post(path, payload) {
@@ -93,24 +119,34 @@ $("release-control").addEventListener("click", async () => {
 });
 $("start-camera").addEventListener("click", () => action("/api/camera/start"));
 $("stop-camera").addEventListener("click", () => action("/api/camera/stop"));
-$("preview-mode").addEventListener("change", async () => {
+async function changeStretch(mode) {
+  if (!token || stretchChangePending) return;
+  stretchChangePending = true;
+  updateButtons();
   try {
-    await post("/api/camera/preview-mode", {mode: $("preview-mode").value});
+    await post("/api/camera/preview-mode", {mode});
+    showStretch(mode);
     write("camera-error", "");
   } catch (error) {
     write("camera-error", error.message);
+    await refresh();
+  } finally {
+    stretchChangePending = false;
+    updateButtons();
   }
-});
+}
+$("stretch-auto").addEventListener("click", () => changeStretch("auto"));
+$("stretch-fixed").addEventListener("click", () => changeStretch("fixed"));
 $("apply-settings").addEventListener("click", async () => {
   const gain = Number($("gain").value);
-  const exposureMs = Number($("exposure-ms").value);
+  const exposureUs = Number($("exposure-us").value);
   if (!Number.isInteger(gain) || gain < 0 || gain > 100 ||
-      !Number.isInteger(exposureMs) || exposureMs < 10 || exposureMs > 5000) {
-    write("camera-error", "Enter gain 0–100 and exposure 10–5000 ms, as whole numbers");
+      !exposurePresets.includes(exposureUs)) {
+    write("camera-error", "Select an exposure preset (1 ms to 30 s) and gain 0–100");
     return;
   }
   try {
-    const result = await post("/api/camera/settings", {gain, exposure_us: exposureMs * 1000});
+    const result = await post("/api/camera/settings", {gain, exposure_us: exposureUs});
     pendingSettingsId = result.request_id;
     write("settings-message", "Applying settings…");
     write("camera-error", "");
@@ -127,9 +163,8 @@ function showProgress(data) {
   const processing = typeof data.preview_processing_ms === "number" ? data.preview_processing_ms.toFixed(0) + " ms processing" : "";
   write("frame-count", (data.frame_number || 0) + " JPEG frames · " + fps + " preview · " + capture + " · " + processing);
   syncSettings(data);
-  if (typeof data.preview_mode === "string" &&
-      document.activeElement !== $("preview-mode")) {
-    $("preview-mode").value = data.preview_mode;
+  if (!stretchChangePending && ["auto", "fixed"].includes(data.preview_mode)) {
+    showStretch(data.preview_mode);
   }
   if (typeof data.raw_mean_adu === "number") {
     write("raw-metrics", "RAW mean: " + data.raw_mean_adu.toFixed(1) +

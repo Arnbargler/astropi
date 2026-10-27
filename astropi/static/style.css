@@ -33,3 +33,14 @@ button:hover:not(:disabled){background:#2a5669}button:disabled{opacity:.38;curso
 @media(max-width:650px){.shell{padding:18px}.intro{padding:28px 0 20px}h2{font-size:28px}.card{padding:18px}.preview-frame{height:250px}header{flex-wrap:wrap}}
 
 .settings-message{color:#8dd4aa;font-size:12px;min-height:18px}
+
+/* Two-state, accessible stretch switch, with a sliding status indicator. */
+.stretch-row{display:flex;align-items:center;justify-content:space-between;gap:14px}
+.stretch-row>span{font-size:12px;color:#afc0ce}
+.stretch-switch{display:flex;align-items:center;gap:6px;border:1px solid #385167;border-radius:24px;padding:3px 6px;background:#0b141d}
+.stretch-switch .stretch-choice{min-width:38px;padding:6px 12px;border:0;background:transparent;color:#90a5b3;border-radius:18px;font-weight:700}
+.stretch-switch .stretch-choice.selected{background:#225366;color:#ecf9ff}
+.stretch-switch .stretch-choice:focus-visible{outline:2px solid #9fcbd9;outline-offset:2px}
+.stretch-switch .stretch-choice:disabled{cursor:not-allowed;opacity:.5}
+.stretch-indicator{width:10px;height:10px;border-radius:50%;background:#75c6a1;box-shadow:0 0 0 2px #75c6a125}
+.stretch-indicator.fixed{background:#e2b56f;box-shadow:0 0 0 2px #e2b56f25}
