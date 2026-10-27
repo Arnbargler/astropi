@@ -88,6 +88,16 @@ def create_app(settings: Settings | None = None, camera=None, lease=None) -> Fla
             return jsonify(error=str(exc)), 400
         return jsonify(ok=True, mode=mode)
 
+    @app.post("/api/camera/debayer")
+    def camera_debayer():
+        require_operator()
+        payload = request.get_json(silent=True) or {}
+        try:
+            enabled = worker.set_debayer(payload.get("enabled"))
+        except ValueError as exc:
+            return jsonify(error=str(exc)), 400
+        return jsonify(ok=True, enabled=enabled)
+
     @app.get("/api/camera/progress")
     def camera_progress():
         # Cheap polling path; avoids findmnt and USB scans on every frame check.

@@ -1,56 +1,72 @@
-"""Display-only colour preview from verified GRBG RAW16 sensor bytes."""
+"""Fast display-only SV705C previews; RAW16 source buffers are never mutated.
+
+Both paths generate ~964x545 display JPEGs from the 3856x2180 GRBG mosaic.
+Debayer ON: inexpensive colour sampling of 4x4 Bayer blocks.
+Debayer OFF: monochrome sampling of green photosites (no colour interpolation).
+"""
 from io import BytesIO
+
 import numpy as np
 from PIL import Image
+
 from .sdk import WIDTH, HEIGHT, RAW_BYTES
 
+_LEVELS = np.arange(4096, dtype=np.float32)
+# Precompute fixed gamma so preview processing requires no per-pixel power().
+_FIXED_LUT = (np.power(_LEVELS / 4095.0, 0.55) * 255).astype(np.uint8)
 
-def raw16_to_jpeg(raw, stretch="auto") -> bytes:
-    """Make a display JPEG. Auto rescales each frame; fixed preserves brightness changes."""
+
+def _stretch_lut(plane, stretch):
+    if stretch == "fixed":
+        return _FIXED_LUT
+
+    # Sample a small fraction of the preview image for per-frame auto stretch.
+    sample = plane[::3, ::3]
+    low, high = np.percentile(sample, (1, 99.5))
+    scaled = np.clip((_LEVELS - low) / max(high - low, 32), 0, 1)
+    return (np.power(scaled, 0.8) * 255).astype(np.uint8)
+
+
+def raw16_to_jpeg(raw, stretch="auto", debayer=True) -> bytes:
+    """Render a colour or fast greyscale JPEG without modifying RAW16 pixels."""
     if stretch not in ("auto", "fixed"):
         raise ValueError("Unsupported preview stretch mode")
+    if type(debayer) is not bool:
+        raise ValueError("debayer must be a boolean")
     if memoryview(raw).nbytes != RAW_BYTES:
         raise ValueError("Unexpected SV705C RAW16 buffer length")
-    # SV705C hardware probe observed 12-bit values left-shifted four bits.
-    p = np.frombuffer(raw, dtype="<u2", count=WIDTH * HEIGHT).reshape(HEIGHT, WIDTH) >> 4
 
-    def mean(*tiles):
-        total = np.zeros_like(tiles[0], dtype=np.float32)
-        for tile in tiles:
-            total += tile
-        return total / len(tiles)
+    pixels = np.frombuffer(raw, dtype="<u2", count=WIDTH * HEIGHT).reshape(HEIGHT, WIDTH)
+    if not debayer:
+        # Bayer GRBG begins with green. One green pixel per 4x4 mosaic block.
+        # This is sensor-sampled monochrome, not a separate greyscale exposure.
+        mono = pixels[0::4, 0::4] >> 4
+        out = BytesIO()
+        Image.fromarray(_stretch_lut(mono, stretch)[mono], "L").save(
+            out, format="JPEG", quality=80
+        )
+        return out.getvalue()
 
-    # One 4x4 Bayer block -> one RGB pixel (964x545). GRBG = G R / B G.
-    red = mean(p[0::4, 1::4], p[0::4, 3::4],
-               p[2::4, 1::4], p[2::4, 3::4])
-    blue = mean(p[1::4, 0::4], p[1::4, 2::4],
-                p[3::4, 0::4], p[3::4, 2::4])
-    green = mean(p[0::4, 0::4], p[0::4, 2::4], p[1::4, 1::4], p[1::4, 3::4],
-                 p[2::4, 0::4], p[2::4, 2::4], p[3::4, 1::4], p[3::4, 3::4])
-    rgb = np.stack((red, green, blue), axis=-1)
-    if stretch == "auto":
-        # Per-frame, per-channel stretch intentionally conceals brightness changes.
-        # Excellent for faint-object visibility, misleading when evaluating gain.
-        sample = rgb[::4, ::4, :]
-        low = np.percentile(sample, 1, axis=(0, 1))
-        high = np.percentile(sample, 99.5, axis=(0, 1))
-        scaled = np.clip((rgb - low) / np.maximum(high - low, 32), 0, 1)
-        gamma = 0.8
-    else:
-        # Identical sensor-to-screen transfer function across all frames and
-        # channels: changing gain/exposure WILL affect displayed brightness.
-        # Fixed gamma brightens shadows but has no frame-dependent normalizer.
-        scaled = np.clip(rgb / 4095.0, 0, 1)
-        gamma = 0.55
-    result = (np.power(scaled, gamma) * 255).astype(np.uint8)
+    # GRBG = G R / B G. Sample two red, two blue and four green photosites
+    # per 4x4 block. Summing 12-bit values stays safely within uint16.
+    red = ((pixels[0::4, 1::4] >> 4) + (pixels[2::4, 3::4] >> 4)) // 2
+    blue = ((pixels[1::4, 0::4] >> 4) + (pixels[3::4, 2::4] >> 4)) // 2
+    green = (
+        (pixels[0::4, 0::4] >> 4) + (pixels[1::4, 1::4] >> 4) +
+        (pixels[2::4, 2::4] >> 4) + (pixels[3::4, 3::4] >> 4)
+    ) // 4
+
+    # LUTs avoid a full float32 RGB tensor and per-pixel nonlinear transforms.
+    rgb = np.empty((*red.shape, 3), dtype=np.uint8)
+    for channel, plane in enumerate((red, green, blue)):
+        rgb[:, :, channel] = _stretch_lut(plane, stretch)[plane]
     out = BytesIO()
-    Image.fromarray(result, "RGB").save(out, format="JPEG", quality=80)
+    Image.fromarray(rgb, "RGB").save(out, format="JPEG", quality=80)
     return out.getvalue()
 
 
-
 def raw16_statistics(raw) -> dict:
-    """Quick un-stretched 12-bit raw diagnostics; sampled sensor pixels, not JPEG."""
+    """Sparse, un-stretched 12-bit sensor statistics for gain/exposure diagnosis."""
     if memoryview(raw).nbytes != RAW_BYTES:
         raise ValueError("Unexpected SV705C RAW16 buffer length")
     pixels = np.frombuffer(raw, dtype="<u2", count=WIDTH * HEIGHT).reshape(HEIGHT, WIDTH)
