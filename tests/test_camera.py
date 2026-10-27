@@ -225,6 +225,8 @@ def test_exposure_presets_and_long_exposure_wait_time():
     worker._phase = "running"
     for duration in EXPOSURE_PRESETS_US:
         assert isinstance(worker.configure(0, duration), int)
+        # The hardware worker normally drains the bounded queue; simulate it here.
+        worker._commands.get_nowait()
 
     for invalid in (999, 1_500, 35_000_000, 500_000.0, "1000", True):
         try:
