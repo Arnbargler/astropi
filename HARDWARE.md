@@ -8,11 +8,18 @@ This file records the hardware we have chosen for AstroPi, how it connects, and 
 | --- | --- | --- |
 | Raspberry Pi 4 Model B Rev 1.5 (4 GB RAM) | Runs headless AstroPi, camera acquisition, mount control and browser server | **Verified on `astropi` (2026-10-27):** Raspberry Pi 4 Model B Rev 1.5; Debian GNU/Linux **13.6 (Trixie)**; kernel **`6.18.39+rpt-rpi-v8`**; `free -h`: **3.7 GiB RAM total**, 188 MiB used, 3.5 GiB available; 2.0 GiB swap, unused. The separate 2 GB Pi runs the music streamer. |
 | 64 GB USB 3 thumb drive | Intended storage for saved SV705C RAW/FITS exposures and image exports | **Owned and selected for acquisition data**; not connected or tested during 2026-10-27 baseline; confirm filesystem, actual capacity, sustained writes and stable mount path when attached. |
-| SVBONY SV705C | Primary USB astronomical camera | Owned; planned first camera implementation using SVBONY SDK on Linux |
+| SVBONY SV705C | Primary USB astronomical camera | **USB enumeration verified on AstroPi (2026-10-27):** `lsusb` shows `f266:9a0a SVBONY SVBONY SV705C` on Bus 002 Device 002 (USB 3 root-hub bus). Negotiated link speed, permissions and SDK detection/capture remain to be tested. |
 | ZWO AM3N | Motorized telescope mount | Owned; **Alt/Az mode exclusively**. Prior Raspberry Pi USB serial communication verified in August 2026 (see details below). Previously listed in this file as AM3; mount reported model `AM3N#` to `:GVP#`. |
 | 12 V DC supply/distribution | Power to mount and accessories where appropriate | General power plan agreed; ratings, wiring and fused branches to document |
 | 12 V-to-5 V buck converter | Power for Raspberry Pi | Planned / available per owner; validate voltage, current capacity and behaviour under load |
 | N100 Linux Mint desktop | Optional development, simulation and browser access | Available; not required as an intermediary between GitHub and Pi |
+
+## SV705C USB detection (2026-10-27, connected hardware)
+
+- **Verified with `lsusb` on `astropi`:** `Bus 002 Device 002: ID f266:9a0a SVBONY SVBONY SV705C`.
+- Camera is visible on the Pi's **USB 3 root-hub bus** (Bus 002); actual negotiated camera link speed still needs confirming with `lsusb -t` or sysfs. Bus and device numbers can change after reconnection.
+- Camera is physically connected and recognized by USB enumeration; **SDK access, exposure capture and ordinary-user USB permissions are not yet validated**.
+- Next checks: `lsusb -t`, USB node permissions and SDK udev rule, `ctypes.CDLL` load, SDK camera enumeration and capture test, plus `vcgencmd get_throttled` while active.
 
 ## SVBONY Linux SDK location (reported 2026-10-27)
 
