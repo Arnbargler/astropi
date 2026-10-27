@@ -114,8 +114,9 @@ function showProgress(data) {
   currentPhase = data.phase;
   write("camera-phase", "Camera: " + data.phase);
   const fps = typeof data.preview_fps === "number" ? data.preview_fps.toFixed(1) + " fps" : "— fps";
+  const capture = typeof data.capture_fps === "number" ? data.capture_fps.toFixed(1) + " raw fps" : "— raw fps";
   const processing = typeof data.preview_processing_ms === "number" ? data.preview_processing_ms.toFixed(0) + " ms processing" : "";
-  write("frame-count", (data.frame_number || 0) + " JPEG frames · " + fps + " · " + processing);
+  write("frame-count", (data.frame_number || 0) + " JPEG frames · " + fps + " preview · " + capture + " · " + processing);
   syncSettings(data);
   updateButtons();
   const image = $("preview-image");
