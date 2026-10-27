@@ -90,7 +90,22 @@ For implementation, use this verified ARM64 SDK build; do not use the x86 builds
 | `:GD#` (reported declination) | `+44*29:41#` |
 
 - These confirm the mount identity and live serial request/response path with the camera still connected. Coordinates are the mount's **reported** values, **not** verified pointing accuracy or an indication that alignment is complete.
-- **Still untested:** mount operational/status flags, tracking behavior, physical motion and emergency stop, park/unpark, homing and GoTo.
+
+### Current read-only AM3N status replies (2026-10-27)
+
+Both commands executed successfully at 9600 baud from `arn@astropi` using the persistent serial port:
+
+| Command | Observed response | Interpretation and limitations |
+| --- | --- | --- |
+| `:GU#` | `nNZM000000000#` | Third-party ZWO AM3/AM5 protocol implementation documents `n` = not tracking, `N` = not slewing, `Z` = Alt/Az mode. `M` and numeric suffix not yet decoded; the flag mapping should be checked against this mount's behaviour in subsequent tests. |
+| `:GAT#` | `e7#` | Raw response recorded. Third-party protocol documentation expects `0`/`1` for tracking status, **inconsistent** with the observed `e7#`; do **not** decode it or assume its tracking meaning. |
+
+- The responses match the historical August 2026 replies **exactly**.
+- Protocol interpretation reference: `https://docs.rs/zwo_mount_control/latest/src/zwo_mount_control/protocol.rs.html` (third-party library; status flag mapping, not itself an AM3N hardware validation).
+- **No movement command was issued.** Verify Alt/Az altitude/azimuth and date/time readbacks next, then test safety stop before performing an actual slew.
+
+
+- **Still untested:** authoritative validation of all status flags, tracking behavior, physical motion and emergency stop, park/unpark, homing and GoTo. (Raw status queries do return replies.)
 
 ## ZWO AM3N serial connection — earlier AstroPi tests (2026-08-31)
 
