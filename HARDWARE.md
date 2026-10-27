@@ -140,6 +140,14 @@ Read-only USB serial queries returned:
 - **Do not equate the Pi time zone with mount `:GG#` sign convention without verifying the ZWO protocol.** Also confirm that the stored mount latitude/longitude are the user's intended observing site before assigning them to AstroPi configuration.
 - No motor or set commands issued; next test should establish an emergency-stop path and cautious physical motion before GoTo.
 
+### Stop-all communication probe (2026-10-27)
+
+- `arn@astropi` opened `/dev/serial/by-id/usb-ZWO_Systems_ZWO_Device_123456-if00` at 9600 baud, transmitted `:Q#`, paused 0.3 s, then queried status and position; serial port closed normally.
+- Subsequent replies: `:GU#` → `nNZM000000000#`; `:GA#` → `+00*00:00#`; `:GZ#` → `000*00:00#`.
+- **Verified:** stop command bytes can be sent without impairing serial communication, and subsequent queries work.
+- **NOT verified:** stop acknowledgment (none expected for this command), any actual motor stop, fail-safe stop on a disconnected USB link, or physical-motion safety. Do not mark emergency stop operational until tested with actual motion.
+- Protocol cross-check: ZWO AM-series third-party implementations describe `:Q#` as stop-all, direction starts `:Me#`/`:Mw#`/`:Mn#`/`:Ms#` with per-axis stops, and numbered rates `:R0#`–`:R9#`. Before using motion, ensure clearances and access to the mount's physical cancel control.
+
 ## ZWO AM3N serial connection — earlier AstroPi tests (2026-08-31)
 
 The following were recovered from earlier mount-control work on the Raspberry Pi; these are **historical results**, not tests on the disconnected mount during the 2026-10-27 hardware baseline.
