@@ -222,3 +222,148 @@ def test_mount_http_operator_auth_and_viewer_status(tmp_path):
     assert client.post("/api/mount/disconnect", headers=headers).status_code == 202
     worker._thread.join(timeout=3)
     assert not worker.status()["connected"]
+
+
+
+class MotionPort(FakePort):
+    """Only accepts the three explicitly allowed *types* of manual command."""
+    def write(self, data):
+        cmd = data.decode("ascii")
+        if cmd in (":R5#", ":Q#", ":Mn#", ":Ms#", ":Me#", ":Mw#"):
+            self.commands.append(cmd)
+            self.last = cmd
+            return
+        super().write(data)
+
+
+class MotionFactory(FakeFactory):
+    def __call__(self, **kwargs):
+        assert kwargs["baudrate"] == 9600
+        port = MotionPort()
+        self.ports.append(port)
+        return port
+
+
+def test_manual_jog_requires_arm_and_server_stop_confirms_stable(tmp_path):
+    alias = tmp_path / "port"
+    alias.touch()
+    factory = MotionFactory()
+    worker = MountWorker(alias, serial_factory=factory, poll_interval=0.08)
+    with pytest.raises(RuntimeError, match="Connect"):
+        worker.arm()
+    with pytest.raises(ValueError):
+        worker.jog(":hC#")
+    worker.connect()
+    wait_until(lambda: worker.status()["connected"])
+    with pytest.raises(RuntimeError, match="Enable"):
+        worker.jog("north")
+    worker.arm()
+    assert worker.status()["motion_armed"]
+    worker.jog("east")
+    wait_until(lambda: ":Me#" in factory.ports[0].commands)
+    commands=factory.ports[0].commands
+    assert commands.index(":R5#") < commands.index(":Me#")
+    assert worker.status()["motion_phase"] == "moving"
+    with pytest.raises(RuntimeError, match="Only one"):
+        worker.jog("north")
+    assert worker.heartbeat("east")
+    assert worker.emergency_stop()
+    wait_until(lambda: ":Q#" in commands)
+    assert worker.status()["last_stop_sent_utc"]
+    with pytest.raises(RuntimeError):
+        worker.arm()  # while stability has yet to be established
+    wait_until(lambda: worker.status()["stop_stable"], timeout=5)
+    assert worker.status()["motion_phase"] == "idle"
+    assert worker.status()["motion_armed"] is False
+    assert worker.status()["motion_direction"] is None
+    with pytest.raises(RuntimeError, match="Enable"):
+        worker.jog("east")  # never automatically re-arm
+    assert worker.disconnect()
+    worker._thread.join(timeout=3)
+    assert factory.ports[0].closed
+
+
+def test_server_deadman_automatically_stops_without_browser_heartbeat(tmp_path):
+    alias = tmp_path / "port"
+    alias.touch()
+    factory = MotionFactory()
+    worker = MountWorker(alias, serial_factory=factory, poll_interval=0.08)
+    worker.connect()
+    wait_until(lambda: worker.status()["connected"])
+    worker.arm()
+    worker.jog("north")
+    wait_until(lambda: ":Mn#" in factory.ports[0].commands)
+    # No heartbeat: timer belongs to the Pi, NOT to browser JavaScript.
+    wait_until(lambda: ":Q#" in factory.ports[0].commands, timeout=3)
+    state = worker.status()
+    assert state["last_stop_reason"] == "Deadman heartbeat expired"
+    assert state["motion_armed"] is False
+    with pytest.raises(RuntimeError):
+        worker.heartbeat("north")  # expired request cannot revive motion
+    wait_until(lambda: worker.status()["stop_stable"], timeout=5)
+    worker.disconnect()
+    worker._thread.join(timeout=3)
+
+
+def test_disconnect_during_jog_attempts_stop_before_serial_close(tmp_path):
+    alias = tmp_path / "port"
+    alias.touch()
+    factory = MotionFactory()
+    worker = MountWorker(alias, serial_factory=factory, poll_interval=0.04)
+    worker.connect()
+    wait_until(lambda: worker.status()["connected"])
+    worker.arm()
+    worker.jog("west")
+    wait_until(lambda: ":Mw#" in factory.ports[0].commands)
+    assert worker.disconnect()
+    worker._thread.join(timeout=3)
+    port = factory.ports[0]
+    assert port.closed
+    assert ":Q#" in port.commands[port.commands.index(":Mw#"):]
+    assert worker.status()["phase"] == "disconnected"
+    assert worker.status()["azimuth_deg"] is None
+
+
+def test_http_jog_requires_lease_and_stop_does_not(tmp_path):
+    alias = tmp_path / "port"
+    alias.touch()
+    factory = MotionFactory()
+    worker = MountWorker(alias, serial_factory=factory, poll_interval=0.06)
+    settings = Settings(tmp_path, "expected", alias, tmp_path / "usb")
+    client = create_app(settings=settings, mount=worker).test_client()
+    assert client.post("/api/mount/arm").status_code == 403
+    assert client.post("/api/mount/jog", json={"direction":"east"}).status_code == 403
+    assert client.post("/api/mount/jog-heartbeat", json={"direction":"east"}).status_code == 403
+    assert client.post("/api/mount/stop").status_code == 409  # not connected
+    token = client.post("/api/control/take").get_json()["token"]
+    headers = {"X-AstroPi-Control": token}
+    assert client.post("/api/mount/connect", headers=headers).status_code == 202
+    wait_until(lambda: worker.status()["connected"])
+    assert client.post("/api/mount/jog", headers=headers, json={"direction":"north"}).status_code == 409
+    assert client.post("/api/mount/arm", headers=headers).status_code == 200
+    assert client.post("/api/mount/jog", headers=headers, json={"direction":":hC#"}).status_code == 400
+    assert client.post("/api/mount/jog", headers=headers, json={"direction":"south"}).status_code == 202
+    wait_until(lambda: ":Ms#" in factory.ports[0].commands)
+    # Any LAN viewer may request a safety Stop, never initiate motion.
+    assert client.post("/api/mount/stop").status_code == 202
+    wait_until(lambda: ":Q#" in factory.ports[0].commands)
+    with pytest.raises(RuntimeError):
+        worker.heartbeat("south")
+    worker.disconnect()
+    worker._thread.join(timeout=3)
+
+
+def test_emergency_stop_from_idle_is_explicit_serial_stop(tmp_path):
+    alias = tmp_path / "port"
+    alias.touch()
+    factory = MotionFactory()
+    worker = MountWorker(alias, serial_factory=factory, poll_interval=0.07)
+    worker.connect()
+    wait_until(lambda: worker.status()["connected"])
+    worker.emergency_stop()
+    wait_until(lambda: ":Q#" in factory.ports[0].commands)
+    assert ":Mn#" not in factory.ports[0].commands
+    assert ":Me#" not in factory.ports[0].commands
+    wait_until(lambda: worker.status()["stop_stable"], timeout=5)
+    worker.disconnect()
+    worker._thread.join(timeout=3)
