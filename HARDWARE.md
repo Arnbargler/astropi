@@ -7,6 +7,7 @@ This file records the hardware we have chosen for AstroPi, how it connects, and 
 | Device | Purpose | Status / notes |
 | --- | --- | --- |
 | Raspberry Pi 4 Model B Rev 1.5 (4 GB RAM) | Runs headless AstroPi, camera acquisition, mount control and browser server | **Verified on `astropi` (2026-10-27):** Raspberry Pi 4 Model B Rev 1.5; Debian GNU/Linux **13.6 (Trixie)**; kernel **`6.18.39+rpt-rpi-v8`**; `free -h`: **3.7 GiB RAM total**, 188 MiB used, 3.5 GiB available; 2.0 GiB swap, unused. The separate 2 GB Pi runs the music streamer. |
+| 64 GB USB 3 thumb drive | Intended storage for saved SV705C RAW/FITS exposures and image exports | **Owned and selected for acquisition data**; not connected or tested during 2026-10-27 baseline; confirm filesystem, actual capacity, sustained writes and stable mount path when attached. |
 | SVBONY SV705C | Primary USB astronomical camera | Owned; planned first camera implementation using SVBONY SDK on Linux |
 | ZWO AM3 | Motorized telescope mount | Owned; **Alt/Az mode exclusively**; serial-control integration planned |
 | 12 V DC supply/distribution | Power to mount and accessories where appropriate | General power plan agreed; ratings, wiring and fused branches to document |
@@ -29,13 +30,13 @@ Measurements below are from **`arn@astropi`**, not the separate N100 desktop. Th
 | Runtime | **Python 3.13.5**, `aarch64` |
 | Swap | `zram0` 2 GiB swap; earlier `free -h` reported no swap usage |
 
-**Follow-ups:** Test 5V power and `get_throttled` under sustained camera load; decide on storage for FITS sequences; verify the SV705C enumerates on a USB 3 port. Configure the Pi's time zone to the observing region if desired; astronomy calculations should use synchronized UTC plus explicitly configured observing latitude/longitude, not infer coordinates from time zone. Offline operation needs a way to acquire accurate time after boot (e.g. browser-provided clock or an RTC).
+**Follow-ups:** Test 5V power and `get_throttled` under sustained camera load; verify the planned 64 GB USB 3 recording drive and mount it persistently; verify the SV705C enumerates on a USB 3 port. Configure the Pi's time zone to the observing region if desired; astronomy calculations should use synchronized UTC plus explicitly configured observing latitude/longitude, not infer coordinates from time zone. Offline operation needs a way to acquire accurate time after boot (e.g. browser-provided clock or an RTC).
 
 ## Configuration still to record
 
 - Telescope and focal length, including any reducer or Barlow (for image scale and field-of-view estimates).
 - Exact USB and serial port topology; persistent device identification.
-- Storage device and destination for FITS/raw captures.
+- Connect and verify 64 GB USB 3 thumb drive; choose filesystem and configure persistent mount by UUID (e.g., `/media/astropi-data`) as FITS/raw capture destination. No formatting or filesystem changes approved yet.
 - Power-supply capacity, connector polarity, buck-converter ratings and cable layout.
 - Camera SDK versions, mount firmware version, and successful hardware tests.
 
