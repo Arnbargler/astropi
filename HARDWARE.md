@@ -9,7 +9,7 @@ This file records the hardware we have chosen for AstroPi, how it connects, and 
 | Raspberry Pi 4 Model B Rev 1.5 (4 GB RAM) | Runs headless AstroPi, camera acquisition, mount control and browser server | **Verified on `astropi` (2026-10-27):** Raspberry Pi 4 Model B Rev 1.5; Debian GNU/Linux **13.6 (Trixie)**; kernel **`6.18.39+rpt-rpi-v8`**; `free -h`: **3.7 GiB RAM total**, 188 MiB used, 3.5 GiB available; 2.0 GiB swap, unused. The separate 2 GB Pi runs the music streamer. |
 | 64 GB USB 3 thumb drive | Intended storage for saved SV705C RAW/FITS exposures and image exports | **Owned and selected for acquisition data**; not connected or tested during 2026-10-27 baseline; confirm filesystem, actual capacity, sustained writes and stable mount path when attached. |
 | SVBONY SV705C | Primary USB astronomical camera | **Detected and identified through SDK on AstroPi (2026-10-27):** USB `f266:9a0a` at **5000M**, permissions `0666`; Python SDK enumeration `1`; camera-info returned name, port `USB3.0`, ID `1`. **Full-resolution RAW16 frame successfully acquired and saved (all SDK return codes `0`); sampled pixel statistics checked, visual confirmation pending.** |
-| ZWO AM3N | Motorized telescope mount | Owned; **Alt/Az mode exclusively**. Prior Raspberry Pi USB serial communication verified in August 2026 (see details below). Previously listed in this file as AM3; mount reported model `AM3N#` to `:GVP#`. |
+| ZWO AM3N | Motorized telescope mount | **Connected to AstroPi, USB/CDC ACM enumerated (2026-10-27):** `03c3:4001`, `/dev/ttyACM0`, stable `/dev/serial/by-id/usb-ZWO_Systems_ZWO_Device_123456-if00`; `arn` in `dialout`. **Read-only serial protocol responses not yet retested on current setup.** Alt/Az mode exclusively; older protocol tests below. |
 | 12 V DC supply/distribution | Power to mount and accessories where appropriate | General power plan agreed; ratings, wiring and fused branches to document |
 | 12 V-to-5 V buck converter | Power for Raspberry Pi | Planned / available per owner; validate voltage, current capacity and behaviour under load |
 | N100 Linux Mint desktop | Optional development, simulation and browser access | Available; not required as an intermediary between GitHub and Pi |
@@ -63,6 +63,18 @@ The SDK distribution is already extracted **on the AstroPi**, separate from the 
 - **Status:** ARM64 binary architecture and shared-library dependencies **verified on AstroPi (2026-10-27)**. SDK loading through Python ctypes, USB-node permissions and installed udev rule **verified on AstroPi (2026-10-27)**. SDK enumeration **verified (1 device)**; camera open/close and sensor-property retrieval **verified (success return codes)**. A single SDK RAW16 frame acquisition and expected-sized file write **verified**; image content still requires validation.
 
 For implementation, use this verified ARM64 SDK build; do not use the x86 builds. Don't commit vendor SDK binaries to this repository.
+
+## ZWO AM3N connected hardware — AstroPi retest (2026-10-27)
+
+**Verified from the live `arn@astropi` USB/udev and power outputs:**
+
+- `lsusb` → `03c3:4001 ZWO ZWO Device`; SVBONY SV705C simultaneously present as `f266:9a0a`.
+- `lsusb -t` → `cdc_acm` interfaces for the mount at **12M** on USB2 bus; the SV705C still runs at **5000M** on the USB3 bus.
+- Serial node: `/dev/ttyACM0`, permissions `crw-rw---- root dialout`. User `arn` is a member of `dialout`; no sudo expected for serial queries.
+- Persistent symlink: `/dev/serial/by-id/usb-ZWO_Systems_ZWO_Device_123456-if00 -> ../../ttyACM0`. Prefer this alias in configuration.
+- Kernel events at connection: Espressif `303a:1001` USB JTAG/serial debug unit briefly enumerated, disconnected and was replaced by `03c3:4001` ZWO USB CDC ACM within about a second; this may be a normal boot-to-application sequence, but its cause has not been established.
+- With camera and mount connected: `vcgencmd get_throttled` → `throttled=0x0`; `vcgencmd measure_temp` → **39.9°C**.
+- **Verification boundary:** Linux USB detection, serial-device creation and account permissions confirmed. **Current serial request/reply communication, motor movement and stop behaviour are not yet verified**. Prior historical responses are documented below.
 
 ## ZWO AM3N serial connection — earlier AstroPi tests (2026-08-31)
 
