@@ -39,31 +39,66 @@
           <button id="start-camera" disabled>Start preview</button>
           <button id="stop-camera" disabled>Stop</button>
         </div>
-        <label for="exposure-us">Exposure</label>
-        <select id="exposure-us" disabled>
-          <option value="1000">1 ms</option>
-          <option value="2000">2 ms</option>
-          <option value="5000">5 ms</option>
-          <option value="10000">10 ms</option>
-          <option value="25000">25 ms</option>
-          <option value="50000">50 ms</option>
-          <option value="100000" selected>100 ms</option>
-          <option value="250000">250 ms</option>
-          <option value="500000">500 ms</option>
-          <option value="750000">750 ms</option>
-          <option value="1000000">1 s</option>
-          <option value="2000000">2 s</option>
-          <option value="5000000">5 s</option>
-          <option value="10000000">10 s</option>
-          <option value="15000000">15 s</option>
-          <option value="20000000">20 s</option>
-          <option value="25000000">25 s</option>
-          <option value="30000000">30 s</option>
-        </select>
-        <p class="hint" id="exposure-readback">Applied: —</p>
-        <label for="gain">Gain</label>
-        <input id="gain" type="number" min="0" max="100" step="1" value="0" disabled>
-        <button id="apply-settings" disabled>Apply settings</button>
+        <span class="control-label">Exposure</span>
+        <div class="preset-grid exposure-grid" id="exposure-buttons" role="group" aria-label="Exposure presets">
+          <input type="radio" class="preset-input" id="exposure-1000" name="exposure" value="1000" disabled>
+          <label for="exposure-1000" class="preset-choice">1 ms</label>
+          <input type="radio" class="preset-input" id="exposure-2000" name="exposure" value="2000" disabled>
+          <label for="exposure-2000" class="preset-choice">2 ms</label>
+          <input type="radio" class="preset-input" id="exposure-5000" name="exposure" value="5000" disabled>
+          <label for="exposure-5000" class="preset-choice">5 ms</label>
+          <input type="radio" class="preset-input" id="exposure-10000" name="exposure" value="10000" disabled>
+          <label for="exposure-10000" class="preset-choice">10 ms</label>
+          <input type="radio" class="preset-input" id="exposure-25000" name="exposure" value="25000" disabled>
+          <label for="exposure-25000" class="preset-choice">25 ms</label>
+          <input type="radio" class="preset-input" id="exposure-50000" name="exposure" value="50000" disabled>
+          <label for="exposure-50000" class="preset-choice">50 ms</label>
+          <input type="radio" class="preset-input" id="exposure-100000" name="exposure" value="100000" checked disabled>
+          <label for="exposure-100000" class="preset-choice">100 ms</label>
+          <input type="radio" class="preset-input" id="exposure-250000" name="exposure" value="250000" disabled>
+          <label for="exposure-250000" class="preset-choice">250 ms</label>
+          <input type="radio" class="preset-input" id="exposure-500000" name="exposure" value="500000" disabled>
+          <label for="exposure-500000" class="preset-choice">500 ms</label>
+          <input type="radio" class="preset-input" id="exposure-750000" name="exposure" value="750000" disabled>
+          <label for="exposure-750000" class="preset-choice">750 ms</label>
+          <input type="radio" class="preset-input" id="exposure-1000000" name="exposure" value="1000000" disabled>
+          <label for="exposure-1000000" class="preset-choice">1 s</label>
+          <input type="radio" class="preset-input" id="exposure-2000000" name="exposure" value="2000000" disabled>
+          <label for="exposure-2000000" class="preset-choice">2 s</label>
+          <input type="radio" class="preset-input" id="exposure-5000000" name="exposure" value="5000000" disabled>
+          <label for="exposure-5000000" class="preset-choice">5 s</label>
+          <input type="radio" class="preset-input" id="exposure-10000000" name="exposure" value="10000000" disabled>
+          <label for="exposure-10000000" class="preset-choice">10 s</label>
+          <input type="radio" class="preset-input" id="exposure-15000000" name="exposure" value="15000000" disabled>
+          <label for="exposure-15000000" class="preset-choice">15 s</label>
+          <input type="radio" class="preset-input" id="exposure-20000000" name="exposure" value="20000000" disabled>
+          <label for="exposure-20000000" class="preset-choice">20 s</label>
+          <input type="radio" class="preset-input" id="exposure-25000000" name="exposure" value="25000000" disabled>
+          <label for="exposure-25000000" class="preset-choice">25 s</label>
+          <input type="radio" class="preset-input" id="exposure-30000000" name="exposure" value="30000000" disabled>
+          <label for="exposure-30000000" class="preset-choice">30 s</label>
+        </div>
+        <p class="hint" id="exposure-readback">Exposure readback: —</p>
+        <span class="control-label">Gain</span>
+        <div class="preset-grid gain-grid" id="gain-buttons" role="group" aria-label="Gain presets">
+          <input type="radio" class="preset-input" id="gain-0" name="gain" value="0" checked disabled>
+          <label for="gain-0" class="preset-choice">0</label>
+          <input type="radio" class="preset-input" id="gain-5" name="gain" value="5" disabled>
+          <label for="gain-5" class="preset-choice">5</label>
+          <input type="radio" class="preset-input" id="gain-10" name="gain" value="10" disabled>
+          <label for="gain-10" class="preset-choice">10</label>
+          <input type="radio" class="preset-input" id="gain-20" name="gain" value="20" disabled>
+          <label for="gain-20" class="preset-choice">20</label>
+          <input type="radio" class="preset-input" id="gain-30" name="gain" value="30" disabled>
+          <label for="gain-30" class="preset-choice">30</label>
+          <input type="radio" class="preset-input" id="gain-50" name="gain" value="50" disabled>
+          <label for="gain-50" class="preset-choice">50</label>
+          <input type="radio" class="preset-input" id="gain-75" name="gain" value="75" disabled>
+          <label for="gain-75" class="preset-choice">75</label>
+          <input type="radio" class="preset-input" id="gain-100" name="gain" value="100" disabled>
+          <label for="gain-100" class="preset-choice">100</label>
+        </div>
+        <p class="hint" id="gain-readback">Gain readback: —</p>
         <div class="stretch-row">
           <span id="stretch-label">Stretch</span>
           <div class="stretch-switch" role="group" aria-labelledby="stretch-label">
@@ -72,11 +107,19 @@
             <button type="button" id="stretch-fixed" class="stretch-choice" aria-label="Fixed stretch" title="Fixed stretch" aria-pressed="false" disabled>F</button>
           </div>
         </div>
-        <p class="hint">A = Auto stretch for faint detail · F = Fixed brightness to compare gain/exposure.</p>
+        <div class="stretch-row">
+          <span id="debayer-label">Debayer</span>
+          <div class="stretch-switch" role="group" aria-labelledby="debayer-label">
+            <button type="button" id="debayer-on" class="stretch-choice selected" aria-pressed="true" disabled>On</button>
+            <span id="debayer-indicator" class="stretch-indicator auto" aria-hidden="true"></span>
+            <button type="button" id="debayer-off" class="stretch-choice" aria-pressed="false" disabled>Off</button>
+          </div>
+        </div>
+        <p class="hint">Stretch A/F: adaptive or fixed brightness. Debayer On: colour; Off: faster monochrome sampled from the Bayer sensor.</p>
         <p id="raw-metrics">Raw sensor signal: waiting for frames…</p>
         <p id="settings-message" role="status" class="settings-message"></p>
         <p id="camera-error" role="alert"></p>
-        <p class="hint">Images are disposable 8-bit JPEG previews. No science RAW/FITS data is being recorded.</p>
+        <p class="hint">Exposure/gain preset changes apply automatically. RAW acquisition and preview run separately; no science RAW/FITS data is recorded.</p>
       </article>
     </section>
     <section class="cards" aria-label="System status">

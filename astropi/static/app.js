@@ -1,85 +1,81 @@
 "use strict";
+
+const exposurePresets = [1000,2000,5000,10000,25000,50000,100000,250000,500000,750000,1000000,2000000,5000000,10000000,15000000,20000000,25000000,30000000];
+const gainPresets = [0,5,10,20,30,50,75,100];
 let token = null;
 let currentPhase = "stopped";
+let desiredGain = 0;
+let desiredExposureUs = 100000;
+let settingsInitialized = false;
+let sendBusy = false;
+let staged = false;
 let pendingSettingsId = null;
+let stretchChangePending = false;
+let debayerChangePending = false;
 let previousFrame = -1;
 let progressBusy = false;
-// Track each field independently. A 3-second status poll must NEVER erase
-// unsubmitted edits when the operator switches between exposure and gain.
-const dirty = {"gain": false, "exposure-us": false};
-// Match SDK quantized exposure readbacks back to the nearest preset.
-const exposurePresets = [1000, 2000, 5000, 10000, 25000, 50000, 100000, 250000, 500000, 750000, 1000000, 2000000, 5000000, 10000000, 15000000, 20000000, 25000000, 30000000];
-let stretchChangePending = false;
-function nearestPreset(us) {
-  return exposurePresets.reduce((best, candidate) =>
-    Math.abs(candidate - us) < Math.abs(best - us) ? candidate : best);
-}
-function formatExposure(us) {
-  return us >= 1000000 ? (us / 1000000).toFixed(3) + " s" :
-    (us / 1000).toFixed(3) + " ms";
-}
-function showStretch(mode) {
-  const fixed = mode === "fixed";
-  $("stretch-auto").className = "stretch-choice" + (!fixed ? " selected" : "");
-  $("stretch-fixed").className = "stretch-choice" + (fixed ? " selected" : "");
-  $("stretch-auto").setAttribute("aria-pressed", String(!fixed));
-  $("stretch-fixed").setAttribute("aria-pressed", String(fixed));
-  $("stretch-indicator").className = "stretch-indicator " + (fixed ? "fixed" : "auto");
-}
 const $ = id => document.getElementById(id);
-function write(id, value) { $(id).textContent = value; }
+const write = (id, value) => { $(id).textContent = value; };
+const nearest = (values, number) => values.reduce((a, b) =>
+  Math.abs(a - number) <= Math.abs(b - number) ? a : b);
+function formatExposure(us) {
+  return us >= 1000000 ? (us / 1000000).toFixed(3) + " s" : (us / 1000).toFixed(3) + " ms";
+}
 function freeSpace(bytes) {
   return typeof bytes === "number" ? (bytes / 1024 ** 3).toFixed(1) + " GiB free" : "Free space unavailable";
 }
+function renderSelections() {
+  for (const v of exposurePresets) $("exposure-" + v).checked = v === desiredExposureUs;
+  for (const v of gainPresets) $("gain-" + v).checked = v === desiredGain;
+}
+function toggleView(prefix, first, second, activeFirst) {
+  const a = $(prefix + "-" + first), b = $(prefix + "-" + second);
+  a.className = "stretch-choice" + (activeFirst ? " selected" : "");
+  b.className = "stretch-choice" + (!activeFirst ? " selected" : "");
+  a.setAttribute("aria-pressed", String(activeFirst));
+  b.setAttribute("aria-pressed", String(!activeFirst));
+  $(prefix + "-indicator").className = "stretch-indicator " + (activeFirst ? "auto" : "fixed");
+}
+function showStretch(mode) { toggleView("stretch", "auto", "fixed", mode !== "fixed"); }
+function showDebayer(enabled) { toggleView("debayer", "on", "off", enabled); }
 function updateButtons() {
   const owner = Boolean(token);
   $("take-control").hidden = owner;
   $("release-control").hidden = !owner;
   $("start-camera").disabled = !owner || !["stopped", "error"].includes(currentPhase);
   $("stop-camera").disabled = !owner || !["running", "connecting"].includes(currentPhase);
-  const editEnabled = owner && currentPhase === "running" && pendingSettingsId === null;
-  for (const id of ["gain", "exposure-us", "apply-settings"]) {
-    $(id).disabled = !editEnabled;
-  }
-  for (const id of ["stretch-auto", "stretch-fixed"]) {
+  const active = owner && currentPhase === "running";
+  for (const v of exposurePresets) $("exposure-" + v).disabled = !active;
+  for (const v of gainPresets) $("gain-" + v).disabled = !active;
+  for (const id of ["stretch-auto", "stretch-fixed"])
     $(id).disabled = !owner || stretchChangePending;
-  }
-}
-$("gain").addEventListener("input", () => {
-  dirty.gain = true;
-  write("settings-message", "Unsaved changes · click Apply settings");
-});
-$("exposure-us").addEventListener("change", () => {
-  dirty["exposure-us"] = true;
-  write("settings-message", "Unsaved changes · click Apply settings");
-});
-function discardEdits() {
-  dirty.gain = false;
-  dirty["exposure-us"] = false;
-  pendingSettingsId = null;
-  write("settings-message", "");
+  for (const id of ["debayer-on", "debayer-off"])
+    $(id).disabled = !owner || debayerChangePending;
 }
 function syncSettings(data) {
-  if (pendingSettingsId !== null) {
-    if (data.settings_applied_id >= pendingSettingsId) {
-      // SDK readbacks are authoritative only after its worker acknowledges the request.
-      pendingSettingsId = null;
-      dirty.gain = false;
-      dirty["exposure-us"] = false;
-      write("settings-message", "Settings applied");
-    } else if (data.phase === "error" || data.phase === "stopped") {
-      pendingSettingsId = null;
-      write("settings-message", "Camera stopped before settings were applied");
-    }
+  // SDK readbacks may be rounded; map to the closest visible radio option.
+  if (!settingsInitialized) {
+    desiredGain = nearest(gainPresets, data.gain);
+    desiredExposureUs = nearest(exposurePresets, data.exposure_us);
+    settingsInitialized = true;
   }
-  if (!dirty.gain && pendingSettingsId === null && document.activeElement !== $("gain")) {
-    $("gain").value = data.gain;
+  if (pendingSettingsId !== null && !sendBusy && !staged &&
+      data.settings_applied_id >= pendingSettingsId) {
+    pendingSettingsId = null;
+    write("settings-message", "Camera settings applied");
   }
-  if (!dirty["exposure-us"] && pendingSettingsId === null && document.activeElement !== $("exposure-us")) {
-    $("exposure-us").value = String(nearestPreset(data.exposure_us));
+  // Never overwrite an optimistic radio selection while the request is in
+  // flight or queued: it can take ~30 s to finish an exposure.
+  if (pendingSettingsId === null && !sendBusy && !staged) {
+    desiredGain = nearest(gainPresets, data.gain);
+    desiredExposureUs = nearest(exposurePresets, data.exposure_us);
   }
-  if (typeof data.exposure_us === "number") {
-    write("exposure-readback", "Applied: " + formatExposure(data.exposure_us));
+  renderSelections();
+  write("exposure-readback", "Actual exposure: " + formatExposure(data.exposure_us));
+  write("gain-readback", "Actual gain: " + data.gain);
+  if (data.phase === "error" && pendingSettingsId !== null) {
+    pendingSettingsId = null;
+    write("settings-message", "Camera stopped before applying changes");
   }
 }
 async function post(path, payload) {
@@ -88,9 +84,9 @@ async function post(path, payload) {
     headers: {"Content-Type": "application/json", ...(token ? {"X-AstroPi-Control": token} : {})},
     body: JSON.stringify(payload || {})
   });
-  const output = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(output.error || "HTTP " + response.status);
-  return output;
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data.error || "HTTP " + response.status);
+  return data;
 }
 async function action(path) {
   try {
@@ -100,6 +96,46 @@ async function action(path) {
   } catch (error) {
     write("camera-error", error.message);
   }
+}
+// Automatically send a complete exposure+gain pair with EACH radio change.
+// In-flight HTTP requests serialize; rapid clicks are coalesced to newest choice.
+async function applySelected() {
+  if (!token || currentPhase !== "running") return;
+  if (sendBusy) { staged = true; return; }
+  sendBusy = true;
+  try {
+    do {
+      staged = false;
+      const gain = desiredGain, exposure_us = desiredExposureUs;
+      const reply = await post("/api/camera/settings", {gain, exposure_us});
+      pendingSettingsId = reply.request_id;
+      write("settings-message", "Applying exposure " + formatExposure(exposure_us) +
+        ", gain " + gain + "…");
+    } while (staged && token && currentPhase === "running");
+    write("camera-error", "");
+  } catch (error) {
+    write("camera-error", error.message);
+    pendingSettingsId = null;
+    settingsInitialized = false;
+    staged = false;
+  } finally {
+    sendBusy = false;
+    updateButtons();
+  }
+}
+for (const value of exposurePresets) {
+  $("exposure-" + value).addEventListener("change", () => {
+    desiredExposureUs = value;
+    renderSelections();
+    return applySelected();
+  });
+}
+for (const value of gainPresets) {
+  $("gain-" + value).addEventListener("change", () => {
+    desiredGain = value;
+    renderSelections();
+    return applySelected();
+  });
 }
 $("take-control").addEventListener("click", async () => {
   try {
@@ -112,7 +148,9 @@ $("release-control").addEventListener("click", async () => {
   try {
     await post("/api/control/release");
     token = null;
-    discardEdits();
+    pendingSettingsId = null;
+    staged = false;
+    settingsInitialized = false;
     await refresh();
   } catch (error) { write("camera-error", error.message); }
   updateButtons();
@@ -137,61 +175,62 @@ async function changeStretch(mode) {
 }
 $("stretch-auto").addEventListener("click", () => changeStretch("auto"));
 $("stretch-fixed").addEventListener("click", () => changeStretch("fixed"));
-$("apply-settings").addEventListener("click", async () => {
-  const gain = Number($("gain").value);
-  const exposureUs = Number($("exposure-us").value);
-  if (!Number.isInteger(gain) || gain < 0 || gain > 100 ||
-      !exposurePresets.includes(exposureUs)) {
-    write("camera-error", "Select an exposure preset (1 ms to 30 s) and gain 0–100");
-    return;
-  }
+async function changeDebayer(enabled) {
+  if (!token || debayerChangePending) return;
+  debayerChangePending = true;
+  updateButtons();
   try {
-    const result = await post("/api/camera/settings", {gain, exposure_us: exposureUs});
-    pendingSettingsId = result.request_id;
-    write("settings-message", "Applying settings…");
+    await post("/api/camera/debayer", {enabled});
+    showDebayer(enabled);
     write("camera-error", "");
-    updateButtons();
   } catch (error) {
     write("camera-error", error.message);
+    await refresh();
+  } finally {
+    debayerChangePending = false;
+    updateButtons();
   }
-});
+}
+$("debayer-on").addEventListener("click", () => changeDebayer(true));
+$("debayer-off").addEventListener("click", () => changeDebayer(false));
+
 function showProgress(data) {
   currentPhase = data.phase;
   write("camera-phase", "Camera: " + data.phase);
   const fps = typeof data.preview_fps === "number" ? data.preview_fps.toFixed(1) + " fps" : "— fps";
-  const capture = typeof data.capture_fps === "number" ? data.capture_fps.toFixed(1) + " raw fps" : "— raw fps";
-  const processing = typeof data.preview_processing_ms === "number" ? data.preview_processing_ms.toFixed(0) + " ms processing" : "";
-  write("frame-count", (data.frame_number || 0) + " JPEG frames · " + fps + " preview · " + capture + " · " + processing);
-  syncSettings(data);
-  if (!stretchChangePending && ["auto", "fixed"].includes(data.preview_mode)) {
+  const raw = typeof data.capture_fps === "number" ? data.capture_fps.toFixed(1) + " fps" : "— fps";
+  const processing = typeof data.preview_processing_ms === "number" ? data.preview_processing_ms.toFixed(0) + " ms" : "— ms";
+  write("frame-count", (data.frame_number || 0) + " JPEG frames · " + fps +
+    " preview · " + raw + " raw · " + processing + " processing");
+  if (typeof data.exposure_us === "number" && typeof data.gain === "number" &&
+      typeof data.settings_applied_id === "number") syncSettings(data);
+  if (!stretchChangePending && ["auto", "fixed"].includes(data.preview_mode))
     showStretch(data.preview_mode);
-  }
+  if (!debayerChangePending && typeof data.debayer === "boolean")
+    showDebayer(data.debayer);
   if (typeof data.raw_mean_adu === "number") {
     write("raw-metrics", "RAW mean: " + data.raw_mean_adu.toFixed(1) +
       " / 4095 ADU · 99th percentile: " + data.raw_p99_adu +
       " · saturated: " + data.raw_saturated_percent.toFixed(2) + "%");
-  } else {
-    write("raw-metrics", "Raw sensor signal: waiting for frames…");
-  }
+  } else write("raw-metrics", "Raw sensor signal: waiting for frames…");
   updateButtons();
-  const image = $("preview-image");
+  const img = $("preview-image");
   if (!data.has_frame) {
-    image.hidden = true;
+    img.hidden = true;
     $("preview-placeholder").hidden = false;
     previousFrame = -1;
   } else if (data.frame_number !== previousFrame) {
     previousFrame = data.frame_number;
-    // Download only NEW JPEGs. Many browser viewers share one backend image.
-    image.src = "/api/camera/frame.jpg?frame=" + data.frame_number + "&t=" + Date.now();
-    image.hidden = false;
+    img.src = "/api/camera/frame.jpg?frame=" + data.frame_number + "&t=" + Date.now();
+    img.hidden = false;
     $("preview-placeholder").hidden = true;
   }
 }
 async function refresh() {
   const el = $("connection");
   try {
-    const response = await fetch("/api/status", {cache: "no-store"});
-    if (!response.ok) throw new Error("HTTP " + response.status);
+    const response = await fetch("/api/status", {cache:"no-store"});
+    if (!response.ok) throw Error("HTTP " + response.status);
     const data = await response.json();
     el.textContent = token ? "Connected · Controller" : "Connected · Viewer";
     el.className = "connection online";
@@ -202,9 +241,9 @@ async function refresh() {
     write("storage-state", data.storage.ready ? "Recording drive ready" : data.storage.state.replaceAll("_", " "));
     write("storage-free", freeSpace(data.storage.free_bytes));
     write("pi-temp", data.host.cpu_temperature_c === null ? "Temperature unavailable" : data.host.cpu_temperature_c + " °C");
-    const seconds = data.host.uptime_seconds;
-    write("pi-uptime", typeof seconds === "number" ? "Uptime: " +
-      Math.floor(seconds / 86400) + "d " + Math.floor(seconds % 86400 / 3600) + "h" : "Uptime unavailable");
+    const s = data.host.uptime_seconds;
+    write("pi-uptime", typeof s === "number" ? "Uptime: " + Math.floor(s / 86400) +
+      "d " + Math.floor(s % 86400 / 3600) + "h" : "Uptime unavailable");
     write("last-update", new Date(data.utc).toLocaleTimeString());
     showProgress(data.camera);
   } catch (error) {
@@ -216,22 +255,25 @@ async function pollPreview() {
   if (progressBusy || !["connecting", "running", "stopping"].includes(currentPhase)) return;
   progressBusy = true;
   try {
-    const response = await fetch("/api/camera/progress", {cache: "no-store"});
+    const response = await fetch("/api/camera/progress", {cache:"no-store"});
     if (response.ok) {
-      const state = await response.json();
-      if (state.last_error) write("camera-error", state.last_error);
-      showProgress(state);
+      const data = await response.json();
+      if (data.last_error) write("camera-error", data.last_error);
+      showProgress(data);
     }
   } catch {
-    // Main status poll will report connection failures.
-  } finally {
-    progressBusy = false;
-  }
+    // Full status poll will report backend connection failures.
+  } finally { progressBusy = false; }
 }
 async function heartbeat() {
   if (!token) return;
   try { await post("/api/control/heartbeat"); }
-  catch { token = null; discardEdits(); updateButtons(); }
+  catch {
+    token = null;
+    pendingSettingsId = null;
+    staged = false;
+    updateButtons();
+  }
 }
 refresh();
 setInterval(refresh, 3000);
