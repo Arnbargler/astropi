@@ -97,3 +97,44 @@ Run this read-only check on the previously saved four-format exposure:
 **Passed on Pi for this precise capture:** 4 file sizes/checksums PASS,
 FITS structure and 12-bit range PASS, and every Bayer pixel matched RAW16.
 The verifier remains read-only; no writes or SDK access.
+
+
+## First read-only AM3N mount connection (new; Pi hardware retest pending)
+
+Mount USB by-id serial path:
+    /dev/serial/by-id/usb-ZWO_Systems_ZWO_Device_123456-if00
+
+On the Pi, install updated requirements before launching. The new dependency
+is pyserial 3.5. After updating, start AstroPi as usual (commands above).
+No mount connection is attempted automatically on Flask start or page load.
+
+1. Connect and power the ZWO AM3N normally, with the hand controller/mount
+   physically stationary and clear. Do NOT send a Home command.
+2. In the browser click **Take Control**, then **Connect Mount** inside
+   the ZWO AM3N panel. Camera preview does not need to be running.
+3. Look for Connection: connected; Model AM3N and firmware 1.8.8; live
+   reported Altitude, Azimuth, RA, Dec, raw :GU# status, and timestamp.
+4. Click **Disconnect**. Verify the panel returns to "disconnected",
+   coordinates clear to dashes, and camera preview/capture is unaffected.
+5. Click **Connect Mount** again to test clean reopening. If the by-id
+   alias is absent or any serial response fails, the mount panel displays
+   the error and clears stale positions. Explicit Connect is required
+   after device recovery.
+
+This milestone ONLY sends the following **read-only** serial queries:
+    :GVP# :GV# :GU# :GA# :GZ# :GR# :GD#
+
+There is no Move, slew, Home, Park, GoTo, tracking or clock/site update
+control in this version. Mount RA/Dec are reported estimates; no verified
+sky alignment exists. The worker deliberately does not write time/site:
+Pi lacks an RTC and offline trusted-time initialization is unresolved.
+No general-purpose serial-command endpoint is exposed.
+
+For a quick terminal diagnostic (no mount modification), while the app is
+running:
+
+    curl -s http://127.0.0.1:8080/api/mount/status | python3 -m json.tool
+
+If the connection fails, provide that output and the current UI error
+before we add ANY controls that could move the mount. Do not launch a
+second serial-monitor process against the same mount port simultaneously.
