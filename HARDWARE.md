@@ -285,11 +285,11 @@ After the 3-second 120× north/up movement and subsequent stop/settling, the use
 
 **Important boundary:** Stop was not instantaneous in the 120× tests: each axis showed **1′28″** of additional reported travel between the immediate post-stop and three-second-later samples. Exact stop timing, behaviour after abnormal software failure/USB disconnection, and tracking / GoTo / alignment remain unverified. Future mount controller must treat `:Q#` as a request to stop, poll status and both axes for stability, and provide operator physical cancel/power fallback.
 
-### AM3N Home-operation follow-up readback — not yet confirmed (2026-10-27)
+### AM3N baseline readback before Home command (2026-10-27)
 
-Following instructions to use the hand-controller **Home** operation (distinct from Park) and then run a read-only serial query, the user reported:
+**Clarification from user:** The hand controller was **not connected**, and the user **only ran the read-only Python script**; they did **not** initiate Home. Therefore the unchanged coordinates are expected and the test should **not** be classified as a failed or attempted Home operation.
 
-| Command | Reported response |
+| Read-only command | Response |
 | --- | --- |
 | `:GU#` | `nNZM000000880#` |
 | `:GA#` | `+01*30:50#` |
@@ -297,10 +297,8 @@ Following instructions to use the hand-controller **Home** operation (distinct f
 | `:GR#` | `21:52:17#` |
 | `:GD#` | `+44*35:00#` |
 
-- Altitude, azimuth, and status **exactly match** the preceding both-axes stationary check. This is **not evidence that a Home motion occurred or completed**. The user has not yet specified whether they actively initiated Home and observed movement, or simply executed the readout command.
-- The AM3N manual documents **holding the hand-controller Cancel button for ~3 seconds to send the mount Home**, whereas a short press cancels an action. Verify the intended operation was actually initiated before concluding anything is wrong. Reference: `https://manuals.plus/m/8e0cc72583ffc0e945135ba10c60c72726cae5af1cf87643f68ca018ba01bb8b`.
-- INDI's ZWO AM-series mount driver implements Go Home as serial `:hC#` (not tested on this AM3N). Source: `https://github.com/indilib/indi/blob/master/drivers/telescope/lx200am5.cpp`.
-- **No Home, Park, homing accuracy or zero/reference restoration has yet been validated.** Do not infer mount Home from RA/Dec readbacks; those depend on time and alignment.
+**Home control remains untested**. INDI's ZWO AM mount driver uses the USB serial command `:hC#` for Go Home, distinct from `:hP#` for Park; the user's **1.8.8** firmware has a distinct horizontal default Park posture. An AM-series hand controller is optional for normal USB control but is useful as a physical Cancel safety fallback during an autonomous Home slew. A future Home test should provide adequate mechanical/cable clearance and monitor positions until stopped.
+
 
 ## ZWO AM3N serial connection — earlier AstroPi tests (2026-08-31)
 
