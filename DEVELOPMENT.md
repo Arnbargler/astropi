@@ -1,6 +1,6 @@
 # AstroPi development guide (read-only browser skeleton present)
 
-**Status: browser status and SV705C colour preview verified on Pi (2026-10-27); fixed stretch confirmed gain/exposure response. New fast JPEG worker, Debayer On/Off, and immediate exposure/gain preset buttons are software-tested but await on-Pi verification.** Read [REQUIREMENTS.md](REQUIREMENTS.md) for authoritative scope and [HARDWARE.md](HARDWARE.md) for **actually verified** devices and quirks. This file is a recommended route to implementation, **not a claim that the proposed hardware-control modules or system services already exist**. Keep implementation modular and modest; avoid one enormous `app.py`.
+**Status: browser status, colour preview, fixed-stretch gain/exposure response and two-thread Debayer On/Off preview speed verified on Pi (2026-10-27). At 50 ms: colour 14.8 FPS (RAW 15.8), grayscale 16.6 FPS (RAW 16.5). Actual long-exposure presets and independent recording still need testing/implementation.** Read [REQUIREMENTS.md](REQUIREMENTS.md) for authoritative scope and [HARDWARE.md](HARDWARE.md) for **actually verified** devices and quirks. This file is a recommended route to implementation, **not a claim that the proposed hardware-control modules or system services already exist**. Keep implementation modular and modest; avoid one enormous `app.py`.
 
 ## First working milestone
 
@@ -52,7 +52,7 @@ The split is conceptual; exact filenames and language for frontend are not yet d
 
 ## Implementation order and verification gates
 
-1. **Project skeleton:** tracked Flask status page, UUID checks and Pi browser smoke test verified 2026-10-27. Camera SDK preview work is the current Pi-test gate; add persistent logging and systemd later. No Home/GoTo on startup.
+1. **Project skeleton/preview:** Flask status page, Pi browser smoke test and 50 ms colour/mono preview performance verified 2026-10-27 (details in HARDWARE.md). Add persistent logging and systemd later. No Home/GoTo on startup.
 2. **Camera live preview:** single SDK owner, control readbacks, image byte handling, GRBG 8-bit preview, lightweight streaming to several browsers. Measure CPU/RAM/latency instead of assuming the probe PNG algorithm is sufficiently fast.
 3. **Recording:** single RAW/FITS saved exposure, then sequences, USB-UUID checks, checksums/atomic writes, optional saving, uninterrupted capture after browser refresh.
 4. **Mount basics:** USB connect/reconnect, time/site verification, status/coordinates, manual jog with deadman Stop, lease enforcement, cautious Home/Park testing.

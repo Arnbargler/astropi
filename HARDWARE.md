@@ -68,11 +68,22 @@ Bus/device numbers and `/dev/sda`/ `/dev/ttyACM0` may change after reconnect; us
 - Crucial: **require a mounted filesystem with this UUID** before writing captures. **Never** silently fill `/dev/mmcblk0` if flash drive is absent. Check free space, write via `.partial` → `fsync` → atomic rename, and verify/capture errors.
 - Last tested drive occupancy was **2.2 GiB used / 57 GiB available** (4%), after endurance; do not assume this remains current.
 
+## Browser live-preview performance (verified on Pi, 2026-10-27)
+
+At the **50 ms exposure** preset with the new two-thread JPEG preview pipeline, the user observed:
+
+| Preview mode | RAW acquisition | Browser preview | Preview processing |
+| --- | ---: | ---: | ---: |
+| Debayer On (colour) | **15.8 FPS** | **14.8 FPS** | **62 ms** |
+| Debayer Off (grayscale, sampled green sites) | **16.5 FPS** | **16.6 FPS** | **14 ms** |
+
+The prior preview was **2.2 FPS** / **143 ms JPEG processing**, so the new colour path is ~6.7× faster; mono ~7.5× faster. Browser preview FPS is a measured instantaneous/smoothed rate and can briefly exceed RAW FPS; do not interpret that as sustained extra frames. At 50 ms the exposure-only ideal ceiling is 20 FPS, but readout/USB/processing impose overhead. Colour conversion is no longer the primary bottleneck. These numbers are snapshots, not a full benchmarking sweep or verified 30 s behaviour.
+
 ## What remains unresolved (not pre-development blockers)
 
-1. **Read-only status service source is now in GitHub; not yet Pi-tested.** Camera/mount successes still come from separate probe scripts. Camera capture integration and systemd auto-start remain future development.
+1. **Pi browser status, live SV705C colour preview and current fast preview worker are verified.** Exposure/gain preset response and full 1–30-second range, RAW/FITS capture integration and systemd auto-start still require verification/development.
 2. **Mount:** sky-pointing alignment model, Alt/Az GoTo, tracking/stop control and Park; offline location/time recovery; abnormal link-failure safety. Home works but does not establish pointing accuracy.
-3. **Camera:** long-exposure/scientific FITS metadata, colour calibration, live-preview performance, valid ROI/binning modes beyond proven full-frame 1×, predictable recovery after capture restart or USB faults.
+3. **Camera:** long-exposure/scientific FITS metadata, colour calibration, valid ROI/binning modes beyond proven full-frame 1×, predictable recovery after capture restart or USB faults. Preview now reaches camera-limited speed at 50 ms; retest any larger processing pipeline changes.
 4. **Physical field deployment:** actual optical tube and 12 V battery/buck wiring, cable clearance on Home/GoTo, safe physical Cancel, offline network and trusted time, sustained battery runtime. The successful test was with connected but **stationary** AM3N.
 5. **Service:** one process owns camera SDK; one serialized mount command queue; capture sequences must survive browser disconnect; one operator lease; timestamps/site/UUID validated before scientific recordings.
 
