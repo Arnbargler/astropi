@@ -11,8 +11,12 @@ const GAIN = [0,5,10,20,30,50,75,100];
 
 function harness() {
   const elements = new Map(), intervals = new Map(), calls = [];
+  const documentHandlers = {};
+  const windowHandlers = {};
+  let documentHidden = false;
   let capture = {phase:"idle",files:[],directory:null,total_frames:0,completed_frames:0,directories:[]};
   let mount = {phase:"disconnected",connected:false,model:null,firmware:null,
+    motion_phase:"idle",motion_armed:false,stop_stable:false,motion_warning:null,
     altitude_text:null,azimuth_text:null,ra_text:null,dec_text:null,
     raw_status:null,updated_utc:null,last_error:null};
   let camera = {
@@ -44,6 +48,21 @@ function harness() {
     })};
     if (url === "/api/camera/progress") return {ok:true,json:async()=>({...camera,capture:{...capture}})};
     if (url === "/api/mount/status") return {ok:true,json:async()=>({...mount})};
+    if (url === "/api/mount/arm") {
+      mount={...mount,motion_armed:true,stop_stable:false,motion_phase:"idle"};
+      return {ok:true,json:async()=>({ok:true})};
+    }
+    if (url === "/api/mount/jog") {
+      mount={...mount,motion_armed:true,motion_phase:"moving",
+        motion_direction:payload.direction};
+      return {ok:true,json:async()=>({ok:true,direction:payload.direction})};
+    }
+    if (url === "/api/mount/jog-heartbeat")
+      return {ok:true,json:async()=>({ok:true})};
+    if (url === "/api/mount/stop") {
+      mount={...mount,motion_armed:false,motion_phase:"stopping",motion_direction:null};
+      return {ok:true,json:async()=>({ok:true,state:"stop_requested"})};
+    }
     if (url === "/api/mount/connect") {
       mount = {...mount,phase:"connected",connected:true,model:"AM3N",
         firmware:"1.8.8",altitude_text:"+01*30:50",azimuth_text:"013*43:10",
@@ -54,6 +73,7 @@ function harness() {
     }
     if (url === "/api/mount/disconnect") {
       mount = {...mount,phase:"disconnected",connected:false,
+        motion_phase:"idle",motion_armed:false,
         altitude_text:null,azimuth_text:null,ra_text:null,dec_text:null,
         raw_status:null,updated_utc:null};
       return {ok:true,json:async()=>({ok:true})};
@@ -88,7 +108,10 @@ function harness() {
   };
   const code = fs.readFileSync(path.join(__dirname,"../astropi/static/app.js"),"utf8");
   vm.runInNewContext(code, {
-    document:{getElementById:el},
+    document:{getElementById:el,
+      addEventListener:(name,fn)=>{documentHandlers[name]=fn;},
+      get hidden(){return documentHidden;}},
+    window:{addEventListener:(name,fn)=>{windowHandlers[name]=fn;}},
     fetch, setInterval:(fn,ms)=>intervals.set(ms,fn),Date,Number,Math,Promise
   });
   return {el, intervals, calls,
@@ -98,6 +121,9 @@ function harness() {
     updateCapture:data=>{capture={...capture,...data}},
     mount:()=>mount,
     updateMount:data=>{mount={...mount,...data}},
+    documentEvent:kind=>documentHandlers[kind](),
+    windowEvent:kind=>windowHandlers[kind](),
+    setHidden:flag=>{documentHidden=flag;},
     flush:()=>new Promise(resolve=>setImmediate(resolve))
   };
 }
@@ -305,4 +331,63 @@ test("mount UI has only read-only connection actions, not motion controls",()=>{
   assert.match(html,/id="mount-connect"/);
   assert.match(html,/id="mount-disconnect"/);
   assert.doesNotMatch(html,/id="mount-(?:home|goto|slew|track|park|east|west|north|south)"/);
+});
+
+
+test("motion buttons cannot command mount without operator and explicit arm",async()=>{
+  const h=harness();
+  await h.flush();
+  assert.equal(h.el("mount-north").disabled,true);
+  assert.equal(h.el("mount-stop").disabled,true);
+  await h.el("take-control").dispatch("click");
+  await h.el("mount-connect").dispatch("click");
+  assert.equal(h.el("mount-stop").disabled,false);
+  assert.equal(h.el("mount-north").disabled,true);
+  assert.equal(h.el("mount-arm").disabled,false);
+  assert.equal(h.calls.filter(c=>c.url==="/api/mount/jog").length,0);
+  await h.el("mount-arm").dispatch("click");
+  assert.equal(h.el("mount-east").disabled,false);
+  await h.el("mount-east").dispatch("pointerdown");
+  let requests=h.calls.filter(c=>c.url==="/api/mount/jog");
+  assert.equal(requests.length,1);
+  assert.equal(requests[0].payload.direction,"east");
+  await h.intervals.get(150)();
+  assert.equal(h.calls.filter(c=>c.url==="/api/mount/jog-heartbeat").length,1);
+  h.documentEvent("pointerup");
+  await h.flush();
+  assert.equal(h.calls.filter(c=>c.url==="/api/mount/stop").length,1);
+  assert.equal(h.el("mount-east").disabled,true,
+    "each jog requires a fresh explicit arm");
+});
+
+test("window blur and visibility change request Stop",async()=>{
+  const h=harness();
+  await h.flush();
+  await h.el("take-control").dispatch("click");
+  await h.el("mount-connect").dispatch("click");
+  await h.el("mount-arm").dispatch("click");
+  await h.el("mount-north").dispatch("pointerdown");
+  h.windowEvent("blur");
+  await h.flush();
+  assert.equal(h.calls.filter(c=>c.url==="/api/mount/stop").length,1);
+  h.updateMount({motion_phase:"idle",motion_armed:false,stop_stable:true});
+  await h.intervals.get(1000)();
+  await h.el("mount-arm").dispatch("click");
+  await h.el("mount-west").dispatch("pointerdown");
+  h.setHidden(true);
+  h.documentEvent("visibilitychange");
+  await h.flush();
+  assert.equal(h.calls.filter(c=>c.url==="/api/mount/stop").length,2);
+});
+
+test("emergency stop is available in the UI without owning operator lease",async()=>{
+  const h=harness();
+  await h.flush();
+  await h.el("take-control").dispatch("click");
+  await h.el("mount-connect").dispatch("click");
+  await h.el("release-control").dispatch("click");
+  assert.equal(h.el("mount-arm").disabled,true);
+  assert.equal(h.el("mount-stop").disabled,false);
+  await h.el("mount-stop").dispatch("click");
+  assert.equal(h.calls.filter(c=>c.url==="/api/mount/stop").length,1);
 });
