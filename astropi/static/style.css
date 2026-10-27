@@ -29,3 +29,5 @@ button:hover:not(:disabled){background:#2a5669}button:disabled{opacity:.38;curso
 [hidden]{display:none!important}
 @media(max-width:800px){.preview-layout{grid-template-columns:1fr}.cards{grid-template-columns:1fr}.preview-frame{height:320px}}
 @media(max-width:650px){.shell{padding:18px}.intro{padding:28px 0 20px}h2{font-size:28px}.card{padding:18px}.preview-frame{height:250px}header{flex-wrap:wrap}}
+
+.settings-message{color:#8dd4aa;font-size:12px;min-height:18px}

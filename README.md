@@ -1,8 +1,8 @@
 # AstroPi — project handoff
 
-**Status (2026-10-27): Hardware integration proven; v0.1 browser status verified on Pi. Experimental v0.2 SDK colour-preview code committed but not yet Pi-tested; mount control remains unimplemented.** AstroPi is a Raspberry Pi 4-hosted, browser-operated deep-sky camera and telescope controller for one SVBONY SV705C and one ZWO AM3N mount, operating in **Alt/Az only**.
+**Status (2026-10-27): Hardware integration proven; browser status and SV705C live colour preview verified on Pi. Preview UI/timing improvements are committed for retesting; mount control remains unimplemented.** AstroPi is a Raspberry Pi 4-hosted, browser-operated deep-sky camera and telescope controller for one SVBONY SV705C and one ZWO AM3N mount, operating in **Alt/Az only**.
 
-This private GitHub repository is the durable handoff for a **new AI assistant or development session**. Do not infer that a tested terminal script is a committed application: **the status service is Pi-tested; the newer camera preview driver is experimental until the next on-Pi test, and mount control is not implemented**.
+This private GitHub repository is the durable handoff for a **new AI assistant or development session**. Do not infer that a tested terminal script is a committed application: **the browser status and live colour camera preview work on the Pi; new frame-pacing and input-polling refinements still require verification, and mount control is not implemented**.
 
 ## Read in this order
 

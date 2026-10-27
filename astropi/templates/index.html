@@ -30,7 +30,7 @@
           <img id="preview-image" alt="Live SV705C camera preview" hidden>
           <span id="preview-placeholder">Camera preview is not running</span>
         </div>
-        <div class="preview-footer"><span id="camera-phase">Camera stopped</span><span id="frame-count">0 preview frames</span></div>
+        <div class="preview-footer"><span id="camera-phase">Camera stopped</span><span id="frame-count">0 JPEG frames · — fps</span></div>
       </article>
       <article class="card controls">
         <h3>SVBONY SV705C</h3>
@@ -44,6 +44,7 @@
         <label for="gain">Gain</label>
         <input id="gain" type="number" min="0" max="100" step="1" value="0" disabled>
         <button id="apply-settings" disabled>Apply settings</button>
+        <p id="settings-message" role="status" class="settings-message"></p>
         <p id="camera-error" role="alert"></p>
         <p class="hint">Images are disposable 8-bit JPEG previews. No science RAW/FITS data is being recorded.</p>
       </article>
@@ -56,7 +57,7 @@
       <article class="card"><h3>Raspberry Pi</h3><div class="metric" id="pi-temp">Checking…</div>
         <p id="pi-uptime">Checking uptime…</p></article>
     </section>
-    <footer>Trusted LAN only · Status every 3 seconds · Updated: <span id="last-update">—</span></footer>
+    <footer>Trusted LAN only · Image checks every 200 ms; status every 3 seconds · Updated: <span id="last-update">—</span></footer>
   </main>
 </body>
 </html>

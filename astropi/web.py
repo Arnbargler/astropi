@@ -69,14 +69,19 @@ def create_app(settings: Settings | None = None, camera=None, lease=None) -> Fla
         require_operator()
         payload = request.get_json(silent=True) or {}
         try:
-            worker.configure(payload.get("gain"), payload.get("exposure_us"))
+            request_id = worker.configure(payload.get("gain"), payload.get("exposure_us"))
         except ValueError as exc:
             return jsonify(error=str(exc)), 400
         except RuntimeError as exc:
             return jsonify(error=str(exc)), 409
         except Full:
             return jsonify(error="Camera command queue is full"), 429
-        return jsonify(ok=True), 202
+        return jsonify(ok=True, request_id=request_id), 202
+
+    @app.get("/api/camera/progress")
+    def camera_progress():
+        # Cheap polling path; avoids findmnt and USB scans on every frame check.
+        return jsonify(worker.status())
 
     @app.get("/api/camera/frame.jpg")
     def frame():

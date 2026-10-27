@@ -21,6 +21,11 @@ class CameraWorker:
         self._sequence = 0
         self._gain = 0
         self._exposure_us = 100_000
+        self._settings_request_id = 0
+        self._settings_applied_id = 0
+        self._capture_fps = 0.0
+        self._preview_fps = 0.0
+        self._preview_ms = 0.0
 
     def status(self):
         with self._lock:
@@ -28,6 +33,10 @@ class CameraWorker:
                 "phase": self._phase, "last_error": self._error,
                 "frame_number": self._sequence, "has_frame": self._image is not None,
                 "gain": self._gain, "exposure_us": self._exposure_us,
+                "settings_applied_id": self._settings_applied_id,
+                "capture_fps": self._capture_fps,
+                "preview_fps": self._preview_fps,
+                "preview_processing_ms": self._preview_ms,
             }
 
     def frame(self):
@@ -44,6 +53,9 @@ class CameraWorker:
             self._error = None
             self._image = None
             self._sequence = 0
+            self._settings_request_id = 0
+            self._settings_applied_id = 0
+            self._capture_fps = self._preview_fps = self._preview_ms = 0.0
             self._thread = threading.Thread(target=self._run, name="sv705c-sdk", daemon=True)
             self._thread.start()
             return True
@@ -64,7 +76,10 @@ class CameraWorker:
         with self._lock:
             if self._phase not in ("connecting", "running"):
                 raise RuntimeError("Start the camera first")
-            self._commands.put_nowait((gain, exposure_us))
+            request_id = self._settings_request_id + 1
+            self._commands.put_nowait((request_id, gain, exposure_us))
+            self._settings_request_id = request_id
+            return request_id
 
     def _run(self):
         driver = None
@@ -85,16 +100,19 @@ class CameraWorker:
             raw = C.create_string_buffer(RAW_BYTES)
             timeouts = 0
             last_preview = 0.0
+            last_capture = None
+            last_preview_complete = None
             with self._lock:
                 self._phase = "running"
             while not self._stop.is_set():
                 try:
                     while True:
-                        requested_gain, requested_exposure = self._commands.get_nowait()
+                        request_id, requested_gain, requested_exposure = self._commands.get_nowait()
                         exposure_us = driver.set_control(EXPOSURE, requested_exposure)
                         gain = driver.set_control(GAIN, requested_gain)
                         with self._lock:
                             self._gain, self._exposure_us = gain, exposure_us
+                            self._settings_applied_id = request_id
                 except Empty:
                     pass
                 wait_ms = min(8_000, max(2_500, int(exposure_us / 1000) + 1_500))
@@ -107,13 +125,32 @@ class CameraWorker:
                     raise
                 timeouts = 0
                 now = time.monotonic()
-                if now - last_preview < 0.75:
+                if last_capture is not None and now > last_capture:
+                    measured = 1.0 / (now - last_capture)
+                    with self._lock:
+                        previous = self._capture_fps
+                        self._capture_fps = round(measured if previous == 0 else 0.25 * measured + 0.75 * previous, 2)
+                last_capture = now
+                # Four previews/second maximum, not the old 750ms artificial cap.
+                # Acquisition continues between previews; source RAW is never altered.
+                if now - last_preview < 0.25:
                     continue
                 jpeg = raw16_to_jpeg(raw)
-                last_preview = now
+                finished = time.monotonic()
+                processing_ms = 1000.0 * (finished - now)
+                if last_preview_complete is not None and finished > last_preview_complete:
+                    measured = 1.0 / (finished - last_preview_complete)
+                else:
+                    measured = 0.0
+                last_preview = finished
+                last_preview_complete = finished
                 with self._lock:
                     self._image = jpeg
                     self._sequence += 1
+                    self._preview_ms = round(processing_ms, 1)
+                    if measured:
+                        previous = self._preview_fps
+                        self._preview_fps = round(measured if previous == 0 else 0.25 * measured + 0.75 * previous, 2)
         except Exception as exc:
             error = str(exc)
         finally:

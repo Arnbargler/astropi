@@ -1,10 +1,10 @@
 # AstroPi development guide (read-only browser skeleton present)
 
-**Status: read-only browser service verified on Pi (2026-10-27); first integrated SV705C preview failed in control initialization with SDK code 16. Exposure-before-gain fix is coded and awaiting Pi verification.** Read [REQUIREMENTS.md](REQUIREMENTS.md) for authoritative scope and [HARDWARE.md](HARDWARE.md) for **actually verified** devices and quirks. This file is a recommended route to implementation, **not a claim that the proposed hardware-control modules or system services already exist**. Keep implementation modular and modest; avoid one enormous `app.py`.
+**Status: browser status and SV705C colour preview verified on Pi (2026-10-27); a newer preview-pacing and input-polling fix is awaiting Pi retest.** Read [REQUIREMENTS.md](REQUIREMENTS.md) for authoritative scope and [HARDWARE.md](HARDWARE.md) for **actually verified** devices and quirks. This file is a recommended route to implementation, **not a claim that the proposed hardware-control modules or system services already exist**. Keep implementation modular and modest; avoid one enormous `app.py`.
 
 ## First working milestone
 
-Build a small **Pi-hosted Python backend** with a browser UI that can connect to the one SV705C, produce live colour previews, set exposure/gain, save individual full-resolution RAW/FITS captures to the UUID-verified USB data drive, and show clear errors. It must not require the N100 desktop to operate. The UI uses **Flask**; experimental camera preview is committed, but hardware camera integration still needs Pi testing. Full-quality capture, mount control and systemd integration remain unimplemented.
+Build a small **Pi-hosted Python backend** with a browser UI that can connect to the one SV705C, produce live colour previews, set exposure/gain, save individual full-resolution RAW/FITS captures to the UUID-verified USB data drive, and show clear errors. It must not require the N100 desktop to operate. The UI uses **Flask**; SV705C colour preview was observed on the Pi, with performance/UI refinements awaiting retest. Full-quality capture, mount control and systemd integration remain unimplemented.
 
 Do not build a general camera-agnostic driver system or implement unselected features. Run on trusted local Wi-Fi/LAN; Internet access must not be necessary for operation except optional NTP syncing.
 

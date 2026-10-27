@@ -117,3 +117,52 @@ def test_worker_initializes_exposure_before_gain():
     controls = [ev[1] for ev in events if isinstance(ev, tuple)]
     assert controls[:2] == [EXPOSURE, GAIN]
     assert worker.status()["phase"] == "stopped"
+
+
+def test_worker_setting_command_is_acknowledged_only_when_applied(monkeypatch):
+    import threading
+    import time
+    from astropi.camera import worker as module
+    from astropi.camera.sdk import EXPOSURE, GAIN
+
+    monkeypatch.setattr(module, "raw16_to_jpeg", lambda raw: b"\xff\xd8test")
+    active = threading.Event()
+    observed = []
+
+    class FakeDriver:
+        def open(self):
+            pass
+        def set_control(self, control, value):
+            observed.append((control, value))
+            return value
+        def start(self):
+            active.set()
+        def get_frame(self, raw, wait_ms):
+            time.sleep(0.01)
+        def close(self):
+            pass
+
+    worker = CameraWorker(driver_factory=FakeDriver)
+    assert worker.start()
+    assert active.wait(timeout=3)
+    id1 = worker.configure(25, 200_000)
+    assert id1 == 1
+    deadline = time.monotonic() + 3
+    while worker.status()["settings_applied_id"] < id1 and time.monotonic() < deadline:
+        time.sleep(0.01)
+    state = worker.status()
+    assert state["settings_applied_id"] == id1
+    assert state["gain"] == 25
+    assert state["exposure_us"] == 200_000
+    assert observed[-2:] == [(EXPOSURE, 200_000), (GAIN, 25)]
+    worker.stop()
+    worker._thread.join(timeout=3)
+    assert not worker._thread.is_alive()
+
+
+def test_fast_camera_progress_endpoint_works(tmp_path):
+    config = Settings(tmp_path, "expected", tmp_path / "serial", tmp_path / "usb")
+    client = create_app(settings=config, camera=FakeCamera()).test_client()
+    response = client.get("/api/camera/progress")
+    assert response.status_code == 200
+    assert response.get_json()["frame_number"] == 0
