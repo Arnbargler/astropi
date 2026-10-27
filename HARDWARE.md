@@ -22,11 +22,12 @@ The SDK distribution is already extracted **on the AstroPi**, separate from the 
 - **Original archive:** `/home/arn/svbony-sdk/linux-SVBCameraSDK-v1.13.4.zip` (archive filename indicates SDK **v1.13.4**)
 - **Directories/files observed:** `include/`, `lib/`, `demo/`, `readme.txt`, `90-ckusb.rules`
 - **Library builds seen:** `lib/armv6/`, `lib/armv7/`, `lib/armv8/`, `lib/x86/`, `lib/x64/`; these include `libSVBCameraSDK.so`, a static `.a` archive, and bundled `libusb-1.0` files.
-- **Likely native ARM64 library:** `/home/arn/svbony-sdk/SVBCameraSDK/lib/armv8/libSVBCameraSDK.so` (for host `aarch64`). **Architecture must still be checked with `file`;** directory naming alone does not verify the ELF build.
-- **Likely bundled USB library:** `/home/arn/svbony-sdk/SVBCameraSDK/lib/armv8/libusb-1.0.so.0` (assess actual shared-library dependencies before choosing system versus bundled libusb).
-- **Status:** Paths and file listing supplied from `arn@astropi`; actual ELF architecture, dependency loading, udev-rule installation, and SV705C detection/capture **not yet verified**.
+- **Verified native ARM64 SDK library:** `/home/arn/svbony-sdk/SVBCameraSDK/lib/armv8/libSVBCameraSDK.so`. `file` reports **ELF 64-bit LSB shared object, ARM aarch64**, dynamically linked.
+- **Verified dependency resolution:** `ldd` resolves every dependency with **no missing libraries**: `libstdc++.so.6`, `libusb-1.0.so.0`, `libm.so.6`, `libgcc_s.so.1`, `libc.so.6`, `libudev.so.1`, and `libcap.so.2`.
+- **USB dependency:** `libusb-1.0.so.0` resolves to the installed system library at `/lib/aarch64-linux-gnu/libusb-1.0.so.0`; the SDK-bundled libusb is not currently necessary for dependency resolution.
+- **Status:** ARM64 binary architecture and shared-library dependencies **verified on AstroPi (2026-10-27)**. SDK loading in an application, USB permissions/udev installation, and successful SV705C detection/capture **not yet verified**.
 
-For implementation, use the confirmed ARM64 SDK library once validated; do not use the x86 builds. Don't commit vendor SDK binaries to this repository.
+For implementation, use this verified ARM64 SDK build; do not use the x86 builds. Don't commit vendor SDK binaries to this repository.
 
 ## Verified running-system baseline (2026-10-27)
 
@@ -52,7 +53,7 @@ Measurements below are from **`arn@astropi`**, not the separate N100 desktop. Th
 - Exact USB and serial port topology; persistent device identification.
 - Connect and verify 64 GB USB 3 thumb drive; choose filesystem and configure persistent mount by UUID (e.g., `/media/astropi-data`) as FITS/raw capture destination. No formatting or filesystem changes approved yet.
 - Power-supply capacity, connector polarity, buck-converter ratings and cable layout.
-- Confirm the extracted SDK's actual library version and ARM64 compatibility; validate udev rules, library dependencies and a successful SV705C capture. Record AM3 firmware version and hardware tests.
+- Confirm runtime SDK loading and reported SDK version; validate udev rules, camera detection and a successful SV705C capture. Record AM3 firmware version and hardware tests.
 
 ## Rules
 
