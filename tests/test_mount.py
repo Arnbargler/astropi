@@ -370,89 +370,87 @@ def test_emergency_stop_from_idle_is_explicit_serial_stop(tmp_path):
 
 
 
-def test_hard_jog_time_limit_with_ongoing_heartbeats(tmp_path):
+def test_continuous_jog_is_not_time_limited_while_heartbeats_arrive(tmp_path):
+    """Simulate 15+ seconds of holding the button without sleeping 15s."""
     alias = tmp_path / "port"
     alias.touch()
+    now = [100.0]
     factory = MotionFactory()
-    worker = MountWorker(alias, serial_factory=factory, poll_interval=0.07)
+    worker = MountWorker(alias, serial_factory=factory, poll_interval=0.07,
+                         clock=lambda: now[0])
     worker.connect()
     wait_until(lambda: worker.status()["connected"])
     worker.arm()
     worker.jog("east")
     wait_until(lambda: ":Me#" in factory.ports[0].commands)
-    # Periodic renewals do not allow unlimited movement.
-    began = time.monotonic()
-    while time.monotonic() - began < 4 and ":Q#" not in factory.ports[0].commands:
-        try:
-            worker.heartbeat("east")
-        except RuntimeError:
-            pass
-        time.sleep(0.15)
-    assert ":Q#" in factory.ports[0].commands
-    assert worker.status()["last_stop_reason"] == "Maximum jog duration reached"
+    for _ in range(60):
+        now[0] += 0.3
+        assert worker.heartbeat("east")
+        time.sleep(0.005)
+    assert worker.status()["motion_phase"] == "moving"
+    assert worker.status()["motion_armed"]
+    assert ":Q#" not in factory.ports[0].commands
+    # Release-to-Stop is still required and is not assumed completed yet.
+    worker.emergency_stop("Button released")
+    wait_until(lambda: ":Q#" in factory.ports[0].commands)
+    assert worker.status()["last_stop_reason"] == "Button released"
     assert not worker.status()["motion_armed"]
     worker.disconnect()
     worker._thread.join(timeout=3)
 
-
-
-def test_manual_speed_presets_have_safe_whitelist_and_time_caps(tmp_path):
+def test_manual_speed_presets_are_whitelisted_without_duration_caps(tmp_path):
     from astropi.mount.worker import JOG_SPEEDS
     assert JOG_SPEEDS == {
-        "slow": (":R5#", 3.0),
-        "medium": (":Rv20.00#", 2.0),
-        "fast": (":Rv60.00#", 1.0),
+        "slow": ":R5#",
+        "medium": ":Rv20.00#",
+        "fast": ":Rv60.00#",
     }
-    alias=tmp_path / "port"
+    alias = tmp_path / "port"
     alias.touch()
-    factory=MotionFactory()
-    worker=MountWorker(alias,serial_factory=factory,poll_interval=0.06)
+    factory = MotionFactory()
+    worker = MountWorker(alias, serial_factory=factory, poll_interval=0.06)
     worker.connect()
-    wait_until(lambda:worker.status()["connected"])
-    for speed,(rate,seconds) in JOG_SPEEDS.items():
+    wait_until(lambda: worker.status()["connected"])
+    for speed, rate in JOG_SPEEDS.items():
         worker.arm()
-        with pytest.raises(ValueError):
-            worker.jog("east",speed=":Rv1440#")
-        with pytest.raises(ValueError):
-            worker.jog("east",speed=1440)
-        worker.jog("east",speed=speed)
-        wait_until(lambda:worker.status()["motion_phase"]=="moving")
-        port=factory.ports[0]
-        assert port.commands.index(rate) < max(i for i,v in enumerate(port.commands) if v==":Me#")
-        assert worker.status()["jog_speed"]==speed
-        remaining=worker._hard_deadline-worker._clock()
-        assert 0 < remaining <= seconds
+        for bad in (":Rv1440#", 1440, None):
+            with pytest.raises(ValueError):
+                worker.jog("east", speed=bad)
+        worker.jog("east", speed=speed)
+        wait_until(lambda: worker.status()["motion_phase"] == "moving")
+        commands = factory.ports[0].commands
+        assert commands.index(rate) < max(i for i, cmd in enumerate(commands) if cmd == ":Me#")
+        assert worker.status()["jog_speed"] == speed
+        assert worker.heartbeat("east")
+        assert not hasattr(worker, "_hard_deadline")
         worker.emergency_stop()
-        wait_until(lambda:worker.status()["stop_stable"],timeout=5)
+        wait_until(lambda: worker.status()["stop_stable"], timeout=5)
         assert not worker.status()["motion_armed"]
     worker.disconnect()
     worker._thread.join(timeout=3)
 
-
-def test_fast_speed_caps_at_one_second_even_with_keepalive(tmp_path):
-    alias=tmp_path / "port"
+def test_fast_jog_can_continue_past_old_one_second_limit(tmp_path):
+    alias = tmp_path / "port"
     alias.touch()
-    factory=MotionFactory()
-    worker=MountWorker(alias,serial_factory=factory,poll_interval=0.06)
+    now = [50.0]
+    factory = MotionFactory()
+    worker = MountWorker(alias, serial_factory=factory, poll_interval=0.06,
+                         clock=lambda: now[0])
     worker.connect()
-    wait_until(lambda:worker.status()["connected"])
+    wait_until(lambda: worker.status()["connected"])
     worker.arm()
-    worker.jog("north",speed="fast")
-    wait_until(lambda:":Mn#" in factory.ports[0].commands)
-    end=time.monotonic()+2.3
-    while time.monotonic()<end and ":Q#" not in factory.ports[0].commands:
-        try:
-            worker.heartbeat("north")
-        except RuntimeError:
-            break
-        time.sleep(0.12)
-    # HTTP heartbeat can discover expiry before the serial-owner thread
-    # finishes its queued Stop write. Wait for the actual :Q# transmission.
-    wait_until(lambda:":Q#" in factory.ports[0].commands,timeout=3)
-    assert worker.status()["last_stop_reason"]=="Maximum jog duration reached"
+    worker.jog("north", speed="fast")
+    wait_until(lambda: ":Mn#" in factory.ports[0].commands)
+    for _ in range(15):
+        now[0] += 0.2
+        assert worker.heartbeat("north")
+        time.sleep(0.007)
+    assert worker.status()["motion_phase"] == "moving"
+    assert ":Q#" not in factory.ports[0].commands
+    worker.emergency_stop()
+    wait_until(lambda: ":Q#" in factory.ports[0].commands)
     worker.disconnect()
     worker._thread.join(timeout=3)
-
 
 def test_unknown_jog_speed_http_rejected_without_any_motion(tmp_path):
     alias=tmp_path / "port"
