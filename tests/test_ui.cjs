@@ -54,10 +54,6 @@ function harness() {
       mount = {...mount,environment_phase:"queued"};
       return {ok:true,json:async()=>({ok:true,state:"queued"})};
     }
-    if (url === "/api/mount/arm") {
-      mount={...mount,motion_armed:true,stop_stable:false,motion_phase:"idle"};
-      return {ok:true,json:async()=>({ok:true})};
-    }
     if (url === "/api/mount/jog") {
       mount={...mount,motion_armed:true,motion_phase:"moving",
         motion_direction:payload.direction};
@@ -333,17 +329,19 @@ test("lost mount data is never shown as fresh pointing",async()=>{
   assert.equal(h.el("mount-connect").disabled,false);
 });
 
-test("mount UI has bounded manual controls but no Home GoTo Park or tracking",()=>{
+test("mount UI has immediate manual controls but no Home GoTo Park or tracking",()=>{
   const html=fs.readFileSync(path.join(__dirname,"../astropi/templates/index.html"),"utf8");
   assert.match(html,/id="mount-connect"/);
   assert.match(html,/id="mount-disconnect"/);
-  assert.doesNotMatch(html,/id="mount-(?:home|goto|slew|track|park)"/);
+  assert.doesNotMatch(html,/id="mount-(?:home|goto|track|park)"/);
   assert.match(html,/id="mount-stop"/);
-  assert.match(html,/id="mount-arm"/);
+  assert.doesNotMatch(html,/id="mount-arm"/);
+  assert.match(html,/id="mount-speed-slew"/);
+  assert.match(html,/id="mount-speed-max"/);
 });
 
 
-test("motion buttons cannot command mount without operator and explicit arm",async()=>{
+test("motion buttons start immediately for operator, no arm step",async()=>{
   const h=harness();
   await h.flush();
   assert.equal(h.el("mount-north").disabled,true);
@@ -351,10 +349,8 @@ test("motion buttons cannot command mount without operator and explicit arm",asy
   await h.el("take-control").dispatch("click");
   await h.el("mount-connect").dispatch("click");
   assert.equal(h.el("mount-stop").disabled,false);
-  assert.equal(h.el("mount-north").disabled,true);
-  assert.equal(h.el("mount-arm").disabled,false);
+  assert.equal(h.el("mount-north").disabled,false);
   assert.equal(h.calls.filter(c=>c.url==="/api/mount/jog").length,0);
-  await h.el("mount-arm").dispatch("click");
   assert.equal(h.el("mount-east").disabled,false);
   await h.el("mount-east").dispatch("pointerdown");
   let requests=h.calls.filter(c=>c.url==="/api/mount/jog");
@@ -367,7 +363,11 @@ test("motion buttons cannot command mount without operator and explicit arm",asy
   await h.flush();
   assert.equal(h.calls.filter(c=>c.url==="/api/mount/stop").length,1);
   assert.equal(h.el("mount-east").disabled,true,
-    "each jog requires a fresh explicit arm");
+    "cannot restart until Stop/axes stability is confirmed");
+  h.updateMount({motion_phase:"idle",stop_stable:true});
+  await h.intervals.get(1000)();
+  assert.equal(h.el("mount-east").disabled,false,
+    "subsequent jog starts without separate arm");
 });
 
 test("window blur and visibility change request Stop",async()=>{
@@ -375,14 +375,12 @@ test("window blur and visibility change request Stop",async()=>{
   await h.flush();
   await h.el("take-control").dispatch("click");
   await h.el("mount-connect").dispatch("click");
-  await h.el("mount-arm").dispatch("click");
   await h.el("mount-north").dispatch("pointerdown");
   h.windowEvent("blur");
   await h.flush();
   assert.equal(h.calls.filter(c=>c.url==="/api/mount/stop").length,1);
   h.updateMount({motion_phase:"idle",motion_armed:false,stop_stable:true});
   await h.intervals.get(1000)();
-  await h.el("mount-arm").dispatch("click");
   await h.el("mount-west").dispatch("pointerdown");
   h.setHidden(true);
   h.documentEvent("visibilitychange");
@@ -396,14 +394,14 @@ test("emergency stop is available in the UI without owning operator lease",async
   await h.el("take-control").dispatch("click");
   await h.el("mount-connect").dispatch("click");
   await h.el("release-control").dispatch("click");
-  assert.equal(h.el("mount-arm").disabled,true);
+  assert.equal(h.el("mount-east").disabled,true);
   assert.equal(h.el("mount-stop").disabled,false);
   await h.el("mount-stop").dispatch("click");
   assert.equal(h.calls.filter(c=>c.url==="/api/mount/stop").length,1);
 });
 
 
-test("mount speed presets bind to jog requests and lock while armed",async()=>{
+test("mount speed presets bind to immediate jogs and lock while moving",async()=>{
   const h=harness();
   await h.flush();
   await h.el("take-control").dispatch("click");
@@ -412,9 +410,10 @@ test("mount speed presets bind to jog requests and lock while armed",async()=>{
   assert.equal(h.el("mount-speed-medium").disabled,false);
   h.el("mount-speed-medium").dispatch("change");
   assert.equal(h.el("mount-speed-medium").checked,true);
-  await h.el("mount-arm").dispatch("click");
-  assert.equal(h.el("mount-speed-fast").disabled,true);
   await h.el("mount-east").dispatch("pointerdown");
+  assert.equal(h.el("mount-speed-fast").disabled,true);
+  assert.equal(h.el("mount-west").disabled,true);
+  assert.equal(h.el("mount-east").disabled,false);
   const requests=h.calls.filter(x=>x.url==="/api/mount/jog");
   assert.equal(requests.length,1);
   assert.deepEqual(requests[0].payload,{direction:"east",speed:"medium"});
@@ -470,4 +469,30 @@ test("clock/site queries have no setter controls or browser-side serial commands
   const html=fs.readFileSync(path.join(__dirname,"../astropi/templates/index.html"),"utf8");
   assert.match(html,/id="mount-read-environment"/);
   assert.doesNotMatch(html,/id="mount-(?:set-time|set-location|set-date|sync-clock)"/);
+});
+
+
+test("720x and 1440x are selected without arm, with release Stop", async()=>{
+  const h=harness();
+  await h.flush();
+  await h.el("take-control").dispatch("click");
+  await h.el("mount-connect").dispatch("click");
+  h.el("mount-speed-slew").dispatch("change");
+  assert.equal(h.el("mount-speed-slew").checked,true);
+  await h.el("mount-north").dispatch("pointerdown");
+  const sends=h.calls.filter(c=>c.url==="/api/mount/jog");
+  assert.deepEqual(sends[0].payload,{direction:"north",speed:"slew"});
+  h.documentEvent("pointerup");
+  await h.flush();
+  assert.equal(h.calls.filter(c=>c.url==="/api/mount/stop").length,1);
+  h.updateMount({motion_phase:"idle",motion_armed:false,stop_stable:true});
+  await h.intervals.get(1000)();
+  h.el("mount-speed-max").dispatch("change");
+  assert.equal(h.el("mount-speed-max").checked,true);
+  await h.el("mount-west").dispatch("pointerdown");
+  const second=h.calls.filter(c=>c.url==="/api/mount/jog");
+  assert.deepEqual(second[1].payload,{direction:"west",speed:"max"});
+  h.documentEvent("pointerup");
+  await h.flush();
+  assert.equal(h.calls.filter(c=>c.url==="/api/mount/stop").length,2);
 });
