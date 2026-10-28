@@ -18,6 +18,7 @@ function harness() {
   let mount = {phase:"disconnected",connected:false,model:null,firmware:null,
     motion_phase:"idle",motion_armed:false,stop_stable:false,motion_warning:null,
     environment_phase:"idle",environment:null,environment_error:null,
+    time_sync_phase:"idle",time_sync_error:null,time_sync_verified_utc:null,
     jog_speed:"slow",
     altitude_text:null,azimuth_text:null,ra_text:null,dec_text:null,
     raw_status:null,updated_utc:null,last_error:null};
@@ -495,4 +496,40 @@ test("720x and 1440x are selected without arm, with release Stop", async()=>{
   h.documentEvent("pointerup");
   await h.flush();
   assert.equal(h.calls.filter(c=>c.url==="/api/mount/stop").length,2);
+});
+
+
+test("mount automatically synced clock status is visible without clicking read button",async()=>{
+  const h=harness();
+  await h.flush();
+  await h.el("take-control").dispatch("click");
+  await h.el("mount-connect").dispatch("click");
+  h.updateMount({
+    time_sync_phase:"verified",time_sync_error:null,
+    time_sync_verified_utc:"2026-10-28T08:33:07+00:00",
+    environment_phase:"ready",environment_updated_utc:"2026-10-28T08:33:07+00:00",
+    environment:{utc_offset:"+00:00",date:"10/28/26",local_time:"08:33:07",
+      latitude:"+45*17:36",longitude_west:"+075*51:26",sidereal_time:"12:45:00"}
+  });
+  await h.intervals.get(1000)();
+  assert.match(h.el("mount-time-sync").textContent,/VERIFIED/);
+  assert.equal(h.el("mount-env-date").textContent,"10/28/26");
+  assert.equal(h.el("mount-env-time").textContent,"08:33:07");
+  assert.equal(h.el("mount-env-latitude").textContent,"+45*17:36");
+  assert.equal(h.calls.filter(x=>x.url==="/api/mount/environment/read").length,0);
+});
+
+test("NTP unavailable shows honest error while mount remains connected",async()=>{
+  const h=harness();
+  await h.flush();
+  await h.el("take-control").dispatch("click");
+  await h.el("mount-connect").dispatch("click");
+  h.updateMount({time_sync_phase:"error",
+    time_sync_error:"Pi has not confirmed NTP sync",
+    time_sync_verified_utc:null});
+  await h.intervals.get(1000)();
+  assert.match(h.el("mount-time-sync").textContent,/NOT synchronized/);
+  assert.match(h.el("mount-time-sync-error").textContent,/not confirmed NTP/);
+  assert.equal(h.el("mount-east").disabled,false,
+    "manual Alt/Az is still available without a verified sky clock");
 });
