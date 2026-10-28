@@ -2,7 +2,7 @@ name: AstroPi tests
 
 on:
   push:
-    branches: [main, 'feature/**', 'fix/**']
+    branches: [main, 'feature/**', 'fix/**', 'maintenance/**']
   pull_request:
 
 jobs:
