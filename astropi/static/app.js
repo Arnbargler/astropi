@@ -337,6 +337,18 @@ function showMount(data) {
   mountPhase = nextPhase;
   mountMotionPhase = data.motion_phase || "idle";
   mountEnvironmentPhase = data.environment_phase || "idle";
+  const syncPhase = data.time_sync_phase || "idle";
+  const syncLabels = {
+    idle: "Pi NTP → mount clock: not synchronized",
+    checking: "Pi NTP → mount clock: checking NTP synchronization…",
+    syncing: "Pi NTP → mount clock: setting UTC and verifying…",
+    verified: "Pi NTP → mount clock: VERIFIED" +
+      (data.time_sync_verified_utc ? " (" +
+        new Date(data.time_sync_verified_utc).toLocaleTimeString() + ")" : ""),
+    error: "Pi NTP → mount clock: NOT synchronized"
+  };
+  write("mount-time-sync", syncLabels[syncPhase] || ("Clock sync: " + syncPhase));
+  write("mount-time-sync-error", data.time_sync_error || "");
   if (mountPhase !== "connected") heldMountDirection = null;
   const env = mountPhase === "connected" ? data.environment : null;
   write("mount-environment-state", env ?

@@ -158,6 +158,8 @@
         </div>
         <p id="mount-phase" role="status">Mount disconnected</p>
         <p id="mount-model">Model / firmware: —</p>
+        <p id="mount-time-sync" role="status">Pi NTP → mount clock: waiting to connect</p>
+        <p id="mount-time-sync-error" role="alert" class="mount-error"></p>
         <div class="mount-environment">
           <button type="button" id="mount-read-environment" disabled>Read Mount Clock &amp; Site</button>
           <p id="mount-environment-state" role="status">Clock/site not read</p>
@@ -169,7 +171,7 @@
             <div><span>Stored latitude</span><strong id="mount-env-latitude">—</strong></div>
             <div><span>Stored longitude (W+)</span><strong id="mount-env-longitude">—</strong></div>
           </div>
-          <p class="mount-small">Read-only snapshot from AM3N. Values are not synchronized or independently verified against the Pi. Longitude is shown in the mount's west-positive convention.</p>
+          <p class="mount-small">Mount clock is automatically set to Pi NTP time (UTC) on Connect and verified by readback. This panel reads the stored values; the observing-site coordinates are not changed. Longitude uses the mount's west-positive convention.</p>
           <p id="mount-environment-error" role="alert" class="mount-error"></p>
         </div>
         <div class="mount-coordinates" aria-label="Mount reported coordinates">
