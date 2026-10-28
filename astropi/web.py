@@ -122,6 +122,15 @@ def create_app(settings: Settings | None = None, camera=None, lease=None, mount=
             return jsonify(error=str(exc)), 409
         return jsonify(ok=True, state="stop_requested"), 202
 
+    @app.post("/api/mount/environment/read")
+    def read_mount_environment():
+        require_operator()
+        try:
+            mount_worker.request_environment_read()
+        except RuntimeError as exc:
+            return jsonify(error=str(exc)), 409
+        return jsonify(ok=True, state="queued"), 202
+
     @app.get("/api/mount/status")
     def mount_status():
         return jsonify(mount_worker.status())
