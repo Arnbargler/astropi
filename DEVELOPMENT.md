@@ -1,62 +1,84 @@
-# AstroPi development guide (read-only browser skeleton present)
+# AstroPi development handoff
 
-**Status: camera live preview verified on Pi (50ms colour 14.8 FPS and grayscale 16.6 FPS). Single-frame RAW16/FITS/JPG/PNG USB capture produced four real Pi capture folders with correct selected format names; real Pi file sizes and SHA-256 digests passed for 11/11 files; a real full-frame FITS passed independent RAW16 Bayer pixel comparison; five-frame and ten-frame sequences completed on Pi; another 10-frame request was cancelled at 4/10 with contiguous numbering and zero .partial folders. Longer endurance and failure recovery untested. AM3N read-only connection, fixed optional status-flag decoding and browser Disconnect/Reconnect with stale-coordinate clearing are Pi-verified; low-speed manual jog produced a 5′57″ azimuth change on Pi screenshots with reported axes stable after Stop; subsequent controlled post-reboot E-jog/release was reported to stop as expected, without quantitative telemetry; North/South jog/release now user-verified on hardware at low test speed; the 3s hard jog cutoff is now Pi hardware-verified, but the 600ms lost-heartbeat path, West and new 20×/60× speed presets remain hardware-unverified; Pi-NTP-gated UTC clock setter with ACK/readback verification is newly software-tested and awaits mount hardware verification; GoTo/tracking and site setters remain unimplemented.** Read [REQUIREMENTS.md](REQUIREMENTS.md) for authoritative scope and [HARDWARE.md](HARDWARE.md) for **actually verified** devices and quirks. This file is a recommended route to implementation, **not a claim that the proposed hardware-control modules or system services already exist**. Keep implementation modular and modest; avoid one enormous `app.py`.
+Read **README → REQUIREMENTS → HARDWARE → DEVELOPMENT**.
+This is a working Pi application; the requirements also describe future
+features. Treat Git history, not the current docs, as the troubleshooting log.
 
-## First working milestone
+## Current code layout
 
-Build a small **Pi-hosted Python backend** with a browser UI that can connect to the one SV705C, produce live colour previews, set exposure/gain, save individual full-resolution RAW/FITS captures to the UUID-verified USB data drive, and show clear errors. It must not require the N100 desktop to operate. The UI uses **Flask**; SV705C colour preview was observed on the Pi, with performance/UI refinements awaiting retest. One-shot full-resolution RAW/FITS saving produced selected files on Pi USB; file size and SHA-256 verification passed on Pi; one real FITS Bayer frame matched RAW16 pixel-for-pixel; five-frame and ten-frame sequences passed on Pi; cancellation preserved 4/10 completed frames with zero .partial folders; fixed-interval scheduling, mount control and systemd integration remain unimplemented.
-
-Do not build a general camera-agnostic driver system or implement unselected features. Run on trusted local Wi-Fi/LAN; Internet access must not be necessary for operation except optional NTP syncing.
-
-## Suggested modules and ownership
-
-| Module (illustrative names) | Responsibilities |
+| Module | Owner / responsibility |
 | --- | --- |
-| `camera/sdk.py` | **Sole owner of SVBONY SDK handle**; enumerate/info/open before configuration; get frame; controls; safe stop/close; bounded timeout/reconnect. Avoid concurrent direct SDK calls from web requests. |
-| `camera/preview.py` | RAW16 (probable 12-bit left-shift 4) → GRBG demosaic/bin → stretch, white balance, efficient 8-bit JPEG/PNG preview, histogram and focus metrics. Preserve original RAW. |
-| `capture/session.py` | Single exposure and timed sequence orchestration independent of browser connection; one camera acquisition path; optional high-quality recording vs preview-only; meaningful status. |
-| `storage.py` | Verify `/media/astropi-data` **has correct mounted UUID**, space and permissions *before every recording*. Crash-safe `.partial` → `fsync` → atomic rename. FITS metadata including timestamps, settings, site, resolution, Bayer. No SD-card fallback. |
-| `mount/serial.py` | Own **one serialized AM3N USB serial connection** and command queue; use by-id alias, explicit timeouts and validated replies; never send conflicting movement commands. |
-| `mount/safety.py` | Operator-controlled **Stop**, manual jog deadman on release/disconnect and bounded duration; request `:Q#` then verify `:GU#` and altitude/azimuth stable across polls; access to physical Cancel/power fallback. |
-| `mount/pointing.py` | Home/Park/GoTo/tracking with state and limits, UTC/site sync on connect, Alt/Az coordination, user-driven alignment model. **These sky functions are unvalidated**. |
-| `sky/catalog.py` / `sky/atlas.py` | Offline OpenNGC/Messier index and VirtualSky integration via replaceable adapter; sky-chart object selection → internal GoTo only. No manual RA/Dec entry UI. |
-| `server/` and `web/` | Responsive subdued-dark interface; multiple read-only viewers; exactly **one operator lease** with Take Control, timeout, consistent state feed; no login system on trusted LAN. |
+| `run.py` | Flask foreground entry point (no systemd service yet) |
+| `astropi/config.py`, `status.py` | hardware paths, USB presence, recording mount/UUID, Pi metrics; read-only status never opens devices |
+| `astropi/control.py`, `web.py` | single operator token/lease, Flask API, worker state; no SDK or mount serial I/O on Flask request threads |
+| `astropi/camera/sdk.py` | SVBONY SDK wrapper, camera enum/open/stream/restore/close |
+| `astropi/camera/worker.py` | sole camera SDK thread, separate one-slot JPEG preview worker; SDK frame buffer copied before recording |
+| `astropi/camera/preview.py` | disposable GRBG display preview + sparse stats |
+| `astropi/capture/manager.py` | single shot or 2–100 counted-frame job, per-frame write boundary and cancellation, independent of browser |
+| `astropi/capture/formats.py` | original RAW16, science FITS and colour quicklooks |
+| `astropi/capture/storage.py` | USB UUID guard, space preflight, pinned directory-fd writes, fsync, atomic publication and SHA-256 manifest |
+| `astropi/capture/verify.py` | retained read-only integrity/FITS pixel verifier, useful for regression and later field diagnostics |
+| `astropi/mount/worker.py` | **only** serial owner: AM3N query, UTC sync on Connect, direction/speed whitelists, Stop and deadman |
+| `astropi/templates/index.html`, `astropi/static/*` | browser UI, polling, pointer controls, captures and mount feedback |
+| `tests/*`, `.github/workflows/tests.yml` | fake camera/USB/mount tests and Node browser regressions, run by GitHub Actions |
 
-The modular Flask/Python implementation now includes astropi/camera, astropi/capture, and astropi/web.py. Keep these ownership boundaries and use the existing endpoints rather than introducing a competing camera handler. Add unit tests for coordinate conversion, loss of operator lease, missing storage, session lifecycle and serial parsing. Keep Pi-specific hardware tests separate from pure code tests.
+## Implemented Flask API
 
-## Camera integration rules derived from working probes
+- `GET /api/status`, `/api/camera/progress`, `/api/camera/frame.jpg`,
+  `/api/capture/status`, `/api/mount/status`.
+- `POST /api/control/take`, `/heartbeat`, `/release`.
+- `POST /api/camera/start`, `/stop`, `/settings`, `/preview-mode`,
+  `/debayer`; `/api/capture`, `/api/capture/sequence`,
+  `/api/capture/cancel`.
+- `POST /api/mount/connect`, `/disconnect`, `/jog`,
+  `/jog-heartbeat`, `/stop`, `/environment/read`.
+  There is **no /api/mount/arm**, generic serial-command endpoint,
+  GoTo, Home, Park, tracking or automatic site setter.
 
-1. Library exists on Pi: `/home/arn/svbony-sdk/SVBCameraSDK/lib/armv8/libSVBCameraSDK.so`; SDK headers are under `.../include/`. Don't vendor SDK binaries in Git.
-2. `SVBGetNumOfConnectedCameras()` → `SVBGetCameraInfo(info,index=0)` → **use `info.CameraID`** → `SVBOpenCamera(id)`. Verified camera info struct: three `char[32]` fields (`FriendlyName`, `CameraSN`, `PortType`), `unsigned int DeviceID`, `int CameraID`. `CameraID=1` in tests but is not a configuration constant.
-3. Full RAW16: `SVBSetROIFormat(id,0,0,3856,2180,1)`, `SVBSetOutputImageType(id,4)`, buffer size `16,812,160` bytes; `SVBStartVideoCapture` and `SVBGetVideoData` return full frames, followed by `SVBStopVideoCapture`/`SVBCloseCamera`. For `ctypes`, SDK functions used were `int` return; `SVBGetVideoData` takes `int id, void *buffer, long bytes, int wait_ms`. Reference the installed SDK headers as ground truth when coding.
-4. Controls: `SVBSetControlValue(id, 0, gain, auto=0)` and `SVBSetControlValue(id,1, exposure_microseconds,auto=0)`; read back actual values. Preserve settings when appropriate. Exposure quantization is real (50 ms request → 50.148 ms observed).
-5. **Observed pitfalls:** skipping camera-info before open gave SDK error **2**; second stop/restart stream in one open session gave frame-wait error **11**, but a new session/single stream ran 600 reads with 0 timeouts. Support bounded timeout retries and recovery, not infinite retries or treating SDK return 0 from `start` as proof frames are flowing.
-6. Saved RAW16 pixel values sampled were all divisible by 16; **12-bit right-shift 4** produces plausible grayscale and **GRBG 4×4-block RGB** previews (964×545). This is a suitable **initial**, not calibrated or optimized, preview. Capture previews and scientific source pixels must never share a destructive buffer transform.
-7. Multi-frame storage proved under one camera stream with periodic `fsync` and readback SHA-256. Performance **20.2 MiB/s measured write** for the stick, so avoid unnecessary huge buffers and frame copies. Unproven SDK bin modes 3 and 4 should not be enabled by default.
+The camera and mount workers are independent. Web poll routes read cached
+state and image data; mount I/O must stay in one serial thread. Browser
+camera preview uses polling, not WebSockets. The controls are for a
+**trusted LAN** and token leases are coordination, not authentication.
 
-## Mount startup, controls and safety
+## Invariants not to break
 
-- Port: `/dev/serial/by-id/usb-ZWO_Systems_ZWO_Device_123456-if00`, **9600 8N1**, via pyserial. Command/query access must be serialized; ASCII `#`-terminated replies. Don't conflate current reported Alt/Az/RA/Dec with true sky pointing.
-- On each connection/reconnection (including mount powered up after Pi): await **trustworthy UTC**, send **UTC offset 0**, date/time, and user site **+45.2933°, −75.8571° (east-positive)**; convert to AM3N **west-positive** longitude `+075*51:26`; verify via `:GG#`, `:GC#`, `:GL#`, `:Gt#`, `:Gg#`. Clock/site writes succeeded manually, but **automation hasn't been written**. Pi lacks RTC, so offline boot needs an explicitly trusted browser time or future RTC/GPS, not guessed time. Camera UI can run while mount initialization is pending.
-- Tested manual moves `:Me#`, `:Mn#` and `:Rv120.00#`; directional `:Qe#`/`:Qn#` and `:Q#` stops. **After stopping, mount can report ~1′28″ extra travel before settling**. Never mark stopped solely because `:Q#` was sent; poll repeatedly until the mount reports non-slewing and positions have settled. A Python `finally` block **is not** a crash/USB-link fail-safe.
-- **`:hC#` Home works**, including its characteristic route near the zenith (owner says hand controller takes the same route). Final reported altitude/azimuth 0/0 and `H` home flag. This is NOT sky alignment and does not imply safe clearance with every OTA/cable layout.
-- `:GAT#` returned undocumented `e7#`; don't infer tracking from it. **Park, tracking and sky GoTo untested.** Avoid automated long slews or night tracking until physical clearances, protocol acknowledgments and stop path have been verified for those commands.
-- Physical safety: reachable hand-controller Cancel or power interrupt for tests, no cable snag or tripod collision. AM3N M12 counterweight-hole overlong-bolt risk (can reach internal wiring).
-- Operator lease: when operator releases arrow/connection drops/lease expires, immediately request Stop; safe timeout and serial queue still needed if browsers are multiple.
+- The SVBONY SDK is initialized from real camera enumeration and opened
+  once per streaming session. Do not interleave SDK calls across threads;
+  camera preview can drop frames rather than accumulate unlimited work.
+- Every output format of a saved frame derives from one immutable RAW16
+  source. FITS retains 12-bit GRBG values, with correct BZERO and byte order.
+  Recorded frames have SHA-256 manifest; incomplete writes remain unpublished.
+- Never write recording data unless the **specific mounted USB UUID** is
+  verified. Missing/incorrect USB must not fill the boot microSD.
+  The Pi owns a recording after browser disconnect; crashing/rebooting the
+  Python process does **not** resume a recording.
+- AM3N Connect requires trusted NTP, UTC setters, ACKs and readback
+  before claiming clock VERIFIED. Stored site is currently read-only.
+- Movement uses whitelisted directions/rates, operator gating,
+  press-and-hold and 600ms missing-heartbeat Stop; release/focus loss,
+  operator release, intentional disconnect and viewer emergency Stop request
+  Stop. Wait for stable reported axes before another jog; sending `:Q#`
+  is not proof motors physically stopped. **No fixed jog time limit.**
+- Never treat reported RA/Dec or Home as a sky-alignment solution.
 
-## Offline atlas and image output
+## Tests and outstanding verification
 
-- Keep sky data and VirtualSky assets served **locally**. Use standard schematic chart markers and object labels rather than astrophotographs. Search all objects even if chart rendering filters by zoom. Keep VirtualSky behind an adapter.
-- FITS is a **planned output format**; current probe files are headerless `.raw16` and must not be mislabeled as FITS. Preserve highest-quality sensor values and useful acquisition metadata; previews are disposable 8-bit encodings.
-- Saving individual exposures is optional in UI, but if saving enabled and the USB UUID is missing/full, **report failure** rather than writing to OS microSD. Background sequences continue even if browsers disconnect; this requirement applies to capture, **not to continuous manual movement**.
+Run both `python -m pytest -q` and
+`node --test tests/test_ui.cjs`. Workflow under
+`.github/workflows/tests.yml` runs on main, feature/fix branches and PRs.
+Mocks test SDK ownership, data conversion, USB fail-closed, sequences,
+serial command gating, heartbeat Stop, NTP ACK/readback and UI behaviour.
+Hardware-confirmed work is summarized in HARDWARE.md.
 
-## Implementation order and verification gates
+Suggested next steps **after the operator tests this cleanup**:
 
-1. **Project skeleton/preview:** Flask status page, Pi browser smoke test and 50 ms colour/mono preview performance verified 2026-10-27 (details in HARDWARE.md). Add persistent logging and systemd later. No Home/GoTo on startup.
-2. **Camera live preview:** single SDK owner, control readbacks, image byte handling, GRBG 8-bit preview, lightweight streaming to several browsers. Measure CPU/RAM/latency instead of assuming the probe PNG algorithm is sufficiently fast.
-3. **Recording:** One-shot RAW16/FITS/JPG/PNG capture with UUID checking, SHA-256, fsync and atomic directory publication is committed; Pi file creation verified; **11/11 recorded file sizes and SHA-256 values match metadata on Pi**. Counted sequences (2–100 frames) are now implemented with the existing SDK stream, UUID-protected writer, progress, cancellation and frozen exposure/gain. Pi five-frame and ten-frame sequences completed; cancelling another run produced 4/10 completed, consecutively numbered frames and no .partial folders. Next verify per-file sequence hashes and stronger fault/endurance cases before timed intervals.
-4. **Mount basics:** explicit operator-owned read-only serial connect/disconnect, AM3N model/firmware/status and reported Alt/Az/RA/Dec now code-tested. Pi hardware verified Connect, Disconnect, coordinates clearing, and intentional Reconnect. Abnormal USB-loss recovery, West motion, and physical watchdog expiry are still untested. E/N/S manual jog and release-to-stop were reported working on real hardware. E-direction manual jog and release-to-stop were subsequently reported working on real hardware. Time/site synchronization, manual jog and Stop include a 600ms server deadman, 3s hard cap and viewer-accessible emergency Stop; E-jog/release worked in user-reported physical test, but heartbeat expiry and N/S are still software-tested only; Home/Park UI, tracking and sky pointing remain unimplemented.
-5. **Offline atlas and pointing:** OpenNGC + Messier and VirtualSky, North/Level, manual two-star / multi-star refinement, chart GoTo, Alt/Az tracking tests *under the real sky*.
-6. **Field acceptance:** offline network/time workflow, actual telescope/cables and battery power, long exposure metadata, recoveries from deliberate safe USB disconnects and missing data drive.
+1. Discuss mount GoTo/sky-alignment architecture, including external
+   Stellarium/INDI or AM3N Wi-Fi instead of duplicating a planetarium.
+   Do not enable competing USB and Wi-Fi movement controllers blindly.
+2. Systemd startup/recovery and longer camera/storage error/endurance tests.
+3. Deferred offline sky atlas (VirtualSky, OpenNGC/Messier), manual two-star
+   alignment, focus tools, ROI/binning and optional field time entry.
 
-**Development discipline:** At each successful milestone, commit source and update a **short** verified/pending note. Do not turn HARDWARE.md into another 69 KB console transcript. Retain full diagnostics locally or rely on Git history. Never invent test results, port mappings or API semantics.
+Keep handoff documents concise; replace obsolete facts in place instead
+of appending a new milestone diary. Do not remove safety regression tests
+merely because the original failure has been fixed.
