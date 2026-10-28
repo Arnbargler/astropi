@@ -174,7 +174,7 @@ class FakeCaptureCamera:
     def request_capture(self, formats, count=1):
         if formats == ["fits"]:
             return "test-capture-id"
-        if formats == ["raw"] and count == 4:
+        if formats == ["raw"] and count in (4, 200):
             return "sequence-id"
         raise StorageError("Recording refused: USB drive not mounted")
 
@@ -312,7 +312,8 @@ def test_sequence_storage_space_reservation_and_limit(tmp_path):
     with pytest.raises(StorageError, match="insufficient USB space"):
         store.preflight(("raw", "fits", "jpg", "png"), count=100)
     manager = CaptureManager(FakeSave())
-    for value in (0, -1, 101, 1.5, "10", True):
+    assert manager.MAX_FRAMES == 200
+    for value in (0, -1, 201, 1.5, "10", True):
         with pytest.raises(ValueError):
             manager.request(["fits"], count=value)
 
@@ -331,13 +332,17 @@ def test_sequence_http_lease_and_cancel(tmp_path):
     assert client.post("/api/capture/sequence", json={"formats":["raw"],"count":4}).status_code == 403
     token = client.post("/api/control/take").get_json()["token"]
     headers = {"X-AstroPi-Control":token}
-    for bad in (0,1,101,"4",True):
+    for bad in (0,1,201,"4",True):
         assert client.post("/api/capture/sequence", headers=headers,
                            json={"formats":["fits"],"count":bad}).status_code == 400
     response=client.post("/api/capture/sequence", headers=headers,
                          json={"formats":["raw"],"count":4})
     assert response.status_code == 202
     assert response.get_json()["id"] == "sequence-id"
+    long_run=client.post("/api/capture/sequence",headers=headers,
+                         json={"formats":["raw"],"count":200})
+    assert long_run.status_code == 202
+    assert long_run.get_json()["count"] == 200
     assert client.post("/api/capture/cancel").status_code == 403
     assert client.post("/api/capture/cancel", headers=headers).status_code == 202
 
@@ -506,3 +511,21 @@ def test_reject_nonboolean_debayer_capture_options(tmp_path):
             quicklook_image(sample_raw(), debayer=invalid)
         with pytest.raises(ValueError, match="Debayer"):
             CaptureManager(FakeSave()).request(["jpg"], debayer=invalid)
+
+
+def test_max_sequence_200_saves_incrementally_and_can_be_cancelled():
+    manager=CaptureManager(FakeSave())
+    job=manager.request(["raw"],count=200)
+    assert job == manager.status()["id"]
+    assert manager.status()["total_frames"] == 200
+    assert manager.active_sequence()
+    assert manager.accept_frame(b"frame",gain=0,exposure_us=100_000,stretch="fixed")
+    import time
+    until=time.monotonic()+3
+    while manager.status()["phase"]=="saving" and time.monotonic()<until:
+        time.sleep(0.01)
+    assert manager.status()["completed_frames"] == 1
+    assert manager.cancel() == job
+    assert manager.status()["phase"] == "cancelled"
+    assert manager.status()["completed_frames"] == 1
+    assert not manager.accept_frame(b"other",gain=0,exposure_us=100_000,stretch="fixed")

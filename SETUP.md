@@ -54,10 +54,11 @@ Scientific RAW16 and FITS keep the original binned numeric samples,
 regardless of Debayer position. The 2×2 FITS still omits `BAYERPAT`
 until SDK colour phase is physically verified. Metadata records binning,
 quicklook dimensions and whether debayering was enabled at capture start.
-Check desired RAW16/FITS/JPG/PNG formats (FITS/JPG default), then **Capture
-& Save** for one frame, or set **Frames in sequence** to 2–100 and press
-**Start Sequence**. **Cancel Sequence** completes any in-progress write before
-stopping. Exposure/gain, saved quicklook stretch and saved Debayer mode
+Select RAW16/FITS/JPG/PNG via the four format switches (FITS/JPG default),
+then press **1, 5, 50, 100, 150 or 200** to save that many frames. The **1**
+button saves a single exposure; all other choices start an independently
+managed Pi sequence. **Cancel** stops the active multi-frame sequence after
+finishing any in-progress write. No user-entered sequence count is needed. Exposure/gain, saved quicklook stretch and saved Debayer mode
 are frozen for each sequence (independent of later preview toggles).
 
 Saved captures: `/media/astropi-data/captures/<timestamp-id>/`. Each

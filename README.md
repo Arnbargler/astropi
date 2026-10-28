@@ -19,7 +19,7 @@ The Linux desktop is a browser/development client, not a required server.
   colour-target test on the Pi. RAW16 and FITS remain unchanged.
   Measured 50 ms preview: ~14.8 colour / ~16.6 mono FPS at 1× on Pi.
 - **Recording:** Individually selected RAW16, FITS, JPEG and PNG; one-shot
-  or consecutive sequences of 2–100 frames. USB-only storage guarded by
+  or consecutive sequences up to 200 frames. USB-only storage guarded by
   filesystem UUID, SHA-256 manifest, fsync and atomic publication; no microSD
   fallback. On Pi: 11/11 saved-file hashes matched; FITS matched RAW16 at
   every sensor pixel. A 10-frame sequence completed and another cancelled
@@ -62,6 +62,11 @@ above the optional mount clock/site details. Capture results remain scrollable
 within their panel. Layout switches to two columns below 1550 CSS pixels and
 a single column below 920 pixels (vertical scrolling is expected).
 
+The compact capture panel has format toggle switches (FITS/RAW16/JPG/PNG)
+and fixed capture buttons **1, 5, 50, 100, 150, 200, Cancel**. The 1 button
+saves one full configured RAW frame; multi-frame sequences run on the Pi and
+the Cancel button stops at a write boundary. Capture results remain scrollable
+within a short panel so they cannot cover the preview.
 The page no longer repeats operating instructions; controls and live
 status/error messages remain. A short physical Stop warning stays visible.
 The user reports that 2×2 colour preview matches 1×1 visually; exact Bayer

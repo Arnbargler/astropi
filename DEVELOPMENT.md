@@ -14,7 +14,7 @@ features. Treat Git history, not the current docs, as the troubleshooting log.
 | `astropi/camera/sdk.py` | SVBONY SDK wrapper, camera enum/open/stream/restore/close, 1×/2× binning and post-bin ROI |
 | `astropi/camera/worker.py` | sole camera SDK thread, separate one-slot JPEG preview worker; SDK frame buffer copied before recording. Reconfigure bin by closing/reopening a full SDK session in this same owner thread, never switching ROI mid-stream |
 | `astropi/camera/preview.py` | disposable GRBG display preview + sparse stats |
-| `astropi/capture/manager.py` | single shot or 2–100 counted-frame job, per-frame write boundary and cancellation, independent of browser |
+| `astropi/capture/manager.py` | single shot or 2–200 counted-frame job, per-frame write boundary and cancellation, independent of browser |
 | `astropi/capture/formats.py` | original RAW16, science FITS and colour quicklooks |
 | `astropi/capture/storage.py` | USB UUID guard, space preflight, pinned directory-fd writes, fsync, atomic publication and SHA-256 manifest |
 | `astropi/capture/verify.py` | retained read-only integrity/FITS pixel verifier, useful for regression and later field diagnostics |
@@ -66,6 +66,13 @@ camera preview uses polling, not WebSockets. The controls are for a
 - Never treat reported RA/Dec or Home as a sky-alignment solution.
 
 ## Browser layout
+
+The capture strip uses four accessible native checkbox toggles and fixed
+count buttons **1/5/50/100/150/200**, plus Cancel. Browser sequences POST
+`/api/capture/sequence`, one shot POSTs `/api/capture`. Both retain the
+existing capture job, USB space preflight, operator lease and cancel-at-write-
+boundary semantics. A sequence is capped at 200 frames. Don't change the
+camera SDK ROI or reduce the capture resolution in order to save UI space.
 
 The dashboard uses `astropi/templates/index.html` and
 `astropi/static/style.css`. The `.dashboard-grid` is three fluid columns

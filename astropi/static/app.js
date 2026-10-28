@@ -523,6 +523,8 @@ $("cancel-sequence").addEventListener("click", async () => {
     await post("/api/capture/cancel");
     write("capture-state", "Cancellation requested; completing active write…");
     write("capture-error", "");
+    sequenceActive = false;
+    updateButtons();
   } catch (error) {
     write("capture-error", error.message);
     updateButtons();
@@ -531,7 +533,7 @@ $("cancel-sequence").addEventListener("click", async () => {
 function showCapture(job) {
   if (!job) return;
   captureBusy = job.phase === "waiting" || job.phase === "saving";
-  sequenceActive = captureBusy && job.total_frames > 1;
+  sequenceActive = captureBusy && job.total_frames > 1 && !job.cancel_requested;
   const total = Number(job.total_frames || 0);
   const completed = Number(job.completed_frames || 0);
   const stages = {idle: "No capture requested", waiting: "Waiting for next camera frame…",

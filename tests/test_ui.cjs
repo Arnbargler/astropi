@@ -196,107 +196,109 @@ test("fast preview polling and frame deduplication are retained",()=>{
 });
 
 
-test("independent format toggles save the selected combination and report paths", async()=>{
+test("compact capture toggles submit exactly selected formats for one frame", async()=>{
   const h=harness();
   await h.flush();
-  assert.equal(h.el("capture-now").disabled,true,"viewers cannot record");
-  h.el("capture-fits").checked=true;
-  h.el("capture-jpg").checked=true;
-  h.el("capture-raw").checked=false;
-  h.el("capture-png").checked=false;
+  assert.equal(h.el("capture-1").disabled,true,"viewers cannot record");
   await h.el("take-control").dispatch("click");
-  assert.equal(h.el("capture-now").disabled,false);
-  await h.el("capture-now").dispatch("click");
-  const submitted=h.calls.filter(call=>call.url==="/api/capture");
-  assert.equal(submitted.length,1);
-  assert.deepEqual(submitted[0].payload,{formats:["fits","jpg"]});
+  assert.equal(h.el("capture-1").disabled,false);
+  await h.el("capture-1").dispatch("click");
+  assert.deepEqual(h.calls.filter(call=>call.url==="/api/capture")[0].payload,
+                   {formats:["fits","jpg"]});
   await h.intervals.get(50)();
-  assert.equal(h.el("capture-now").disabled,true,"only one capture may be pending");
+  assert.equal(h.el("capture-1").disabled,true,"only one capture may be pending");
   h.updateCapture({phase:"done",directory:"captures/shot1",
     files:[{format:"FITS",path:"captures/shot1/a.fits",bytes:16800000},
            {format:"JPG",path:"captures/shot1/a.jpg",bytes:40000}]});
   await h.intervals.get(50)();
-  assert.equal(h.el("capture-now").disabled,false);
+  assert.equal(h.el("capture-1").disabled,false);
   assert.match(h.el("capture-results").textContent,/captures\/shot1\/a.fits/);
   h.el("capture-fits").checked=false;
   h.el("capture-jpg").checked=false;
-  h.el("capture-now").disabled=false;
   h.el("capture-raw").checked=true;
   h.el("capture-png").checked=true;
-  await h.el("capture-now").dispatch("click");
-  const submissions=h.calls.filter(call=>call.url==="/api/capture");
-  assert.deepEqual(submissions[1].payload,{formats:["raw","png"]});
+  h.el("capture-raw").dispatch("change");
+  await h.el("capture-1").dispatch("click");
+  assert.deepEqual(h.calls.filter(call=>call.url==="/api/capture")[1].payload,
+                   {formats:["raw","png"]});
+  assert.equal(h.calls.filter(call=>call.url==="/api/capture/sequence").length,0);
 });
 
-test("save controls are disabled when no formats are selected",async()=>{
+test("capture buttons are disabled with no formats and return when reselected",async()=>{
   const h=harness();
   await h.flush();
   await h.el("take-control").dispatch("click");
   for(const name of ["fits","raw","jpg","png"]) h.el("capture-"+name).checked=false;
   h.el("capture-fits").dispatch("change");
-  assert.equal(h.el("capture-now").disabled,true);
-});
-
-
-test("sequence frame count submits formats and does not require browser to stay open",async()=>{
-  const h=harness();
-  await h.flush();
-  await h.el("take-control").dispatch("click");
-  h.el("capture-fits").checked=true;
+  for(const count of [1,5,50,100,150,200])
+    assert.equal(h.el("capture-"+count).disabled,true);
   h.el("capture-jpg").checked=true;
-  h.el("capture-raw").checked=false;
-  h.el("capture-png").checked=false;
-  h.el("sequence-count").value="5";
-  h.el("sequence-count").dispatch("input");
-  assert.equal(h.el("start-sequence").disabled,false);
-  await h.el("start-sequence").dispatch("click");
-  const sends=h.calls.filter(c=>c.url==="/api/capture/sequence");
-  assert.equal(sends.length,1);
-  assert.deepEqual(sends[0].payload,{count:5,formats:["fits","jpg"]});
-  await h.intervals.get(50)();
-  assert.equal(h.el("start-sequence").disabled,true);
-  assert.equal(h.el("gain-5").disabled,true);
-  assert.equal(h.el("cancel-sequence").disabled,false);
-  h.updateCapture({phase:"saving",completed_frames:2,current_frame:3, total_frames:5});
-  await h.intervals.get(50)();
-  assert.match(h.el("sequence-progress").textContent,/2 \/ 5/);
-  h.updateCapture({phase:"done",completed_frames:5,
-    directories:["captures/a","captures/b","captures/c","captures/d","captures/e"]});
-  await h.intervals.get(50)();
-  assert.equal(h.el("start-sequence").disabled,false);
-  assert.equal(h.el("cancel-sequence").disabled,true);
-  assert.match(h.el("capture-results").textContent,/captures\/e/);
+  h.el("capture-jpg").dispatch("change");
+  assert.equal(h.el("capture-200").disabled,false);
 });
 
-test("sequence cancel is operator controlled and updates browser status",async()=>{
+test("fixed sequence buttons submit correct count and lock until complete",async()=>{
+  for (const count of [5,50,100,150,200]) {
+    const h=harness();
+    await h.flush();
+    await h.el("take-control").dispatch("click");
+    h.el("capture-fits").checked=true;
+    h.el("capture-jpg").checked=true;
+    h.el("capture-raw").checked=false;
+    h.el("capture-png").checked=false;
+    assert.equal(h.el("capture-"+count).disabled,false);
+    await h.el("capture-"+count).dispatch("click");
+    const sends=h.calls.filter(c=>c.url==="/api/capture/sequence");
+    assert.equal(sends.length,1);
+    assert.deepEqual(sends[0].payload,{count,formats:["fits","jpg"]});
+    await h.intervals.get(50)();
+    for(const other of [1,5,50,100,150,200])
+      assert.equal(h.el("capture-"+other).disabled,true);
+    assert.equal(h.el("gain-5").disabled,true);
+    assert.equal(h.el("cancel-sequence").disabled,false);
+    h.updateCapture({phase:"saving",completed_frames:2,current_frame:3, total_frames:count});
+    await h.intervals.get(50)();
+    assert.match(h.el("sequence-progress").textContent,new RegExp("2 / "+count));
+    h.updateCapture({phase:"done",completed_frames:count,
+      directories:["captures/first","captures/last"]});
+    await h.intervals.get(50)();
+    assert.equal(h.el("capture-"+count).disabled,false);
+    assert.equal(h.el("cancel-sequence").disabled,true);
+    assert.match(h.el("capture-results").textContent,/captures\/last/);
+  }
+});
+
+test("Cancel only operates during an active multi-frame sequence",async()=>{
   const h=harness();
   await h.flush();
   assert.equal(h.el("cancel-sequence").disabled,true);
   await h.el("take-control").dispatch("click");
-  h.el("sequence-count").value="2";
-  h.el("capture-fits").checked=true;
-  h.el("sequence-count").dispatch("input");
-  await h.el("start-sequence").dispatch("click");
+  await h.el("capture-1").dispatch("click");
+  await h.intervals.get(50)();
+  assert.equal(h.el("cancel-sequence").disabled,true,"one frame is not a sequence");
+  h.updateCapture({phase:"done",files:[]});
+  await h.intervals.get(50)();
+  await h.el("capture-5").dispatch("click");
   await h.intervals.get(50)();
   assert.equal(h.el("cancel-sequence").disabled,false);
   await h.el("cancel-sequence").dispatch("click");
   await h.intervals.get(50)();
   assert.equal(h.el("cancel-sequence").disabled,true);
   assert.match(h.el("capture-state").textContent,/cancelled/);
+  assert.equal(h.calls.filter(c=>c.url==="/api/capture/cancel").length,1);
 });
 
-test("invalid sequence counts are rejected without POST",async()=>{
-  const h=harness();
-  await h.flush();
-  await h.el("take-control").dispatch("click");
-  for(const count of ["1","101","3.5","0"]) {
-    h.el("sequence-count").value=count;
-    h.el("sequence-count").dispatch("input");
-    assert.equal(h.el("start-sequence").disabled,true);
-  }
-  assert.equal(h.calls.filter(c=>c.url==="/api/capture/sequence").length,0);
+test("capture UI offers only the six fixed frame counts",()=>{
+  const html=fs.readFileSync(path.join(__dirname,"../astropi/templates/index.html"),"utf8");
+  assert.match(html,/class="capture-presets"/);
+  assert.match(html,/class="format-switch"/);
+  for (const n of [1,5,50,100,150,200])
+    assert.match(html,new RegExp('id="capture-'+n+'"'));
+  assert.doesNotMatch(html,/id="sequence-count"/);
+  assert.doesNotMatch(html,/id="start-sequence"/);
+  assert.doesNotMatch(html,/id="capture-now"/);
+  assert.match(html,/id="cancel-sequence"/);
 });
-
 
 test("mount telemetry viewer remains read-only; operator explicitly connects",async()=>{
   const h=harness();
@@ -593,8 +595,9 @@ test("1080p dashboard is full-width, keeps all functional controls and stays res
   for (const id of [
     "preview-image","start-camera","stop-camera","exposure-buttons","gain-buttons",
     "binning-buttons","stretch-auto","stretch-fixed","debayer-on","debayer-off",
-    "capture-fits","capture-raw","capture-jpg","capture-png","capture-now",
-    "start-sequence","cancel-sequence","capture-results","mount-connect",
+    "capture-fits","capture-raw","capture-jpg","capture-png","capture-1",
+    "capture-5","capture-50","capture-100","capture-150","capture-200",
+    "cancel-sequence","capture-results","mount-connect",
     "mount-disconnect","mount-stop","mount-speed-slow","mount-speed-max",
     "mount-north","mount-south","mount-west","mount-east",
     "mount-env-time","mount-env-latitude","mount-raw-status",
