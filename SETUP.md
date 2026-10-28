@@ -1,5 +1,43 @@
 # AstroPi — counted exposure sequences (2026-10-27)
 
+
+## Automatic mount UTC synchronization (2026-10-28; hardware test pending)
+
+**New behavior:** each time you click **Connect Mount**, AstroPi asks the
+Pi's systemd whether its NTP clock is actually synchronized (not just whether
+the network is connected). If confirmed, it sets AM3N offset **+00:00**, UTC
+date, then UTC time. Every command needs an acknowledgement; UTC offset,
+date and time are read back and compared with the Pi. The UI indicates
+**Pi NTP → mount clock: VERIFIED** only when all checks pass. The clock/site
+readout then fills automatically, without clicking Read Mount Clock & Site.
+
+The mount's saved latitude and longitude are not changed. No Home, GoTo,
+sky tracking or time-entry controls are added. A failed time sync is
+visible, and manual directional movement remains available. If the Pi
+was booted without NTP synchronization, mount time is NOT set; allow the Pi
+to sync and Disconnect / Connect Mount again to retry.
+
+On the Pi, confirm the NTP source before this test:
+
+    timedatectl show -p NTPSynchronized --value
+    date -u '+%Y-%m-%d %H:%M:%S UTC'
+
+Expected: "yes" and a sensible live UTC date/time.
+
+After pulling and restarting AstroPi, click Take Control, then Connect
+Mount. The clock/site area should automatically show VERIFIED and today's
+UTC date/time (previously mount readback was 01/01/00 and 01:12:54).
+Use **Read Mount Clock & Site** if you want a later fresh snapshot.
+Observe the mount's UTC offset +00:00 and unchanged observing site
+latitude +45*17:36 / west-positive longitude +075*51:26.
+
+If sync says NOT synchronized, paste this read-only diagnostic output:
+
+    curl -s http://127.0.0.1:8080/api/mount/status | python3 -m json.tool
+
+The automatic setting path is software-tested with a simulated serial
+AM3N. It has NOT yet been verified on the physical firmware via AstroPi.
+
 ## Current AM3N manual controls
 
 Press and hold any direction button immediately once **Take Control** and
