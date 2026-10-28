@@ -24,7 +24,7 @@ The extensive **original chronological hardware probe log** is preserved in [Git
 
 ## The next development step
 
-**Current next gate:** Verify immediate E/N/S/W press-and-hold and release-to-Stop after deployment, then test newly added **Slew 720×** and **Max 1440×** rate requests on the actual AM3N (start briefly, measure reported axes). No extra Arm click, no hard time cap. Clock/site read-only button is implemented, but user screenshot showed idle/unread; request and inspect a live readout before implementing any synchronization. Preserve USB recording UUID and serial ownership invariants. Read [HARDWARE.md](HARDWARE.md) for verified hardware evidence and [DEVELOPMENT.md](DEVELOPMENT.md) for implementation roadmap.
+**Current next gate:** Verify immediate E/N/S/W press-and-hold and release-to-Stop after deployment, then test newly added **Slew 720×** and **Max 1440×** rate requests on the actual AM3N (start briefly, measure reported axes). No extra Arm click, no hard time cap. Clock/site read-only button is now Pi-verified: a screenshot shows stored site +45*17:36, west-positive +075*51:26, but a clearly stale mount date 01/01/00 and time 01:12:54 while the Pi reports 2026-10-28 08:31 UTC. Next engineering step is trusted Pi time synchronization with mount setter/readback verification, before sky GoTo. Preserve USB recording UUID and serial ownership invariants. Read [HARDWARE.md](HARDWARE.md) for verified hardware evidence and [DEVELOPMENT.md](DEVELOPMENT.md) for implementation roadmap.
 
 **Don't repeat completed hardware probes by default.** Don't claim more than was tested. In particular, Home ≠ alignment, RAW16 ≠ FITS, successful SDK exposure *readback* ≠ precise exposure calibration, and the offline/no-RTC time problem is still open.
 
@@ -32,7 +32,7 @@ The extensive **original chronological hardware probe log** is preserved in [Git
 
 Mount direction buttons now **move on press-and-hold without a separate Arm click**. Operator control is still required. Releasing, changing tab/window, emergency Stop or loss of 600ms heartbeat requests Stop; no fixed duration limit. Repeated presses require Stop/axis settling before a new direction starts.
 
-Available preset commands are **Slow 8x** (`:R5#`), **Medium 20x** (`:Rv20.00#`), **Fast 60x** (`:Rv60.00#`), **Slew 720x** (`:R8#`) and **Max 1440x** (`:R9#`). The final two map directly to the published INDI AM-series driver. The operator reports the three lower presets working on the actual AM3N, while **Slew/Max are code-tested only and await Pi hardware verification**. Clock/site readout remains on-demand and read-only, and Home/GoTo/tracking are not implemented in the browser.
+Available preset commands are **Slow 8x** (`:R5#`), **Medium 20x** (`:Rv20.00#`), **Fast 60x** (`:Rv60.00#`), **Slew 720x** (`:R8#`) and **Max 1440x** (`:R9#`). The final two map directly to the published INDI AM-series driver. The operator reports the three lower presets working on the actual AM3N, while **Slew 720x is shown selected in the new UI with the operator reporting normal operation; Max 1440x and measured angular speeds remain unconfirmed**. Clock/site readout has been verified on the Pi and is still read-only, and Home/GoTo/tracking are not implemented in the browser.
 
 ## Operating assumptions
 
