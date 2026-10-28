@@ -1,45 +1,89 @@
-# AstroPi — project handoff
+# AstroPi
 
-**Status (2026-10-28):** SV705C live preview and one-shot RAW16/FITS/JPG/PNG capture verified on Pi; 11/11 stored file hashes and independent FITS↔RAW16 full-pixel comparison passed. Five-frame and ten-frame sequences completed; a 10-frame sequence cancelled cleanly at 4/10. AM3N USB telemetry and intentional Connect/Disconnect/Reconnect are Pi-verified. East/North/South low-speed manual jog and release-to-Stop worked on real mount; Slow/Medium/Fast controls reportedly operate normally. Three-second hard Stop was once hardware-verified, then intentionally removed by user request. **Current implementation:** direct press-and-hold manual jogging with no separate Arm and no duration cap; five preset rates including 720× and 1440× newly code-tested but not yet Pi-tested. The 600ms missed-heartbeat watchdog, emergency Stop and operator lease remain; USB-loss fail-safe, sky alignment, GoTo and tracking remain unimplemented/unverified. **Automatic AM3N UTC clock sync on Connect is now VERIFIED on the actual AM3N firmware 1.8.8:** user screenshot shows mount UTC date 10/28/26, time 08:47:34, offset +00:00, and observing site unchanged.** AstroPi is a Raspberry Pi 4-hosted, browser-operated deep-sky camera and telescope controller for one SVBONY SV705C and one ZWO AM3N mount, operating in **Alt/Az only**.
+Pi-hosted observatory controller for **one SVBONY SV705C** camera and **one
+ZWO AM3N** mount (Alt/Az). Browser UI on the trusted LAN; Raspberry Pi owns
+acquisition, file writing, mount serial I/O and ongoing capture sequences.
+The Linux desktop is a browser/development client, not a required server.
 
-This private GitHub repository is the durable handoff for a **new AI assistant or development session**. Do not infer that a tested terminal script is a committed application: **live camera preview and one-shot USB file creation are Pi-verified; five-/ten-frame recording, cancellation after four saved frames, and FITS/RAW16 pixel equality are Pi-verified; extended capture endurance, USB-loss recovery and AM3N forced serial-loss and missing-serial recovery tests remain outstanding**.
+## Current state — verified 2026-10-28
 
-## Read in this order
+- **Camera:** Full-frame 3856×2180, 12-bit GRBG in RAW16; live colour and
+  monochrome preview, manual exposure/gain, fixed/auto preview stretch.
+  Measured 50 ms preview: ~14.8 colour / ~16.6 mono FPS on Pi.
+- **Recording:** Individually selected RAW16, FITS, JPEG and PNG; one-shot
+  or consecutive sequences of 2–100 frames. USB-only storage guarded by
+  filesystem UUID, SHA-256 manifest, fsync and atomic publication; no microSD
+  fallback. On Pi: 11/11 saved-file hashes matched; FITS matched RAW16 at
+  every sensor pixel. A 10-frame sequence completed and another cancelled
+  cleanly at 4/10. Browser closure does not end an active Pi capture.
+- **Mount:** AM3N firmware 1.8.8; serial Connect/Disconnect/Reconnect, model,
+  reported Alt/Az and RA/Dec, status flags, date/time and stored site.
+  Direct press-and-hold N/S/E/W controls (no separate Arm), release-to-Stop,
+  five speed choices (8×, 20×, 60×, 720×, 1440×), prominent Stop,
+  600 ms missed-jog-heartbeat timeout and settling checks. **No fixed
+  duration limit.** E/N/S and slow-speed Stop were checked on the real mount;
+  operator also reported speed selection and revised controls working.
+  Exact angular rates and abnormal serial-loss Stop remain unverified.
+- **Clock:** Every explicit mount Connect checks Pi NTP synchronization,
+  writes UTC offset 0/date/time to the AM3N, requires setter ACKs and verifies
+  clock readback. **Verified on actual AM3N**: mount date 10/28/26,
+  UTC time 08:47:34, offset +00:00; site unchanged.
+  "Mount time (UTC)" is *not* Ontario wall time.
+- **Host:** Raspberry Pi 4B 4 GB, Debian 13 Trixie ARM64, Python 3.13.
+  Camera SDK and USB storage are installed on the Pi (not in Git).
 
-1. **[README.md](README.md)** — orientation, exact current status and next step (this file).
-2. **[REQUIREMENTS.md](REQUIREMENTS.md)** — *authoritative* feature decisions and explicit exclusions. Preserve the numbered decisions.
-3. **[HARDWARE.md](HARDWARE.md)** — *authoritative* current hardware inventory, verified protocols, paths, test evidence and unresolved risks.
-4. **[DEVELOPMENT.md](DEVELOPMENT.md)** — proposed implementation boundaries, integration rules, startup behaviour and build sequence. Architecture is guidance, not code already written.
+### Not implemented or not yet field-verified
 
-The extensive **original chronological hardware probe log** is preserved in [Git history at commit `f01ae019`](https://github.com/Arnbargler/astropi/blob/f01ae019f9ba840f90b5bb5e566d0fc17dab41b7/HARDWARE.md). It includes superseded observations; consult only for deep troubleshooting rather than loading it as normal handoff context.
+**No sky alignment, astronomical GoTo, tracking, Park, offline star atlas,
+plate solving, live stacking, fixed-interval sequence scheduling, or automatic
+service startup.** Native mount Home was manually tested in earlier terminal
+probes but **is not a browser action**. Mount RA/Dec are reported values, not
+independently verified telescope pointing. The Pi has no RTC: sync requires
+NTP, and manual field-time entry is a possible later feature. Extended
+in-app recording endurance and deliberately induced USB/storage faults have
+not been verified. We may later evaluate Stellarium control over AM3N Wi-Fi
+or an INDI server, avoiding simultaneous conflicting USB/Wi-Fi commands.
 
-## Verified today
+## Start / update
 
-- **Host:** `arn@astropi`, Raspberry Pi 4B Rev 1.5 **4 GiB**, Debian 13.6 Trixie / ARM64, Python 3.13.5. Hardware camera SDK loaded successfully.
-- **Camera:** SV705C on USB3; full-size **3856×2180 RAW16** captures; 12-bit values appear left-shifted by four; **GRBG** Bayer. Grayscale and colour PNG previews inspected and accepted. Exposure and gain controls produce expected image response.
-- **Mount:** ZWO **AM3N firmware 1.8.8**, 9600-baud USB serial; clock/site commands, both motors, commanded stop settling and native `:hC#` Home all tested. **No celestial alignment, GoTo, tracking or Park verification yet.**
-- **Recording:** 64 GB USB3 stick, ext4 auto-mounted read/write at `/media/astropi-data`; reboot retention and SHA-256 integrity passed.
-- **Endurance:** 20 minutes, **600/600 frames received**, **120/120 full RAW16 files saved and checked**, **0 SDK timeouts**, Pi **46.7–51.6°C**, `throttled=0x0`. One kernel USB3 reset occurred near camera initialization; no resulting failures.
-- **Observing site:** user-selected **+45.2933° N, −75.8571°** longitude (east-positive). Mount location was updated and read back. Mount UTC clock was set successfully from Pi's NTP-synchronized clock; **automatic reconnection/clock synchronization is not implemented**.
+See [SETUP.md](SETUP.md) for install, launch, UI use and diagnostics.
+On the Pi, with existing Flask stopped:
 
-## The next development step
+```bash
+cd ~/astropi
+git pull --ff-only
+source .venv/bin/activate
+python -m pip install -r requirements-dev.txt
+python -m pytest -q
+node --test tests/test_ui.cjs
+python run.py --host 0.0.0.0 --port 8080
+```
 
-**Current next gate:** Verify immediate E/N/S/W press-and-hold and release-to-Stop after deployment, then test newly added **Slew 720×** and **Max 1440×** rate requests on the actual AM3N (start briefly, measure reported axes). No extra Arm click, no hard time cap. Clock/site read-only button is now Pi-verified: a screenshot shows stored site +45*17:36, west-positive +075*51:26, but a clearly stale mount date 01/01/00 and time 01:12:54 while the Pi reports 2026-10-28 08:31 UTC. The Pi-to-AM3N UTC clock initialization and readback are now verified on live firmware 1.8.8. The UTC-offset-zero mount field is labeled Mount time (UTC) to avoid confusion with local Ontario time. Next astronomy milestone: explicitly design sky alignment and GoTo/tracking behaviour; **none are implemented yet**, and reported RA/Dec remain unverified pointing. Preserve site-coordinate convention and USB recording safeguards. Preserve USB recording UUID and serial ownership invariants. Read [HARDWARE.md](HARDWARE.md) for verified hardware evidence and [DEVELOPMENT.md](DEVELOPMENT.md) for implementation roadmap.
+Open http://astropi.local:8080/ and hard-refresh after changes.
+Run the camera and mount **independently**; no mount movement is sent at
+startup. The Flask development server is LAN-only, **not Internet-facing**.
 
-**Don't repeat completed hardware probes by default.** Don't claim more than was tested. In particular, Home ≠ alignment, RAW16 ≠ FITS, successful SDK exposure *readback* ≠ precise exposure calibration, and the offline/no-RTC time problem is still open.
+## Repository orientation (for the next development session)
 
-## AM3N current manual interface (2026-10-28)
+1. **README.md** — current verified status and non-features.
+2. **REQUIREMENTS.md** — selected feature IDs and scope decisions.
+3. **HARDWARE.md** — hardware, paths, protocol, verified quirks and limits.
+4. **DEVELOPMENT.md** — actual code ownership, test strategy and next work.
+5. **SETUP.md** — operational commands and troubleshooting.
 
-Mount direction buttons now **move on press-and-hold without a separate Arm click**. Operator control is still required. Releasing, changing tab/window, emergency Stop or loss of 600ms heartbeat requests Stop; no fixed duration limit. Repeated presses require Stop/axis settling before a new direction starts.
+Source: `astropi/camera/` SDK + preview worker;
+`astropi/capture/` science formats, UUID-safe USB writer and independent verifier;
+`astropi/mount/worker.py` sole mount serial owner;
+`astropi/web.py` Flask API and operator lease;
+`astropi/static/` + `templates/` browser UI;
+`tests/` fake-hardware and browser regressions. CI tests Python and Node.
 
-Available preset commands are **Slow 8x** (`:R5#`), **Medium 20x** (`:Rv20.00#`), **Fast 60x** (`:Rv60.00#`), **Slew 720x** (`:R8#`) and **Max 1440x** (`:R9#`). The final two map directly to the published INDI AM-series driver. The operator reports the three lower presets working on the actual AM3N, while **Slew 720x is shown selected in the new UI with the operator reporting normal operation; Max 1440x and measured angular speeds remain unconfirmed**. Clock/site readout has been verified on the Pi and is still read-only, and Home/GoTo/tracking are not implemented in the browser.
+**Preserve:** single SDK owner, single mount serial owner, immutable RAW16
+source, verified USB UUID with no microSD fallback, operator-gated motion,
+release/heartbeat Stop and honest status on unsuccessful mount time sync.
+Do not infer a feature is implemented merely because it appears in
+requirements or was explored in a standalone terminal probe.
 
-## Operating assumptions
-
-- The Pi performs acquisition, camera processing, mount control and web serving. The Linux Mint **N100** is optional for development/browser access and **post-capture stacking/field-rotation correction**, not an always-required server.
-- **Offline sky chart and catalogues**, manual two-/multi-star alignment, no plate solving, no live stacking, no Internet dependency for the chart.
-- Multiple browser viewers, **one controller lease**; a disconnected browser must **never leave a continuous manual slew running**. Camera capture sequences continue after browser disconnect.
-- Trusted home/field local network only; no user accounts or Internet-facing service planned.
-- Do not commit private credentials, SDK binaries or large captured RAW/FITS data.
-
-**Suggested new-session opener:** “Continue AstroPi from the private GitHub repository `Arnbargler/astropi`. Read README, REQUIREMENTS, HARDWARE and DEVELOPMENT in that order. The live camera preview works on Pi; the one-shot RAW16/FITS/JPG/PNG saver produced four real capture folders on Pi USB; the 11 saved files passed size and SHA-256 checks; the prior four-format FITS file passed full Bayer pixel equality with RAW16 and a five-frame FITS+JPG sequence completed on Pi; ten-frame completion and four-frame cancellation are now verified; next verify the newly implemented AM3N read-only status panel on real Pi serial, then cautiously address mount safety. Preserve the single camera SDK owner, storage UUID checks, and untested mount safety boundaries.”
+Detailed historical hardware experiments and superseded setup instructions
+remain in Git history (not in the current handoff); start with the current
+documents instead.
