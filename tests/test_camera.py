@@ -411,3 +411,33 @@ def test_change_binning_rejected_during_capture():
     for bad in (3,4,"2"):
         with pytest.raises(ValueError):
             worker.set_binning(bad)
+
+
+
+def test_sdk_binning_roi_verified_by_actual_readback():
+    import ctypes as C
+    import pytest
+    from astropi.camera.sdk import SVBDriver
+
+    class FakeLib:
+        mismatch = False
+        def SVBSetROIFormat(self, *args):
+            assert args == (5, 0, 0, 1928, 1090, 2)
+            return 0
+        def SVBGetROIFormat(self, cam, px, py, pw, ph, pb):
+            assert cam == 5
+            for ptr, value in zip((px, py, pw, ph, pb),
+                                  (0, 0, 1928, 1090, 1 if self.mismatch else 2)):
+                C.cast(ptr, C.POINTER(C.c_int))[0] = value
+            return 0
+    driver = SVBDriver.__new__(SVBDriver)
+    driver.lib = FakeLib()
+    driver.camera_id = 5
+    driver.streaming = False
+    driver.configure_binning(2)
+    driver.lib.mismatch = True
+    with pytest.raises(RuntimeError, match="readback mismatch"):
+        driver.configure_binning(2)
+    driver.streaming = True
+    with pytest.raises(RuntimeError, match="Stop camera"):
+        driver.configure_binning(2)
