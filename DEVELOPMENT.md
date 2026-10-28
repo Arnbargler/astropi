@@ -47,10 +47,12 @@ camera preview uses polling, not WebSockets. The controls are for a
   camera preview can drop frames rather than accumulate unlimited work.
 - Every output format of a saved frame derives from one immutable RAW16
   source. FITS retains 12-bit samples, with correct BZERO and byte order.
-  1×1 is GRBG; Sony documents Bayer-preserving 2×2 binning, so colour
-  quicklooks provisionally use the same GRBG phase when Debayer is On.
-  Debayer Off generates monochrome preview and quicklooks. Binned
-  FITS omits BAYERPAT until the camera SDK's phase is physically verified.
+  1×1 is GRBG; Sony documents Bayer-preserving 2×2 binning, and the
+  operator visually verified correct colours in the 2×2 preview on the
+  physical SV705C (2026-10-28). JPG/PNG quicklooks use the same GRBG
+  interpretation. Debayer Off generates monochrome preview and quicklooks.
+  Binned FITS currently omits BAYERPAT because the writer has not been
+  updated; do not claim this header is present without a code/test change.
   Recorded frames have SHA-256 manifest; incomplete writes remain unpublished.
 - Never write recording data unless the **specific mounted USB UUID** is
   verified. Missing/incorrect USB must not fill the boot microSD.
@@ -98,13 +100,14 @@ Suggested next steps **after the operator tests this cleanup**:
    Stellarium/INDI or AM3N Wi-Fi instead of duplicating a planetarium.
    Do not enable competing USB and Wi-Fi movement controllers blindly.
 2. Systemd startup/recovery and longer camera/storage error/endurance tests.
-3. **Verify binned GRBG phase on the actual SV705C** using a recognizable
-   red and blue subject at 1×1 then 2×2 with Debayer On. If red/blue are
-   reversed, correct binned phase before adding the FITS BAYERPAT keyword.
-   Check Debayer Off returns monochrome at 2×2, then verify saved
-   JPG/PNG, RAW16/FITS parity and sequence Debayer freezing.
-   Future arbitrary ROI, the offline sky atlas, manual alignment,
-   focus tools and field time entry remain deferred.
+3. **2×2 colour is verified in preview**: the operator confirmed correct
+   colour rendition on the real SV705C on 2026-10-28. The earlier pending
+   red/blue preview check is closed. The FITS writer still omits BAYERPAT
+   at 2×2; adding it would be a separate code/test change. Optional
+   field regressions include saved JPG/PNG colours, 2×2 Debayer Off,
+   RAW16/FITS parity and sequence Debayer freezing. Future arbitrary ROI,
+   offline sky atlas, manual alignment, focus tools and field time entry
+   remain deferred.
 
 Keep handoff documents concise; replace obsolete facts in place instead
 of appending a new milestone diary. Do not remove safety regression tests

@@ -28,12 +28,14 @@ AM3N stable serial alias: `/dev/serial/by-id/usb-ZWO_Systems_ZWO_Device_123456-i
   Sony's IMX585 datasheet (page 38) describes 2×2 adjacent-pixel
   **Bayer-preserving colour output**:
   [sensor datasheet](https://dl.khadas.com/products/add-ons/cameras/imx585/datasheet/imx585-datasheet.pdf).
-  Accordingly 2×2 preview and JPG/PNG quicklooks now support GRBG colour
+  Accordingly 2×2 preview and JPG/PNG quicklooks use GRBG colour
   when Debayer is On, and green-site monochrome when Off; the same
-  behaviour applies to 1×1. **The exact output Bayer phase GRBG is a
-  provisional SDK assumption, not yet colour-target-verified on the Pi**.
-  FITS still omits `BAYERPAT` for 2×2 until that check; both RAW16 bytes
-  and FITS numeric pixels remain unaltered.
+  behaviour applies to 1×1. **On 2026-10-28 the operator confirmed that
+  2×2 colour preview renders correctly on the real SV705C** (visual field
+  verification). JPG/PNG quicklooks use the same GRBG interpretation;
+  a separate saved-quicklook colour check is not recorded. The FITS writer
+  currently omits `BAYERPAT` for 2×2; that metadata behaviour has not
+  yet been changed. RAW16 bytes and FITS numeric pixels remain unaltered.
   See [SVBONY published specs](https://www.svbony.com/products/sv705c-color-planetary-camera-imx585).
 - Required flow: enumerate, call `SVBGetCameraInfo` to obtain real CameraID (do not hard-code), open, set full-frame 3856×2180 ROI and RAW16 enum 4, **start one continuous stream**, read frames, restore controls and close on exit. An earlier stop/start in the same SDK session returned timeout code **11**.
 - Gain is SDK control **0**; exposure is control **1** in microseconds. SDK readback rounds values: 10,000→10,007 µs, 50,000→50,148 µs and 1,000,000→1,000,143 µs. Image brightness responded to changes. No photometric calibration claim.

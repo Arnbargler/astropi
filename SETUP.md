@@ -46,13 +46,12 @@ exposure may delay a change until the SDK read completes. The camera may
 briefly show Reconfiguring. Preview can use colour or mono, fixed or auto
 display stretch. 2×2 acquisition and FITS display have passed a first
 real-Pi test. **Both binning modes support Debayer On (colour) and Off
-(monochrome)** for preview and JPG/PNG quicklooks. The 2×2 colour path
-currently assumes the same GRBG phase as 1×1; this is supported by the
-IMX585's colour-binning architecture but still needs a red/blue scene
-comparison on the actual SV705C. A wrong phase may swap colours.
-Scientific RAW16 and FITS keep the original binned numeric samples,
-regardless of Debayer position. The 2×2 FITS still omits `BAYERPAT`
-until SDK colour phase is physically verified. Metadata records binning,
+(monochrome)** for preview and JPG/PNG quicklooks. The operator verified
+correct 2×2 preview colours on the real SV705C on 2026-10-28, using
+AstroPi's GRBG rendering. JPG/PNG quicklooks use the same Bayer
+interpretation. Scientific RAW16 and FITS keep the original binned numeric
+samples, regardless of Debayer position. The 2×2 FITS currently omits
+`BAYERPAT` because the writer has not yet been updated. Metadata records binning,
 quicklook dimensions and whether debayering was enabled at capture start.
 Select RAW16/FITS/JPG/PNG via the four format switches (FITS/JPG default),
 then press **1, 5, 50, 100, 150 or 200** to save that many frames. The **1**

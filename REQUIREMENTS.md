@@ -10,8 +10,8 @@ original 70-item feature menu. For **current implementation status**, read
 - **#4** Responsive browser preview with modest network/CPU overhead.
 - **#5** Manual exposure and gain.
 - **#6** Supported ROI/resolution/binning choices. **1×1 and 2×2 hardware
-  binning** now implemented using the SV705C's published capabilities;
-  only 1×1 physically verified so far. Arbitrary ROI selection remains future.
+  binning** are implemented and physically verified on the SV705C; the operator
+  also confirmed correct 2×2 preview colours. Arbitrary ROI remains future.
 - **#8** Display debayer/colour and white balance without changing sensor RAW.
 - **#9** Histogram and display stretching.
 - **#10** Focus peaking overlay.

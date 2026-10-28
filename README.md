@@ -12,11 +12,11 @@ The Linux desktop is a browser/development client, not a required server.
   **New: manufacturer-supported 1×1 and 2×2 hardware binning buttons below Gain,**
   with a fresh SDK session after change and bin-aware recording. 2×2 is
   Pi-verified for 2×2 RAW/FITS capture: the user saved ~4 MiB files and
-  opened the FITS in Siril. **New: provisional Bayer colour preview and
-  JPG/PNG quicklooks at 2×2 when Debayer On; Debayer Off produces
-  monochrome**. Sony's IMX585 documentation describes Bayer-preserving
-  2×2 binning, but the SDK output's exact GRBG phase awaits a red/blue
-  colour-target test on the Pi. RAW16 and FITS remain unchanged.
+  opened the FITS in Siril. **2×2 colour preview is now operator-verified
+  visually correct with Debayer On; Debayer Off produces monochrome**.
+  Sony's IMX585 documentation describes Bayer-preserving 2×2 binning;
+  AstroPi uses GRBG for binned preview and JPG/PNG quicklooks. RAW16 and
+  FITS pixel data remain unchanged.
   Measured 50 ms preview: ~14.8 colour / ~16.6 mono FPS at 1× on Pi.
 - **Recording:** Individually selected RAW16, FITS, JPEG and PNG; one-shot
   or consecutive sequences up to 200 frames. USB-only storage guarded by
@@ -69,8 +69,8 @@ the Cancel button stops at a write boundary. Capture results remain scrollable
 within a short panel so they cannot cover the preview.
 The page no longer repeats operating instructions; controls and live
 status/error messages remain. A short physical Stop warning stays visible.
-The user reports that 2×2 colour preview matches 1×1 visually; exact Bayer
-phase is still documented as visually checked rather than instrument-tested.
+On 2026-10-28 the operator confirmed correct colours in the SV705C 2×2
+preview on real hardware. This supersedes the earlier pending colour check.
 
 ## Start / update
 
