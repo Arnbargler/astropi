@@ -292,7 +292,12 @@ class CameraWorker:
                 try:
                     driver.get_frame(raw, frame_wait_ms(exposure_us))
                 except SDKError as exc:
-                    if exc.code == 11 and timeouts < 3 and not self._stop.is_set():
+                    # SDK may time out on an in-flight exposure during Stop
+                    # or binning reconfiguration. An intentional Stop is not
+                    # a camera failure and must not block the new session.
+                    if self._stop.is_set():
+                        break
+                    if exc.code == 11 and timeouts < 3:
                         timeouts += 1
                         continue
                     raise
