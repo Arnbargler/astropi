@@ -217,6 +217,9 @@ async function stopMount() {
   if (mountStopPending || mountPhase !== "connected") return;
   mountStopPending = true;
   mountArmed = false;
+  // Lock out speed changes immediately, before the serial owner has
+  // acknowledged and verified a complete Stop.
+  mountMotionPhase = "stopping";
   updateButtons();
   try {
     await post("/api/mount/stop");
