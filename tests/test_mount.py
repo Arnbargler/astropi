@@ -525,7 +525,13 @@ def test_clock_site_readout_requires_lease_and_idle_mount(tmp_path):
         ":GG#": "+00:00", ":GC#": "10/28/26",
         ":GL#": "07:41:24", ":Gt#": "+45*17:36",
         ":Gg#": "+075*51:26", ":GS#": "12:32:54"}
-    factory = FakeFactory(responses=responses)
+    class EnvMotionFactory(FakeFactory):
+        def __call__(self, **kwargs):
+            port = MotionPort(responses=responses)
+            self.ports.append(port)
+            return port
+
+    factory = EnvMotionFactory()
     mount = MountWorker(alias, serial_factory=factory, poll_interval=0.06)
     client = create_app(settings=Settings(tmp_path, "expected", alias, tmp_path / "usb"),
                         mount=mount).test_client()
