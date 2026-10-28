@@ -1,186 +1,51 @@
-# AstroPi hardware and verified integration
+# AstroPi hardware reference
 
-**Current truth as of 2026-10-27.** This is the **concise operational reference**, not a chronological test diary. “Verified” means directly observed from `arn@astropi` terminal output or inspected images. “Planned” means **not implemented or not tested**. The full 69 KB original probe log remains in [Git history at `f01ae019`](https://github.com/Arnbargler/astropi/blob/f01ae019f9ba840f90b5bb5e566d0fc17dab41b7/HARDWARE.md) for troubleshooting; some statements in that historical snapshot were superseded by later tests.
+Current verified hardware and protocol facts (2026-10-28). Older detailed probe logs are in [Git history](https://github.com/Arnbargler/astropi/blob/f01ae019f9ba840f90b5bb5e566d0fc17dab41b7/HARDWARE.md); they are not current setup instructions.
 
-## AM3N auto UTC time sync on Connect (Pi hardware verified 2026-10-28)
+## Devices and installation
 
-**On each explicit browser Connect Mount**, the single serial-owning mount worker now checks the Pi's `timedatectl show -p NTPSynchronized --value` result. Only a synchronized Pi with a plausible UTC date may write AM3N clock settings. The exact commands, previously verified manually on firmware 1.8.8, are sent in order: `:SG+00:00#` (UTC zone), `:SCMM/DD/YY#` (current UTC date), and `:SLHH:MM:SS#` (current UTC time). Each must return a one-byte `1` acknowledgement. Worker then reads `:GG#`, `:GC#` and `:GL#`, checking UTC zone and comparing the mount's time with the Pi's current UTC to within six seconds. Only then is `time_sync_phase=verified` published; the existing read-only clock/site panel is refreshed automatically after successful verification.
-
-If NTP is not synchronized, a write is rejected or date/time readback differs, the dashboard shows `NOT synchronized` and the reason. The connection can still provide manual motor control; **no sky GoTo, tracking, time/site manual-entry or alignment is enabled**, and unsuccessful synchronization is not reported as verified. A reconnect is required to retry after Pi NTP becomes ready. The observing-site latitude and longitude are **not modified**. **Now verified through the new AstroPi app on live AM3N firmware 1.8.8:** a user screenshot shows `Pi NTP → mount clock: VERIFIED (04:47:34)`, mount date `10/28/26`, mount UTC time `08:47:34`, UTC offset `+00:00`, sidereal time `06:11:01`, stored latitude `+45*17:36` and west-positive longitude `+075*51:26`. The UTC snapshot time was `2026-10-28T08:47:34.680561+00:00`, closely matching the verified mount readback. This supersedes the stale `01/01/00` readback documented below. The UI has been relabeled from `Mount local time` to `Mount time (UTC)` because offset zero intentionally makes the mount-local field equal UTC; local Ontario wall time at this instant was approximately 04:47 EDT. No site-coordinate setter was used. Automatic synchronization and verification are now Pi hardware-tested; **sky alignment, GoTo and tracking are still not implemented or validated**.
-
-## AM3N live clock/site readback (2026-10-28)
-
-User screenshot confirms the **Read Mount Clock & Site** button now works on the physical AM3N (firmware 1.8.8). At Pi UTC snapshot `2026-10-28T08:31:45+00:00`, the mount reported **date `01/01/00`**, local time **`01:12:54`**, UTC offset **`+00:00`**, sidereal time **`01:13:07`**, latitude **`+45*17:36`** and west-positive longitude **`+075*51:26`**. Stored site coordinates match the previously manually configured observing site, but the mount's clock is clearly **not synchronized** with the Pi. This is expected to make time-dependent sky GoTo unreliable. Do **not** treat reported RA/Dec as valid celestial pointing until clock/site synchronization and alignment are verified.
-
-The same screenshot shows the new mount dashboard and **Slew 720x** selected, with the user reporting it is functioning well. This supports an initial hardware check of the redesigned controls; **Max 1440x and exact rates are not separately quantified**. Next implementation gate: establish trusted Pi time (Pi has no battery RTC), convert to mount UTC fields, send the previously tested time/date setters only when time is trusted, verify by readback, and leave sky GoTo disabled until those checks succeed.
-
-## Current AM3N controls (2026-10-28)
-
-- **Normal manual operation:** Operator lease + connected mount permits immediate N/S/E/W press-and-hold; the separate "Enable one manual jog" button and HTTP `/api/mount/arm` endpoint have been removed. A jog may continue for as long as the pointer is held and valid heartbeats arrive; there is **no fixed time cap**. Release, loss of browser focus, 600ms missed heartbeat, intentional Disconnect or the viewer-accessible red Stop requests `:Q#`. Reported coordinates must stabilize before the next jog; start and Stop commands are serialized. This is software-tested; direct-no-arm UI needs actual Pi retest.
-- **Five whitelisted manual rates:** Slow 8× `:R5#`, Medium 20× `:Rv20.00#`, Fast 60× `:Rv60.00#`, Slew 720× `:R8#`, Max 1440× `:R9#`. The 720×/1440× presets match INDI's AM3/AM5 driver `SetSlewRate(index)` and supported rate table. Existing three lower choices have been user-reported working; **the higher two have not yet been physically tested via AstroPi**. The driver initially sets `:R5#` on every jog, then the selected higher-rate command if needed.
-- **Time/site:** Read-only user-triggered query panel exists but screenshot showed not yet activated (`Clock/site: idle`, dash values). No automatic setters or NTP/RTC trust path. Keep GoTo/sky alignment disabled.
-- The paragraphs below preserve historic probes and earlier safety-test milestones; where they describe a 3s hard cap or an Arm button, those **no longer describe the current build**.
-
-## Equipment and connections
-
-| Item | Current configuration / evidence |
+| Device | Verified configuration |
 | --- | --- |
-| Host | Raspberry Pi **4 Model B Rev 1.5, 4 GiB**, hostname **`astropi`**, username **`arn`**; Debian **13.6 Trixie**, kernel **`6.18.39+rpt-rpi-v8`**, Python **3.13.5**, ARM64. Boots from **32 GB microSD** (`/dev/mmcblk0`). |
-| Network/time | Wi-Fi `wlan0` works, NTP was active and synchronized in tests; **no hardware RTC**. Do not depend on the Pi's local timezone; use trusted **UTC**. Offline time acquisition is **not implemented**. |
-| Camera | **SVBONY SV705C**, USB ID **`f266:9a0a`**, USB3 **5000M** on the Pi's blue port, 3856×2180 colour sensor, max sensor depth **12 bits**; SDK Bayer enum 2 = **GRBG**. |
-| Mount | **ZWO AM3N**, firmware **`1.8.8`**, USB ID **`03c3:4001`**, CDC ACM USB2 **12M**; Alt/Az **only**. `arn` belongs to `dialout`. |
-| Recording | **64 GB** USB3 flash stick, model **Flash Drive FIT**, negotiated **5000M**. One ext4 GPT partition, label `astropi-data`, filesystem UUID **`25b33cfa-b178-4b86-8a15-d00c8305cca5`**, auto-mounted at **`/media/astropi-data`**. |
-| Test optics | **Canon EF kit lens at 18 mm** attached to SV705C; this produced recognizable room images. **Not** a final telescope/focal-length specification. |
-| Power | Intended field setup: **12 V supply/battery** feeding AM3N and **12→5 V buck** for Pi. Exact buck ratings, wiring/fusing and end-to-end battery endurance **not yet documented/tested**. |
-| Other workstation | Linux Mint **N100** for development/browser use and eventual offline/post-capture alignment/stacking/field-rotation correction; **not required for Pi acquisition**. |
+| Host | Raspberry Pi 4B Rev 1.5, 4 GiB; Debian 13 Trixie ARM64, Python 3.13; hostname `astropi`, login `arn` |
+| Camera | SVBONY SV705C, USB ID `f266:9a0a`, USB3 5000M, GRBG, 3856×2180, 12-bit sensor |
+| Mount | ZWO AM3N firmware 1.8.8, USB ID `03c3:4001`, CDC ACM serial 9600 8N1, Alt/Az |
+| Recording | 64 GB USB3 ext4 stick, `/media/astropi-data`, label `astropi-data`, UUID `25b33cfa-b178-4b86-8a15-d00c8305cca5` |
+| Time | systemd NTP; Pi has no battery RTC. AM3N automatic UTC sync is active only when Pi NTP is confirmed |
 
-Bus/device numbers and `/dev/sda`/ `/dev/ttyACM0` may change after reconnect; use a stable serial alias and the filesystem UUID. Observed USB layout during endurance: SV705C on USB3 bus 2 port 2, stick on USB3 bus 2 port 1, AM3N on USB2 using `cdc_acm`. All three remained enumerated after Pi reboot.
+AM3N stable serial alias: `/dev/serial/by-id/usb-ZWO_Systems_ZWO_Device_123456-if00`; Pi user belongs to `dialout`. Do not depend on shifting `/dev/ttyACM*` numbers. SVBONY SDK 1.13.4 at `/home/arn/svbony-sdk/SVBCameraSDK/lib/armv8/libSVBCameraSDK.so` (or `ASTROPI_SVB_SDK`). Camera USB permissions: `/etc/udev/rules.d/90-ckusb.rules`. Vendor binaries are not in Git.
 
-## Camera: SDK and exact integration details
+## SV705C integration quirks
 
-- SVBONY Linux SDK distribution `v1.13.4` is installed **on the Pi, not in this repository**. ARM64 library: **`/home/arn/svbony-sdk/SVBCameraSDK/lib/armv8/libSVBCameraSDK.so`**; headers: `/home/arn/svbony-sdk/SVBCameraSDK/include/`. Load via Python `ctypes.CDLL`; system `libusb-1.0` dependencies resolve.
-- Camera USB permission rule: `/etc/udev/rules.d/90-ckusb.rules`, vendor/product `f266:9a0a`, mode `0666` (trusted local environment). Do not commit the vendor binaries.
-- **Required demonstrated initialization order:** `SVBGetNumOfConnectedCameras()` → `SVBGetCameraInfo(&info, index=0)` → use `info.CameraID` → `SVBOpenCamera(id)` → configure → `SVBStartVideoCapture(id)` → `SVBGetVideoData(...)` → `SVBStopVideoCapture(id)` → `SVBCloseCamera(id)`. CameraInfo has 32-byte `FriendlyName`, `CameraSN`, `PortType`, then unsigned `DeviceID` and signed `CameraID`; observed CameraID **1**, **do not hard-code it**.
-- A test skipping `SVBGetCameraInfo` before `SVBOpenCamera(1)` failed with **SDK error 2**. After proper enumeration/info, open/close succeeded. Treat correct sequence as mandatory even though the precise SDK-internal reason is unproven.
-- Verified full resolution call `SVBSetROIFormat(id, 0, 0, 3856, 2180, 1)` and output enum **4 = RAW16**; RAW8 enum 0 also supported. Each full RAW16 buffer is exactly **16,812,160 bytes**. Supported bin modes were reported **1, 2, 3, 4**, but **3 and 4 have not been capture-tested** (published camera specifications may differ). Do not expose modes just because a capability array lists them.
-- SDK control **0 = gain**, **1 = exposure in microseconds**. Use `SVBSetControlValue` and read back `SVBGetControlValue`; SDK exposure quantizes slightly. Verified requests/readbacks: 10,000→**10,007 µs**, 50,000→**50,148 µs**, 1,000,000→**1,000,143 µs**; gain 0→0 and 100→100, with auto flag 0.
-- Exposure validation: at gain 0, changing ~10 ms→50 ms changed sampled 12-bit mean from **27.35→133.34 (~4.88×)** at similar light levels. Gain validation: at ~50 ms, gain 0→100 increased mean **133.34→440.11 (~3.30×)**; high-gain sample had ~0.05% saturation. These are **functional tests, not calibration standards**.
-- RAW16 sampled pixel words were **100% multiples of 16** in dark and illuminated frames, strongly supporting **12-bit data left-aligned by four bits**; right-shift by 4 for preview scaling. Dark frames had **lens cap on**. An illuminated 10 ms frame showed sampled max raw **5,328**, mean **317.22**, ~3.77% zero pixels, no sampled saturation. The original RAW must remain unchanged.
-- Colour preview: **GRBG** arrangement; combine each **4×4 Bayer sensor block** into one RGB sample, ~**964×545**, rough percentile-based white balance/stretch, encode PNG. User inspected both grayscale and RGB views; recognizably correct indoor objects and plausible colours. **Not** a full-resolution/photometrically calibrated demosaic, and performance for live preview still needs profiling.
-- SDK stream caveat: a test calling stop/start for a *second* capture within the same camera session failed at `SVBGetVideoData` with **error 11 = timeout**. A fresh camera session with one stream start captured the 50 ms frame on its first request. **Root cause not proved.** Prefer maintaining one streaming session; implement bounded timeouts, safe cleanup and reconnect handling rather than assuming every restart will work.
-- Paths of actual retained examples: `/media/astropi-data/camera-test-20261027-110857/` (ten full RAW16 frames), `/media/astropi-data/light-test-20261027-111913.raw16` plus grayscale and `-color.png`, `/media/astropi-data/exposure-gain-test/`, and endurance output below. These are on the **Pi USB stick, not in Git**.
+- Required flow: enumerate, call `SVBGetCameraInfo` to obtain real CameraID (do not hard-code), open, set full-frame 3856×2180 ROI and RAW16 enum 4, **start one continuous stream**, read frames, restore controls and close on exit. An earlier stop/start in the same SDK session returned timeout code **11**.
+- Gain is SDK control **0**; exposure is control **1** in microseconds. SDK readback rounds values: 10,000→10,007 µs, 50,000→50,148 µs and 1,000,000→1,000,143 µs. Image brightness responded to changes. No photometric calibration claim.
+- RAW16 frame = **16,812,160 bytes**, 3856×2180 little-endian uint16, with 12-bit Bayer **GRBG** values shifted left by four bits. FITS stores full-resolution native samples (big-endian BITPIX16, BZERO=32768, BSCALE=1); RAW16 unchanged. FITS exposure start is estimated, not a hardware timestamp. Browser preview ~964×545, JPEG/PNG saved quicklooks 1928×1090; these are *not* calibrated full demosaics.
+- Pi 50ms live rates: RAW acquisition ~15.8 FPS; colour preview ~14.8 FPS (62ms processing); sampled-green mono ~16.6 FPS (14ms processing).
+- **Standalone 20-minute endurance probe**: 600/600 full RAW frames retrieved, 120/120 saved/verified by SHA-256 (~1.88 GiB), zero SDK timeouts, CPU 46.7–51.6°C, throttled flags 0x0. One camera USB3 reset was logged near startup without observed lost frames. This probe is *not* proof of equivalent 120-frame browser recording endurance.
+- **Browser captures**: 11/11 file size/hash matches across four format combinations; independent full-frame FITS↔RAW16 check matched all 8,406,080 samples. Pi sequences of 5 and 10 frames completed; a 10-frame request cancelled at 4/10 with zero incomplete directories.
+- USB recording mount must match its UUID before and during each save. Files are written via pinned directory fds, fsync and atomic `.partial` → final directory rename. **Never fall back to system microSD.** Missing-drive and in-flight device-loss handling have not been deliberately field-failure-tested.
 
-### Proven capture/storage endurance
+## AM3N serial control
 
-**20-minute test 2026-10-27**, AM3N connected but stationary, one continuous camera session, gain 0, measured exposure 1,000,143 µs, RAW16 at full resolution, a frame retrieval every 2 seconds and an `fsync`/SHA-256-checked file every fifth retrieval:
+AM3N read queries: `:GVP#` model (AM3N), `:GV#` firmware (1.8.8), `:GU#` state, `:GA#` altitude, `:GZ#` azimuth, `:GR#` RA, `:GD#` Dec and `:GS#` sidereal time. Status flags are optional and shift position: `n` not tracking, `N` not slewing, `H` Home, `Z` Alt/Az. `M...` suffix is undocumented; preserve raw status. Reported RA/Dec are **not verified sky pointing**.
 
-| Metric | Observed |
-| --- | --- |
-| Frame retrieval | **600/600** successful; **0 SDK timeouts** |
-| Saved files | **120/120**, individually SHA-256 readback verified; **120 distinct digests** |
-| Raw payload | **2,017,459,200 bytes (~1.88 GiB)** |
-| Pi temperature | **46.7–51.6°C** over twenty 1-minute readings |
-| Power flags | `vcgencmd get_throttled` **`0x0`** throughout |
-| SDK shutdown | Stop, restore gain/exposure and Close all returned **0** |
-| Directory | `/media/astropi-data/endurance-20261027-114529/` |
+### Current browser manual rates
 
-**One kernel USB3 reset**: `2026-10-27 11:45:29 usb 2-2: reset SuperSpeed USB device number 3 using xhci_hcd`, on the camera's USB port around capture startup. Cause unknown; *no subsequent matching USB/storage errors in the user's filtered log*, no lost frames or timeouts. Monitor for future resets, especially during recording; don't call the kernel log completely clean. This test is representative of low-cadence DSO exposures, **not maximal USB3 throughput or simultaneous mount slewing**.
+| UI | Serial rate | Nominal multiple |
+| --- | --- | ---: |
+| Slow | `:R5#` | 8× |
+| Medium | `:Rv20.00#` | 20× |
+| Fast | `:Rv60.00#` | 60× |
+| Slew | `:R8#` | 720× |
+| Max | `:R9#` | 1440× |
 
-## AM3N: protocol, current settings and motion evidence
+These rates follow known AM-series driver commands; exact angular speeds have not been measured. Direction commands `:Mn#`, `:Ms#`, `:Me#`, `:Mw#`; all-stop `:Q#`. Operator verified manual jogging, release-to-Stop and camera/mount coexistence; slow-speed 3s automatic stop was previously tested, then **deliberately removed**. Current app supports direct hold-to-move with **no fixed duration limit**, 600ms missing-heartbeat Stop, one serial-owner thread and post-Stop position settling before next jog. Serial loss/crash cannot guarantee a physical stop; manual Cancel/power remains fallback.
 
-- Preferred path: **`/dev/serial/by-id/usb-ZWO_Systems_ZWO_Device_123456-if00`** (currently points to `/dev/ttyACM0`). `pyserial 3.5`; **9600 8N1**, no flow control, ~2 s serial read timeout, ASCII LX200-like `:` commands, `#` reply terminator for queries.
-- Model `:GVP#` → `AM3N#`; firmware `:GV#` → `1.8.8#`. Query `:GU#` reports status flags (third-party protocol interpretation): **`n` not tracking, `N` not slewing, `H` at Home, `Z` Alt/Az**. The remaining `M...` suffix is **not decoded**. **`:GAT#` returned `e7#`**, inconsistent with some third-party tracking examples; **do not rely on it** for tracking status.
-- **Owner-selected observing site:** latitude **+45.2933°** (mount `+45*17:36#`), longitude **−75.8571° east-positive** (mount uses **west-positive** `+075*51:26#`). Setter `:St+45*17:36#` for latitude; `:Sg+075*51:26#` for longitude. Both replied **`1`**, verified by `:Gt#`/`:Gg#` readbacks. Owner believes site survives power cycles because the old stored coordinates matched their former home; **nonvolatility not independently power-cycle-tested**. Reapply site on connect.
-- **Clock (manually demonstrated):** `:SG+00:00#` sets UTC offset 0; `:SC10/27/26#` date; `:SL13:37:03#` time—each setter acknowledged `1`. `:GG#`, `:GC#`, `:GL#` readbacks matched; clock advanced correctly, and `:GS#` local sidereal time agreed to ~0.5 s with independent calculation at the then-stored longitude. **Example commands contain historical times; use live UTC.** **Automatic startup/reconnect synchronization does NOT exist yet**. Pi lacks RTC, so offline field boot needs trusted time before sky GoTo.
-- **Read-only position:** `:GA#` altitude, `:GZ#` azimuth, `:GR#` RA, `:GD#` Dec; **reported** coordinates are not proven pointing accuracy until alignment. `:GS#` sidereal time. No command should be treated as proof of sky alignment.
-- **Manual motion verified:** `:Rv120.00#` (~120× sidereal) followed by `:Me#` east caused **visibly observed** azimuth movement; `:Mn#` up caused positive altitude telemetry change. Preset `:R5#` also moved azimuth (2 arcmin in 1 s, 6 arcmin in 3 s). Directional stops e.g. `:Qe#`, `:Qn#`, plus `:Q#` all-stop are accepted.
-- **Important stop behaviour:** after high-speed `:Qe#`/`:Qn#` and `:Q#`, each tested axis showed another **1′28″ reported position change** before a later stable reading; it may be deceleration or telemetry latency. Always treat a stop as **requested**, then poll `:GU#` and both axes repeatedly for stationary readings. The normal-operation stop-settling tests passed; **abnormal USB disconnect/process crash/fail-safe stopping have not been tested**.
-- **Native Home verified:** sent **`:hC#`** via USB, hand controller disconnected, and observed actual motorized Home sequence. Start altitude **+01°30′50″**, azimuth **013°43′10″**; final **altitude 0°, azimuth 0°** with status **`nNHZM040400990#`** stable across four polls. Owner confirms its **near-zenith, azimuth-wrap route** is the same native route taken via hand controller. **Do not attempt to “fix” this path**. Confirm payload/cable clearance in each physical setup.
-- **Park is separate and not tested** (third-party driver uses `:hP#`; firmware 1.8.8 reportedly defaults to horizontal Park). Unpark, tracking commands, sky GoTo and alignment have **not been validated**. Use protocol sources as hypotheses and verify in controlled stages; e.g. [INDI AM-series driver](https://github.com/indilib/indi/blob/master/drivers/telescope/lx200am5.cpp).
-- User's physical warning: AM3N's **M12 counterweight-bolt hole can reach internal wiring**. **Never insert an overlong M12 bolt.** Mount/Home movements also require physical clearance and a reachable hardware Cancel/power fallback; software stop is not fail-safe if Pi/USB dies.
+**Stored observing site:** latitude **+45.2933° N**, `+45*17:36`; longitude **−75.8571° east-positive** (AM3N convention west-positive `+075*51:26`). Currently read-only in app. Standalone site setters `:St+45*17:36#` and `:Sg+075*51:26#` previously returned success; **current app does not set site**.
 
-## USB flash data drive
+**Automatic clock sync on each explicit Connect:** check `timedatectl show -p NTPSynchronized --value` equals yes; send `:SG+00:00#`, `:SCMM/DD/YY#`, `:SLHH:MM:SS#`, require single-byte `1` acknowledgment from each; read back with `:GG#`, `:GC#`, `:GL#` and compare within six seconds of Pi UTC. **Confirmed on live firmware 1.8.8**: 2026-10-28, mount UTC time 08:47:34, offset +00:00, existing site unchanged. UI says **Mount time (UTC)**; it is intentionally not Ontario local time. If NTP not yet synchronized, report error and retry on a later Connect. No manual-time field mode yet.
 
-- USB3 at **5000M**, ~59.8 GiB. USB stick was an old Pi OS image; the user explicitly approved its erasure. ext4 label **`astropi-data`**, UUID **`25b33cfa-b178-4b86-8a15-d00c8305cca5`**.
-- `/etc/fstab`: `UUID=25b33cfa-b178-4b86-8a15-d00c8305cca5 /media/astropi-data ext4 defaults,nofail,x-systemd.device-timeout=10s 0 2`. Mounted `rw`; mount root `arn:arn`. `nofail` permits boot without USB drive.
-- Storage benchmark: **512 MiB write at 20.2 MiB/s**, checksum readback **PASS**; measured read **146.5 MiB/s** likely inflated by Linux cache. A **16 MiB file survived reboot** with SHA-256 `OK`; filesystem auto-mounted after reboot; no undervoltage.
-- Crucial: **require a mounted filesystem with this UUID** before writing captures. **Never** silently fill `/dev/mmcblk0` if flash drive is absent. Check free space, write via `.partial` → `fsync` → atomic rename, and verify/capture errors.
-- Last tested drive occupancy was **2.2 GiB used / 57 GiB available** (4%), after endurance; do not assume this remains current.
+**Standalone native Home test**: `:hC#` reached altitude/azimuth 0/0 via near-zenith/azimuth-wrap; this is not alignment and **Home is not implemented in browser**. Park `:hP#`, sky GoTo and tracking have not been validated. The AM3N M12 counterweight bolt hole can reach internal wiring with an overlong bolt: do not insert one.
 
-## Browser live-preview performance (verified on Pi, 2026-10-27)
+## Not verified / future
 
-At the **50 ms exposure** preset with the new two-thread JPEG preview pipeline, the user observed:
-
-| Preview mode | RAW acquisition | Browser preview | Preview processing |
-| --- | ---: | ---: | ---: |
-| Debayer On (colour) | **15.8 FPS** | **14.8 FPS** | **62 ms** |
-| Debayer Off (grayscale, sampled green sites) | **16.5 FPS** | **16.6 FPS** | **14 ms** |
-
-The prior preview was **2.2 FPS** / **143 ms JPEG processing**, so the new colour path is ~6.7× faster; mono ~7.5× faster. Browser preview FPS is a measured instantaneous/smoothed rate and can briefly exceed RAW FPS; do not interpret that as sustained extra frames. At 50 ms the exposure-only ideal ceiling is 20 FPS, but readout/USB/processing impose overhead. Colour conversion is no longer the primary bottleneck. These numbers are snapshots, not a full benchmarking sweep or verified 30 s behaviour.
-
-## On-Pi one-shot capture file creation (verified 2026-10-27)
-
-The user tested independent recording format toggles and provided a Pi shell listing confirming four completed directories on `/media/astropi-data/captures/`:
-
-| UTC folder prefix | Observed files besides `metadata.json` |
-| --- | --- |
-| `20261027T212407_904664_f9b41e` | FITS, RAW16, JPG, PNG |
-| `20261027T212436_111525_ab0bbd` | FITS only |
-| `20261027T212445_542596_1dd89b` | FITS, JPG |
-| `20261027T212451_166770_6a75d1` | FITS, RAW16, JPG, PNG |
-
-Thus all four format writers and independent selection combinations produced files through the Pi app on its configured USB recording path. There were no `.partial` paths in the displayed list. **Follow-up Pi verification:** all four directories passed file size and SHA-256 digest comparisons against their `metadata.json` records: 4 + 1 + 2 + 4 = **11/11 files PASS**. This confirms stored bytes match the recorded hashes, not independent FITS pixel correctness, exact mounted UUID at test time or USB-loss behaviour; those remain separately unverified. No exposure sequences yet.
-
-## Five-frame sequence and Bayer fidelity (verified on Pi, 2026-10-27)
-
-User performed the first **real** 5-frame sequence using the newly integrated browser controls. UI reported **5 / 5 frames saved** and **Sequence: Capture saved to USB drive**, listing these five completed capture directories:
-
-- `captures/20261027T214833_403289_c8ea6d`
-- `captures/20261027T214834_911017_e0d56e`
-- `captures/20261027T214836_114608_a299a1`
-- `captures/20261027T214837_324260_50a998`
-- `captures/20261027T214838_630750_0b3f85`
-
-This verifies sequence completion, five reported completed frame folders, and Pi USB recording in the tested short run. Per-frame SHA-256 recheck for this **new** five-frame sequence was not supplied; previous 11 one-shot files were validated.
-
-The user also ran the new **read-only FITS/Bayer verifier** on the previously recorded all-four-format capture `20261027T212451_166770_6a75d1`. Exact terminal results:
-
-```text
-PASS: 4 saved files match checksums and sizes.
-PASS: FITS structure and 12-bit Bayer sample range.
-PASS: All FITS pixels match the RAW16 sensor pixels.
-```
-
-Hence **all 8,406,080 pixels of that saved FITS matched the paired RAW16** after accounting for the native 12-bit left shift and FITS signed storage offset. This validates one real recorded science-data pair; it does not independently calibrate sensor response, guarantee exact exposure timestamps, establish browser-disconnect endurance, test cancellation under load or prove recovery from lost USB storage.
-
-## Ten-frame completion and cancellation (verified on Pi, 2026-10-27)
-
-Follow-up real-camera / USB sequence tests passed:
-
-| Sequence ID | Browser completion status | Independent manifest enumeration |
-| --- | --- | --- |
-| `77f0893f415b` | Normal ten-frame run | **10 / 10** folders with frame numbers **1–10**, no gaps |
-| `62b28bdbfabd` | **Sequence: Capture sequence cancelled**, **4 / 10 frames saved** | **4 / 10** folders with frame numbers **1–4**, no gaps |
-
-The cancelled run displayed four completed capture directories:
-
-- `captures/20261027T220217_190814_74cd27`
-- `captures/20261027T220218_694299_c0327c`
-- `captures/20261027T220234_233343_3aafe0`
-- `captures/20261027T220240_248883_c39207`
-
-The user's manifest-inspection script reported **`Incomplete folders: 0`**. Cancellation appears to have respected the safe write boundary: four finished frames were retained and the remaining six were not saved. Together with the prior five-frame pass, normal completion and short-run cancellation are now **hardware-verified**. Not independently reverified in this test: per-file SHA-256 for the new sequences, camera exposure timing, browser-disconnection endurance, >10-frame endurance, or deliberate USB-loss recovery. No AM3N mount movement in these camera tests.
-
-## First AM3N application integration (live Pi connection and disconnect/reconnect verified)
-
-**New milestone (2026-10-27):** The app has an explicit operator-only **Connect Mount / Disconnect** UI and its own serial telemetry worker at `astropi/mount/worker.py`. The worker is not started at web-service launch or when any browser reads status. Connect opens ONLY the verified by-id alias at 9600 8N1 (pyserial), checks `:GVP#` returns model AM3N, obtains firmware via `:GV#`, and polls the **read-only** commands `:GU#`, `:GA#`, `:GZ#`, `:GR#`, `:GD#` (status, altitude, azimuth, RA and Dec).
-
-All serial I/O is confined to one thread. Flask exposes cached status to viewers and operator-gated Connect/Disconnect only; it has **NO generic command endpoint** and **NO motion/Home/Park/clock/site/tracking setters**. Invalid serial responses, missing alias and unplug errors close the handle, show error status and clear potentially stale coordinates. Recovery requires an explicit Connect again (no automatic move or reconnect). Flag decoding is conservative: recognize known flags by their presence before the undocumented `M` suffix, not fixed offsets. The optional `H` Home marker is absent in the live `nNZM...` response but present in the previously tested `nNHZM...` response; `Z` denotes Alt/Az in both. The raw response is always displayed. All displayed coordinates are explicitly mount-reported, not sky-aligned or independently measured.
-
-**Pi hardware evidence (2026-10-27):** A screenshot of the live AstroPi browser shows **USB detected**, **serial alias available**, connection **connected**, model **AM3N**, firmware **1.8.8**, altitude **+00*00:00**, azimuth **000*00:00**, reported RA **13:13:45**, reported Dec **+44*42:24**, and raw status **`nNZM0000000000`**. The panel also displayed a recent telemetry timestamp. This directly verifies the new application serial connection and live status/coordinate reporting. Screenshot showed `unknown` for Alt/Az solely because the old parser expected `Z` at a fixed position; a code-tested correction now accepts the shifted optional flag. **Follow-up Pi screenshots confirm the browser connection lifecycle:** (1) connected with model AM3N, firmware 1.8.8, altitude +00*00:00, azimuth 000*00:00, reported RA 13:21:32, Dec +44*42:24, and `nNZM...` flags now correctly decoding Alt/Az; (2) clicked Disconnect and the UI showed disconnected with altitude/azimuth/RA/Dec, flags and telemetry timestamp cleared to dashes; (3) clicked Connect and the UI again showed connected with telemetry restored, reported RA 13:22:30 and Dec +44*42:24. This verifies intentional Connect/Disconnect/Reconnect and **clearing old pointing data**, without commanding the motors to move. Reported RA advanced while both mount axes remained at zero, consistent with time-based celestial reporting; this does not establish sky alignment. **Forced serial unplug, abnormal link-loss failsafe and actual mount motion via the app remain untested**. Older manual protocol probes listed above are real hardware evidence, but not evidence this new application worker works there. No time/site synchronization occurs and offline sky GoTo is still unsafe/not implemented.
-
-## First manual motion implementation (software-tested only)
-
-**First Pi screenshots now show real AZIMUTH movement:** from 000°00′00″ to 000°05′57″ (delta 5′57″, ~0.0992°) while altitude remained +00°17′26″. Both before/after screenshots show `Reported axes stable after Stop · movement disabled`, connected AM3N firmware 1.8.8 and storage ready. This demonstrates a manual commanded change in mount-reported azimuth and subsequent UI stable status. **After a reboot, the user performed the requested isolated E-jog and reported that everything, including release-to-stop, behaved as expected.** The user supplied no timing/position measurements for this follow-up; treat it as qualitative on-hardware confirmation only. The operator subsequently confirmed North and South jog/release worked as expected, describing movement as very slow, consistent with the deliberately conservative `:R5#` test rate. No quantitative movement distances or timing were supplied. West and hardware deadman expiry remain unverified. The magnitude is consistent with about three seconds at the previously measured `:R5#` rate of roughly 2′/s; if this was a 0.3–0.5s press, that would warrant investigating delayed software Stop or physical coast before more jogging. The new manual buttons require operator-only arming for EACH jog. The Pi serial-owner sends only whitelisted `:R5#` (previously physically tested, ~8× sidereal), `:Mn#/:Ms#/:Me#/:Mw#` and `:Q#`. No Home, GoTo, Park, automatic tracking, site/time setter or general-purpose LX200 command endpoint.
-
-A live jog requires heartbeats no more than **600 ms** apart and is forcibly ended after **3.0 seconds**, regardless of heartbeats. Re-arming is mandatory after every Stop. Release/leave of a button, loss of browser focus, tab hidden and operator release request Stop; the Pi watchdog also requests Stop independently. Any local viewer can request emergency Stop, but cannot begin a jog. Writes are serialized with Stop taking priority; stopping is followed by reported position-stability checks and up to three `:Q#` attempts. If telemetry never stabilizes, further jogs are blocked with a **physical Stop required** warning.
-
-**Important limit:** Neither Python nor a network heartbeat can ensure stopping after Pi power failure, process death, a severed USB serial cable or a stuck mount controller. Previous standalone probes saw further position change after Stop. Keep the physical Cancel/power cutoff within reach, allow motor deceleration and verify visually. See SETUP.md for stationary Stop first, then ONE short manual test. Extended fault safety remains untested.
-
-## Three-second mount safety limit and speed selection (2026-10-28)
-
-**Verified on actual mount:** User held a direction beyond 3s and observed the browser report **"Stop requested" while still holding**, followed by the mount **stopping itself at ~3s**. This validates the **independent three-second jog hard cutoff** at the existing slow `:R5#` rate. User also confirmed earlier E, N and S short-jog/release behaviour. **The 600ms missing-heartbeat watchdog, sudden Pi/USB failure and West jog remain unverified on hardware.**
-
-**New rate-selection code — hardware-unverified:** Adds Slow 8× (`:R5#`, physically verified), Medium 20× (`:Rv20.00#`) and Fast 60× (`:Rv60.00#`). AM3N hardware manual lists 8×, 20× and 60× sidereal rates; previous probes successfully sent the same variable-rate command family at `:Rv120.00#`, but **20× and 60× have not yet been tested via AstroPi**. For every new jog, code first sends the known `:R5#` baseline, then the selected higher rate, then the selected directional command. Rate strings are whitelisted on server. Slow has 3s hard limit, Medium 2s, Fast 1s; **all have the same 600ms heartbeat timeout and require separate arming**. Selection is unavailable while armed/moving, and reconnect resets to Slow. The UI shows the *requested* rate, not independent speed feedback.
-
-Always keep physical Cancel/power cutoff accessible; serial disconnect can defeat software Stop.
-
-## What remains unresolved (not pre-development blockers)
-
-1. **Pi browser status, SV705C preview and 50ms two-thread colour/mono rates are verified.** One-shot recording produced four completed capture directories on Pi USB with different combinations of FITS/RAW16/JPG/PNG. All 11 file sizes and SHA-256 checksums verified against metadata on the Pi; FITS 12-bit Bayer pixel equality against RAW16 verified for one real capture; first five-frame sequence completed and reported five saved directories on Pi USB. Ten-frame completion and four-frame cancellation during a requested ten-frame sequence are Pi-verified, with zero incomplete folders. Endurance beyond ten frames, fault recovery and auto-start remain unverified/unfinished.
-2. **Mount:** read-only serial connection, flag decoding, intentional browser Disconnect/Reconnect and stale-coordinate clearing verified on real AM3N. An explicit bounded manual jog/Stop implementation now passes simulated serial tests; E-direction app-initiated motion and reported Stop/settling have been observed in Pi screenshots, and the user subsequently confirmed a controlled E-jog/release behaved as expected. North/South and actual deadman expiry are unverified. Sky alignment, GoTo, tracking and Park remain unimplemented; abnormal link-loss failsafe untested; offline location/time recovery and abnormal link-failure safety remain untested. Home works but does not establish pointing accuracy.
-3. **Camera:** test extended endurance and failure handling, separately verify per-frame saved sequence checksums, long-exposure metadata precision, colour calibration, ROI/binning beyond proven full-frame 1x and fault recovery. Live preview is near camera-limited speed at 50ms.
-4. **Physical field deployment:** actual optical tube and 12 V battery/buck wiring, cable clearance on Home/GoTo, safe physical Cancel, offline network and trusted time, sustained battery runtime. The successful test was with connected but **stationary** AM3N.
-5. **Service:** one process owns camera SDK; one serialized mount command queue; capture sequences must survive browser disconnect; one operator lease; timestamps/site/UUID validated before scientific recordings.
-
-**Use [REQUIREMENTS.md](REQUIREMENTS.md) for what to build and [DEVELOPMENT.md](DEVELOPMENT.md) for how to begin.** Current facts here supersede historical probe entries; keep detailed diagnosis in Git history rather than turning this file back into a daily console log.
+No true optical sky alignment, GoTo, tracking, Park, automatic site overwrite or plate solving. No controlled forced USB/serial-loss fail-safe test, real field battery/buck wiring, mounted telescope clearance, service auto-start or no-NTP clock recovery. Do not infer SDK-only or terminal-probe tests imply application features.
