@@ -167,7 +167,21 @@
         <div class="mount-jog-panel">
           <button id="mount-stop" class="mount-stop" disabled>STOP MOUNT</button>
           <p class="mount-caution">Emergency Stop is available to every viewer. It requests a motor stop; it is not proof of a completed halt. Keep the physical Cancel/power cutoff accessible.</p>
-          <button id="mount-arm" disabled>Enable one low-speed jog</button>
+          <div class="mount-speed" role="group" aria-label="Manual mount jog speed">
+            <label for="mount-speed-slow" class="mount-speed-choice">
+              <input id="mount-speed-slow" name="mount-speed" type="radio" value="slow" checked disabled>
+              <span>Slow <small>8×</small></span>
+            </label>
+            <label for="mount-speed-medium" class="mount-speed-choice">
+              <input id="mount-speed-medium" name="mount-speed" type="radio" value="medium" disabled>
+              <span>Medium <small>20×</small></span>
+            </label>
+            <label for="mount-speed-fast" class="mount-speed-choice">
+              <input id="mount-speed-fast" name="mount-speed" type="radio" value="fast" disabled>
+              <span>Fast <small>60×</small></span>
+            </label>
+          </div>
+          <button id="mount-arm" disabled>Enable one manual jog</button>
           <div class="mount-directions" role="group" aria-label="Press and hold to jog mount">
             <button type="button" id="mount-north" disabled aria-label="Hold to move altitude north">N ↑</button>
             <button type="button" id="mount-west" disabled aria-label="Hold to move azimuth west">W ←</button>
@@ -177,7 +191,7 @@
           </div>
           <p id="mount-motion" role="status" aria-live="polite">Movement disabled</p>
           <p id="mount-motion-warning" role="alert" class="mount-error"></p>
-          <p class="mount-small">Low speed only (AM3N rate R5, roughly 8× sidereal). Hold one direction; release, leave the button, switch tabs or lose contact to request Stop. Each jog requires re-enabling movement and cannot exceed 3 seconds.</p>
+          <p class="mount-small">Slow 8× is Pi-verified. Medium 20× and Fast 60× are experimental until tested on the mount. Each jog must be re-armed; Stop/heartbeat safety always applies. Absolute caps: Slow 3s, Medium 2s, Fast 1s. Releasing, leaving the button or switching tabs requests Stop.</p>
         </div>
         <p id="mount-flags">Status flags: —</p>
         <p id="mount-raw-status" class="mount-small">Raw :GU#: —</p>

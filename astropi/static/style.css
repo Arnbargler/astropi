@@ -118,3 +118,14 @@ button:hover:not(:disabled){background:#2a5669}button:disabled{opacity:.38;curso
 #mount-motion{font-weight:600;color:#b1d7cf;font-size:13px}
 #mount-arm{min-height:37px}
 .mount-jog-panel .mount-caution{border-top:0;margin:0;padding:0}
+
+
+.mount-speed{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
+.mount-speed-choice{display:block;cursor:pointer;font-size:12px}
+.mount-speed-choice input{position:absolute;opacity:0;width:1px;height:1px}
+.mount-speed-choice span{display:flex;flex-direction:column;gap:3px;align-items:center;justify-content:center;
+  padding:8px 2px;border:1px solid #416276;border-radius:6px;background:#122331;color:#c6d9e5;font-weight:650}
+.mount-speed-choice small{font-size:10px;font-weight:400;color:#aac4d0}
+.mount-speed-choice input:checked+span{background:#256a81;border-color:#79bed1;color:#fff}
+.mount-speed-choice input:disabled+span{opacity:.42;cursor:not-allowed}
+.mount-speed-choice input:focus-visible+span{outline:2px solid #f1e5a7;outline-offset:2px}

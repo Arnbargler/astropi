@@ -25,6 +25,13 @@ let mountArmed = false;
 let heldMountDirection = null;
 let mountStopPending = false;
 let mountHeartbeatBusy = false;
+const mountSpeeds = ["slow", "medium", "fast"];
+let selectedMountSpeed = "slow";
+function showMountSpeed(speed) {
+  selectedMountSpeed = speed;
+  for (const option of mountSpeeds)
+    $("mount-speed-" + option).checked = option === speed;
+}
 const saveFormats = ["fits", "raw", "jpg", "png"];
 const $ = id => document.getElementById(id);
 const write = (id, value) => { $(id).textContent = value; };
@@ -63,6 +70,11 @@ function updateButtons() {
   $("mount-stop").disabled = mountPhase !== "connected" || mountStopPending;
   $("mount-arm").disabled = !owner || mountPhase !== "connected" ||
     mountMotionPhase !== "idle" || mountArmed || mountRequestPending;
+  for (const speed of mountSpeeds) {
+    $("mount-speed-" + speed).disabled = !owner || mountPhase !== "connected" ||
+      mountMotionPhase !== "idle" || mountArmed || mountRequestPending ||
+      Boolean(heldMountDirection);
+  }
   for (const direction of ["north", "south", "east", "west"]) {
     $("mount-" + direction).disabled = !owner || mountPhase !== "connected" ||
       !mountArmed || mountMotionPhase !== "idle" || mountRequestPending;
@@ -188,6 +200,16 @@ $("release-control").addEventListener("click", async () => {
   } catch (error) { write("camera-error", error.message); }
   updateButtons();
 });
+for (const speed of mountSpeeds) {
+  $("mount-speed-" + speed).addEventListener("change", () => {
+    if (mountArmed || mountMotionPhase !== "idle" || heldMountDirection) {
+      showMountSpeed(selectedMountSpeed);
+      return;
+    }
+    showMountSpeed(speed);
+    updateButtons();
+  });
+}
 // Pointer holds have no click-to-latch behaviour. The *Pi* enforces the 600ms
 // deadline; browser events are an additional first line of defence.
 async function stopMount() {
@@ -227,9 +249,10 @@ async function beginMountHold(direction) {
   heldMountDirection = direction;
   updateButtons();
   try {
-    await post("/api/mount/jog", {direction});
+    await post("/api/mount/jog", {direction, speed:selectedMountSpeed});
     if (heldMountDirection !== direction) return; // Release already requested
-    write("mount-motion", "Jog " + direction + " requested · hold button");
+    write("mount-motion", "Jog " + direction + " (" + selectedMountSpeed +
+      ") requested · hold button");
     write("mount-error", "");
   } catch(error) {
     heldMountDirection = null;
@@ -296,7 +319,10 @@ function describeFlag(v, whenTrue, whenFalse) {
 }
 function showMount(data) {
   if (!data) return;
-  mountPhase = data.phase || "disconnected";
+  const nextPhase = data.phase || "disconnected";
+  if (mountPhase !== "connected" && nextPhase === "connected")
+    showMountSpeed("slow");  // reconnect always starts conservatively
+  mountPhase = nextPhase;
   mountMotionPhase = data.motion_phase || "idle";
   mountArmed = Boolean(data.motion_armed);
   if (mountPhase !== "connected") heldMountDirection = null;
@@ -305,7 +331,7 @@ function showMount(data) {
     idle: data.stop_stable ? "Reported axes stable after Stop · movement disabled" :
       (mountArmed ? "One jog enabled · hold a direction" : "Movement disabled"),
     starting: "Starting manual jog · hold button",
-    moving: "Jog in progress · release for Stop",
+    moving: "Jog " + (data.jog_speed || "slow") + " in progress · release for Stop",
     stopping: "Stop requested · checking position stability…",
     uncertain: "STOP NOT CONFIRMED — use physical Cancel/power!",
     disconnecting: "Disconnecting (Stop attempted if necessary)"
