@@ -8,7 +8,8 @@ The Linux desktop is a browser/development client, not a required server.
 ## Current state — verified 2026-10-28
 
 - **Camera:** Full-frame 3856×2180, 12-bit GRBG in RAW16; live colour and
-  monochrome preview, manual exposure/gain, fixed/auto preview stretch.
+  monochrome preview, manual exposure and gain presets
+  (0/50/100/260/350/450/550/650), fixed/auto preview stretch.
   **New: manufacturer-supported 1×1 and 2×2 hardware binning buttons below Gain,**
   with a fresh SDK session after change and bin-aware recording. 2×2 is
   Pi-verified for 2×2 RAW/FITS capture: the user saved ~4 MiB files and

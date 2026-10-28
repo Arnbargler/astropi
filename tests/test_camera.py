@@ -93,7 +93,8 @@ def test_http_requires_lease(tmp_path):
 
 def test_worker_input_validation_without_sdk():
     worker = CameraWorker()
-    for gain, exposure in [(101, 100_000), (0, -1), ("0", 100_000)]:
+    for gain, exposure in [(5, 100_000), (30, 100_000), (75, 100_000),
+                           (101, 100_000), (651, 100_000), (0, -1), ("0", 100_000)]:
         try:
             worker.configure(gain, exposure)
         except ValueError:
@@ -165,16 +166,16 @@ def test_worker_setting_command_is_acknowledged_only_when_applied(monkeypatch):
     worker = CameraWorker(driver_factory=FakeDriver)
     assert worker.start()
     assert active.wait(timeout=3)
-    id1 = worker.configure(30, 250_000)
+    id1 = worker.configure(650, 250_000)
     assert id1 == 1
     deadline = time.monotonic() + 3
     while worker.status()["settings_applied_id"] < id1 and time.monotonic() < deadline:
         time.sleep(0.01)
     state = worker.status()
     assert state["settings_applied_id"] == id1
-    assert state["gain"] == 30
+    assert state["gain"] == 650
     assert state["exposure_us"] == 250_000
-    assert observed[-2:] == [(EXPOSURE, 250_000), (GAIN, 30)]
+    assert observed[-2:] == [(EXPOSURE, 250_000), (GAIN, 650)]
     worker.stop()
     worker._thread.join(timeout=3)
     assert not worker._thread.is_alive()
@@ -283,12 +284,12 @@ def test_backend_debayer_selection_requires_operator(tmp_path):
 
 def test_rapid_preset_clicks_coalesce_to_latest_request():
     from astropi.camera.worker import GAIN_PRESETS
-    assert GAIN_PRESETS == (0, 5, 10, 20, 30, 50, 75, 100)
+    assert GAIN_PRESETS == (0, 50, 100, 260, 350, 450, 550, 650)
     worker = CameraWorker()
     worker._phase = "running"
     for i, gain in enumerate(GAIN_PRESETS, start=1):
         assert worker.configure(gain, 100_000) == i
-    assert worker._pending_settings == (len(GAIN_PRESETS), 100, 100_000)
+    assert worker._pending_settings == (len(GAIN_PRESETS), 650, 100_000)
     assert worker.status()["settings_applied_id"] == 0
     assert worker.set_debayer(False) is False
     assert worker.status()["debayer"] is False

@@ -19,7 +19,7 @@ EXPOSURE_PRESETS_US = (
     5_000_000, 10_000_000, 15_000_000, 20_000_000,
     25_000_000, 30_000_000,
 )
-GAIN_PRESETS = (0, 5, 10, 20, 30, 50, 75, 100)
+GAIN_PRESETS = (0, 50, 100, 260, 350, 450, 550, 650)
 
 
 def frame_wait_ms(exposure_us):
@@ -162,7 +162,7 @@ class CameraWorker:
 
     def configure(self, gain, exposure_us):
         if type(gain) is not int or gain not in GAIN_PRESETS:
-            raise ValueError("Gain must be a selected preset (0, 5, 10, 20, 30, 50, 75, 100)")
+            raise ValueError(f"Gain must be a selected preset ({', '.join(map(str, GAIN_PRESETS))})")
         if type(exposure_us) is not int or exposure_us not in EXPOSURE_PRESETS_US:
             raise ValueError("Exposure must be a selected preset (1 ms to 30 s)")
         with self._lock:

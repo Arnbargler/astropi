@@ -35,6 +35,11 @@ features. Treat Git history, not the current docs, as the troubleshooting log.
   There is **no /api/mount/arm**, generic serial-command endpoint,
   GoTo, Home, Park, tracking or automatic site setter.
 
+Gain presets in UI and worker are **0/50/100/260/350/450/550/650**. The
+operator chose these values without requesting an SDK capability query.
+Maintain the same whitelist in both places; high-gain behaviour awaits
+physical verification on the SV705C.
+
 The camera and mount workers are independent. Web poll routes read cached
 state and image data; mount I/O must stay in one serial thread. Browser
 camera preview uses polling, not WebSockets. The controls are for a

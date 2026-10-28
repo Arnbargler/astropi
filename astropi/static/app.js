@@ -1,7 +1,7 @@
 "use strict";
 
 const exposurePresets = [1000,2000,5000,10000,25000,50000,100000,250000,500000,750000,1000000,2000000,5000000,10000000,15000000,20000000,25000000,30000000];
-const gainPresets = [0,5,10,20,30,50,75,100];
+const gainPresets = [0,50,100,260,350,450,550,650];
 let token = null;
 let currentPhase = "stopped";
 let desiredGain = 0;

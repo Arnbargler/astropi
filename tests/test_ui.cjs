@@ -7,7 +7,7 @@ const path = require("node:path");
 
 const EX = [1000,2000,5000,10000,25000,50000,100000,250000,500000,750000,
   1000000,2000000,5000000,10000000,15000000,20000000,25000000,30000000];
-const GAIN = [0,5,10,20,30,50,75,100];
+const GAIN = [0,50,100,260,350,450,550,650];
 const BINNING = [1, 2];
 
 function harness() {
@@ -159,21 +159,21 @@ test("selecting exposure or gain immediately sends matching settings", async()=>
   assert.equal(h.el("exposure-100000").checked,true);
   assert.equal(h.el("gain-0").checked,true);
   await h.el("take-control").dispatch("click");
-  assert.equal(h.el("gain-100").disabled,false);
+  assert.equal(h.el("gain-650").disabled,false);
   await h.el("exposure-250000").dispatch("change");
   let posts=h.calls.filter(c=>c.url==="/api/camera/settings");
   assert.deepEqual(posts[0].payload,{gain:0,exposure_us:250000});
   assert.equal(h.el("exposure-250000").checked,true);
   await h.intervals.get(3000)();
   assert.equal(h.el("exposure-250000").checked,true,"poll must not undo unacknowledged choice");
-  await h.el("gain-75").dispatch("change");
+  await h.el("gain-650").dispatch("change");
   posts=h.calls.filter(c=>c.url==="/api/camera/settings");
-  assert.deepEqual(posts[1].payload,{gain:75,exposure_us:250000});
-  assert.equal(h.el("gain-75").checked,true);
-  h.updateCamera({gain:75,exposure_us:250143,settings_applied_id:2});
+  assert.deepEqual(posts[1].payload,{gain:650,exposure_us:250000});
+  assert.equal(h.el("gain-650").checked,true);
+  h.updateCamera({gain:650,exposure_us:250143,settings_applied_id:2});
   await h.intervals.get(50)();
   assert.equal(h.el("exposure-250000").checked,true);
-  assert.equal(h.el("gain-75").checked,true);
+  assert.equal(h.el("gain-650").checked,true);
   assert.match(h.el("settings-message").textContent,/applied/);
 });
 
@@ -257,7 +257,7 @@ test("fixed sequence buttons submit correct count and lock until complete",async
     await h.intervals.get(50)();
     for(const other of [1,5,50,100,150,200])
       assert.equal(h.el("capture-"+other).disabled,true);
-    assert.equal(h.el("gain-5").disabled,true);
+    assert.equal(h.el("gain-650").disabled,true);
     assert.equal(h.el("cancel-sequence").disabled,false);
     h.updateCapture({phase:"saving",completed_frames:2,current_frame:3, total_frames:count});
     await h.intervals.get(50)();

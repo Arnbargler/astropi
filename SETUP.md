@@ -37,7 +37,9 @@ the page. Internet exposure/authentication is not supported.
 ## Camera, recording and verification
 
 Click **Take Control**, **Start preview**, choose exposure/gain and wait for
-SDK readbacks. **Binning** buttons just below Gain select 1×1 (full sensor
+SDK readbacks. Gain buttons select **0, 50, 100, 260, 350, 450, 550, 650**;
+these are operator-requested presets (not SDK-capability-queried limits).
+**Binning** buttons just below Gain select 1×1 (full sensor
 3856×2180) or 2×2 (1928×1090). Binning can be changed when stopped or
 running: while running, the Pi first stops and closes the existing camera
 SDK session, then opens a fresh session with the new binning. Changing binning

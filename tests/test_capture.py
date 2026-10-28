@@ -390,7 +390,7 @@ def test_capture_worker_freezes_gain_exposure_during_active_sequence():
     worker = CameraWorker(capture=NoDisk())
     worker._phase = "running"
     with pytest.raises(RuntimeError, match="locked"):
-        worker.configure(10, 100_000)
+        worker.configure(260, 100_000)
     assert worker._settings_request_id == 0
 
 
