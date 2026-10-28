@@ -475,3 +475,75 @@ def test_unknown_jog_speed_http_rejected_without_any_motion(tmp_path):
     assert client.post("/api/mount/stop").status_code==202
     worker.disconnect()
     worker._thread.join(timeout=3)
+
+
+
+def test_mount_clock_site_readout_is_explicit_and_read_only(tmp_path):
+    from astropi.mount.worker import ENVIRONMENT_QUERIES
+    alias = tmp_path / "serial"
+    alias.touch()
+    responses = {
+        **RESPONSES,
+        ":GG#": "+00:00",
+        ":GC#": "10/28/26",
+        ":GL#": "07:41:24",
+        ":Gt#": "+45*17:36",
+        ":Gg#": "+075*51:26",
+        ":GS#": "12:32:54",
+    }
+    factory = FakeFactory(responses=responses)
+    mount = MountWorker(alias, serial_factory=factory, poll_interval=0.06)
+    mount.connect()
+    wait_until(lambda: mount.status()["connected"])
+    assert not any(cmd in factory.ports[0].commands
+                   for cmd in ENVIRONMENT_QUERIES.values())
+    assert mount.status()["environment"] is None
+    mount.request_environment_read()
+    with pytest.raises(RuntimeError):
+        mount.request_environment_read()
+    wait_until(lambda: mount.status()["environment_phase"] == "ready")
+    result = mount.status()["environment"]
+    assert result == {
+        "utc_offset": "+00:00", "date": "10/28/26",
+        "local_time": "07:41:24", "latitude": "+45*17:36",
+        "longitude_west": "+075*51:26", "sidereal_time": "12:32:54",
+    }
+    assert mount.status()["environment_updated_utc"]
+    # Clock/site are read and NEVER modified through this interface.
+    assert set(factory.ports[0].commands) <= QUERIES
+    assert all(cmd in factory.ports[0].commands for cmd in ENVIRONMENT_QUERIES.values())
+    assert mount.disconnect()
+    mount._thread.join(timeout=3)
+    assert mount.status()["environment"] is None
+    assert mount.status()["environment_phase"] == "idle"
+
+
+def test_clock_site_readout_requires_lease_and_idle_mount(tmp_path):
+    alias = tmp_path / "serial"
+    alias.touch()
+    responses = {**RESPONSES,
+        ":GG#": "+00:00", ":GC#": "10/28/26",
+        ":GL#": "07:41:24", ":Gt#": "+45*17:36",
+        ":Gg#": "+075*51:26", ":GS#": "12:32:54"}
+    factory = FakeFactory(responses=responses)
+    mount = MountWorker(alias, serial_factory=factory, poll_interval=0.06)
+    client = create_app(settings=Settings(tmp_path, "expected", alias, tmp_path / "usb"),
+                        mount=mount).test_client()
+    assert client.post("/api/mount/environment/read").status_code == 403
+    token = client.post("/api/control/take").get_json()["token"]
+    headers = {"X-AstroPi-Control": token}
+    assert client.post("/api/mount/environment/read", headers=headers).status_code == 409
+    client.post("/api/mount/connect", headers=headers)
+    wait_until(lambda: mount.status()["connected"])
+    mount.arm()
+    assert client.post("/api/mount/environment/read", headers=headers).status_code == 409
+    mount.jog("east")
+    wait_until(lambda: ":Me#" in factory.ports[0].commands)
+    assert client.post("/api/mount/environment/read", headers=headers).status_code == 409
+    mount.emergency_stop()
+    wait_until(lambda: mount.status()["stop_stable"], timeout=5)
+    assert client.post("/api/mount/environment/read", headers=headers).status_code == 202
+    wait_until(lambda: mount.status()["environment_phase"] == "ready")
+    assert client.get("/api/mount/status").get_json()["environment"]["date"] == "10/28/26"
+    mount.disconnect()
+    mount._thread.join(timeout=3)
