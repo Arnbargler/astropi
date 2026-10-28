@@ -15,7 +15,18 @@ import time
 import serial
 
 # Intentional hard-coded whitelist. NEVER let a client supply serial commands.
-QUERIES = frozenset((":GVP#", ":GV#", ":GU#", ":GA#", ":GZ#", ":GR#", ":GD#"))
+ENVIRONMENT_QUERIES = {
+    "utc_offset": ":GG#",
+    "date": ":GC#",
+    "local_time": ":GL#",
+    "latitude": ":Gt#",
+    "longitude_west": ":Gg#",
+    "sidereal_time": ":GS#",
+}
+QUERIES = frozenset((
+    ":GVP#", ":GV#", ":GU#", ":GA#", ":GZ#", ":GR#", ":GD#",
+    *ENVIRONMENT_QUERIES.values()
+))
 # Rate mapping: :R5# and :Rv120.00# were physically verified in earlier
 # manual AM3N probes. ZWO AM3N supports 8x/20x/60x sidereal rates; 20x and
 # 60x command-specific behaviour still require controlled on-Pi tests.
@@ -103,6 +114,8 @@ class MountWorker:
         self._pending_speed = "slow"
         self._motion_deadline = 0.0
         self._stop_pending = False
+        self._environment_pending = False
+        self._environment_in_progress = False
         self._stop_reason = None
         self._ever_moved = False
         self._stop_sent_at = None
@@ -120,6 +133,10 @@ class MountWorker:
             "last_stop_reason": None,
             "last_stop_sent_utc": None, "stop_stable": False,
             "motion_warning": None,
+            "environment_phase": "idle",
+            "environment_updated_utc": None,
+            "environment_error": None,
+            "environment": None,
             **_TELEMETRY,
         }
 
@@ -137,6 +154,8 @@ class MountWorker:
             self._pending_speed = "slow"
             self._motion_deadline = 0.0
             self._stop_pending = False
+            self._environment_pending = False
+            self._environment_in_progress = False
             self._ever_moved = False
             self._stop_sent_at = None
             self._stop_attempts = 0
@@ -147,7 +166,9 @@ class MountWorker:
                 firmware=None, last_error=None, motion_phase="idle",
                 motion_armed=False, motion_direction=None, jog_speed="slow",
                 last_stop_reason=None, last_stop_sent_utc=None,
-                stop_stable=False, motion_warning=None, **_TELEMETRY
+                stop_stable=False, motion_warning=None,
+                environment_phase="idle", environment_updated_utc=None,
+                environment_error=None, environment=None, **_TELEMETRY
             )
             self._thread = threading.Thread(
                 target=self._run, name="am3n-readonly", daemon=True
@@ -175,8 +196,9 @@ class MountWorker:
         with self._lock:
             if not self._state["connected"] or self._state["phase"] != "connected":
                 raise RuntimeError("Connect the mount before arming")
-            if self._state["motion_phase"] != "idle" or self._stop_pending:
-                raise RuntimeError("Mount must be idle and stable before arming")
+            if (self._state["motion_phase"] != "idle" or self._stop_pending or
+                    self._environment_pending or self._environment_in_progress):
+                raise RuntimeError("Mount must be idle and not reading its clock/site before arming")
             self._armed = True
             self._state["motion_armed"] = True
             return True
@@ -223,6 +245,46 @@ class MountWorker:
             motion_armed=False, motion_phase="stopping",
             last_stop_reason=reason, stop_stable=False, motion_warning=None
         )
+
+    def request_environment_read(self):
+        """Queue six read-only AM3N queries; no time/site setter commands."""
+        with self._lock:
+            if not self._state["connected"] or self._stop.is_set():
+                raise RuntimeError("Connect the mount to read its stored clock/site")
+            if (self._armed or self._state["motion_phase"] != "idle" or
+                    self._environment_pending or self._environment_in_progress):
+                raise RuntimeError("Mount must be idle and not already reading clock/site")
+            self._environment_pending = True
+            self._state.update(environment_phase="queued", environment_error=None)
+            return True
+
+    def _service_environment(self, port):
+        """Called only by the serial-owner thread when no jog is active."""
+        with self._lock:
+            if not self._environment_pending or self._state["motion_phase"] != "idle":
+                return
+            self._environment_pending = False
+            self._environment_in_progress = True
+            self._state["environment_phase"] = "reading"
+        try:
+            values = {}
+            for key, command in ENVIRONMENT_QUERIES.items():
+                self._service_motion(port)  # honor Stop before each request
+                values[key] = self._query(port, command)
+            with self._lock:
+                if not self._stop.is_set():
+                    self._state.update(
+                        environment=values, environment_phase="ready",
+                        environment_updated_utc=datetime.now(timezone.utc).isoformat(),
+                        environment_error=None,
+                    )
+        except (MountProtocolError, OSError, serial.SerialException) as exc:
+            with self._lock:
+                self._state.update(environment_phase="error",
+                                   environment_error=str(exc), environment=None)
+        finally:
+            with self._lock:
+                self._environment_in_progress = False
 
     def emergency_stop(self, reason="Emergency Stop requested"):
         """Available even to viewers. Request is NOT confirmation of halt."""
@@ -383,6 +445,7 @@ class MountWorker:
                 if now - last_poll >= interval:
                     self._poll(port)
                     last_poll = self._clock()
+                self._service_environment(port)
                 self._stop.wait(0.05)
         except InterruptedError:
             pass  # User-requested disconnect, no failure.
@@ -417,5 +480,7 @@ class MountWorker:
                     phase="error" if problem else "disconnected",
                     connected=False, last_error=problem, motion_armed=False,
                     motion_direction=None, motion_phase="idle",
-                    stop_stable=False, **_TELEMETRY,
+                    stop_stable=False, environment_phase="idle",
+                    environment=None, environment_updated_utc=None,
+                    environment_error=None, **_TELEMETRY,
                 )
