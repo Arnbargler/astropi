@@ -17,6 +17,7 @@ function harness() {
   let capture = {phase:"idle",files:[],directory:null,total_frames:0,completed_frames:0,directories:[]};
   let mount = {phase:"disconnected",connected:false,model:null,firmware:null,
     motion_phase:"idle",motion_armed:false,stop_stable:false,motion_warning:null,
+    environment_phase:"idle",environment:null,environment_error:null,
     jog_speed:"slow",
     altitude_text:null,azimuth_text:null,ra_text:null,dec_text:null,
     raw_status:null,updated_utc:null,last_error:null};
@@ -49,6 +50,10 @@ function harness() {
     })};
     if (url === "/api/camera/progress") return {ok:true,json:async()=>({...camera,capture:{...capture}})};
     if (url === "/api/mount/status") return {ok:true,json:async()=>({...mount})};
+    if (url === "/api/mount/environment/read") {
+      mount = {...mount,environment_phase:"queued"};
+      return {ok:true,json:async()=>({ok:true,state:"queued"})};
+    }
     if (url === "/api/mount/arm") {
       mount={...mount,motion_armed:true,stop_stable:false,motion_phase:"idle"};
       return {ok:true,json:async()=>({ok:true})};
@@ -431,4 +436,38 @@ test("reconnect always restores slow mount speed",async()=>{
   await h.el("mount-disconnect").dispatch("click");
   await h.el("mount-connect").dispatch("click");
   assert.equal(h.el("mount-speed-slow").checked,true);
+});
+
+
+
+test("mount clock/site button is operator-only and renders read-only responses", async()=>{
+  const h=harness();
+  await h.flush();
+  assert.equal(h.el("mount-read-environment").disabled,true);
+  assert.equal(h.calls.filter(x=>x.url==="/api/mount/environment/read").length,0);
+  await h.el("take-control").dispatch("click");
+  await h.el("mount-connect").dispatch("click");
+  assert.equal(h.el("mount-read-environment").disabled,false);
+  await h.el("mount-read-environment").dispatch("click");
+  assert.equal(h.calls.filter(x=>x.url==="/api/mount/environment/read").length,1);
+  h.updateMount({environment_phase:"ready",
+    environment_updated_utc:"2026-10-28T07:41:24Z",
+    environment:{utc_offset:"+00:00",date:"10/28/26",local_time:"07:41:24",
+      latitude:"+45*17:36",longitude_west:"+075*51:26",sidereal_time:"12:32:54"}});
+  await h.intervals.get(1000)();
+  assert.equal(h.el("mount-env-latitude").textContent,"+45*17:36");
+  assert.equal(h.el("mount-env-longitude").textContent,"+075*51:26");
+  assert.equal(h.el("mount-env-time").textContent,"07:41:24");
+  assert.equal(h.el("mount-env-offset").textContent,"+00:00");
+  assert.equal(h.el("mount-env-sidereal").textContent,"12:32:54");
+  await h.el("mount-disconnect").dispatch("click");
+  await h.intervals.get(1000)();
+  assert.equal(h.el("mount-env-longitude").textContent,"—");
+  assert.equal(h.el("mount-read-environment").disabled,true);
+});
+
+test("clock/site queries have no setter controls or browser-side serial commands",()=>{
+  const html=fs.readFileSync(path.join(__dirname,"../astropi/templates/index.html"),"utf8");
+  assert.match(html,/id="mount-read-environment"/);
+  assert.doesNotMatch(html,/id="mount-(?:set-time|set-location|set-date|sync-clock)"/);
 });
