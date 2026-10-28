@@ -129,8 +129,9 @@ camera preview/settings nodes. Global Stop and jog-on-tab-departure
 Stop remain untouched.
 
 **Verification:** `tests/test_atlas.py` checks local assets, all 110
-catalogue entries and motion-free adapter. `tests/test_ui.cjs`
-covers retained tab safety and atlas DOM. CI success does not imply
+catalogue entries and motion-free adapter. `tests/test_atlas.cjs`
+checks Pi UTC, search/clicks, projections and offline loading;
+`tests/test_ui.cjs` covers retained tab safety and atlas DOM. CI success does not imply
 a real-Pi rendering test: verify offline loading and chart dragging,
 M1/M31/M42/M110, no remote requests, UTC, responsive layout, mount
 Stop, and unbroken capture/lease continuity on the actual Pi.

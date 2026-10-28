@@ -154,7 +154,7 @@ If manual movement or NTP verification fails, capture the UI error and the
 read-only mount status **after the mount has stopped**. Do not open the same
 USB serial port in a second diagnostic process while AstroPi owns it.
 Optional on a development machine with Node.js 22+:
-`node --test tests/test_ui.cjs`. Node is **not** required to run
+`node --test tests/test_ui.cjs tests/test_atlas.cjs`. Node is **not** required to run
 AstroPi on the Pi; GitHub CI also runs these browser regression tests.
 For architecture and verified hardware quirks see [DEVELOPMENT.md](DEVELOPMENT.md)
 and [HARDWARE.md](HARDWARE.md).

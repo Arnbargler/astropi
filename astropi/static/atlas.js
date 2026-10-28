@@ -17,6 +17,11 @@
     utcAnchor = millis;
     monotonicAnchor = now();
     if (sky && active) updateClock();
+    if (active && !sky && !loading) {
+      loading = initialize().catch(error => {
+        loading = null; note("Atlas unavailable: " + error.message);
+      });
+    }
   }
 
   function updateClock() {
@@ -126,6 +131,7 @@
         colour:"#b4c9d5", d:4, html:"<strong>" + key + "</strong>"
       });
     }
+    updateClock();
     sky.draw();
     window.requestAnimationFrame(() => { if (active) sky.resize(); });
     note("Offline sky ready · 110 Messier targets. Click a marker or search by M-number.");
@@ -139,6 +145,10 @@
       if (response.ok) syncUTC((await response.json()).utc);
     } catch (_) { /* Existing 3-second app polling will retry. */ }
     if (!active) return;
+    if (utcAnchor === null) {
+      note("Waiting for the Pi's UTC clock…");
+      return;
+    }
     if (sky) {
       sky.resize();
       updateClock();

@@ -82,7 +82,7 @@ English-label and Messier assets under
 `astropi/static/atlas.js`; provenance/permission notes are in
 `astropi/static/vendor/virtualsky/PROVENANCE.md`.
 
-**Status:** implemented in Git; GitHub CI exercises offline asset/DOM
+**Status:** implemented in Git; GitHub CI exercises offline asset, UTC, chart-interaction and DOM
 regressions. Browser appearance/interaction on the **actual Pi** have
 not yet been reverified by the operator. Full OpenNGC, precise pointing
 marker, alignment, GoTo and focus tools remain deferred.
