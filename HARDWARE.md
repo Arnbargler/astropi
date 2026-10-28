@@ -2,6 +2,12 @@
 
 **Current truth as of 2026-10-27.** This is the **concise operational reference**, not a chronological test diary. “Verified” means directly observed from `arn@astropi` terminal output or inspected images. “Planned” means **not implemented or not tested**. The full 69 KB original probe log remains in [Git history at `f01ae019`](https://github.com/Arnbargler/astropi/blob/f01ae019f9ba840f90b5bb5e566d0fc17dab41b7/HARDWARE.md) for troubleshooting; some statements in that historical snapshot were superseded by later tests.
 
+## AM3N live clock/site readback (2026-10-28)
+
+User screenshot confirms the **Read Mount Clock & Site** button now works on the physical AM3N (firmware 1.8.8). At Pi UTC snapshot `2026-10-28T08:31:45+00:00`, the mount reported **date `01/01/00`**, local time **`01:12:54`**, UTC offset **`+00:00`**, sidereal time **`01:13:07`**, latitude **`+45*17:36`** and west-positive longitude **`+075*51:26`**. Stored site coordinates match the previously manually configured observing site, but the mount's clock is clearly **not synchronized** with the Pi. This is expected to make time-dependent sky GoTo unreliable. Do **not** treat reported RA/Dec as valid celestial pointing until clock/site synchronization and alignment are verified.
+
+The same screenshot shows the new mount dashboard and **Slew 720x** selected, with the user reporting it is functioning well. This supports an initial hardware check of the redesigned controls; **Max 1440x and exact rates are not separately quantified**. Next implementation gate: establish trusted Pi time (Pi has no battery RTC), convert to mount UTC fields, send the previously tested time/date setters only when time is trusted, verify by readback, and leave sky GoTo disabled until those checks succeed.
+
 ## Current AM3N controls (2026-10-28)
 
 - **Normal manual operation:** Operator lease + connected mount permits immediate N/S/E/W press-and-hold; the separate "Enable one manual jog" button and HTTP `/api/mount/arm` endpoint have been removed. A jog may continue for as long as the pointer is held and valid heartbeats arrive; there is **no fixed time cap**. Release, loss of browser focus, 600ms missed heartbeat, intentional Disconnect or the viewer-accessible red Stop requests `:Q#`. Reported coordinates must stabilize before the next jog; start and Stop commands are serialized. This is software-tested; direct-no-arm UI needs actual Pi retest.
