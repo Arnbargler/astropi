@@ -409,7 +409,7 @@ def test_sequence_quicklook_stretch_frozen_at_start():
 
 
 
-def test_2x2_binning_writes_correct_raw_fits_and_monochrome_quicklooks(tmp_path):
+def test_2x2_binning_writes_correct_raw_fits_and_colour_quicklooks(tmp_path):
     from astropi.capture.verify import check_capture
     from astropi.camera.sdk import frame_bytes
     raw = np.full((HEIGHT // 2, WIDTH // 2), 400 << 4, dtype="<u2")
@@ -430,8 +430,9 @@ def test_2x2_binning_writes_correct_raw_fits_and_monochrome_quicklooks(tmp_path)
     assert (folder / "sv705c.raw16").read_bytes() == raw.tobytes()
     for kind in ("jpg", "png"):
         quicklook = Image.open(folder / ("sv705c." + kind))
-        assert quicklook.mode == "L"
+        assert quicklook.mode == "RGB"
         assert quicklook.size == (964, 545)
+    assert manifest["quicklook_debayer"] is True
     fits = (folder / "sv705c.fits").read_bytes()
     assert b"XBINNING" in fits[:2880]
     assert b"YBINNING" in fits[:2880]
@@ -462,3 +463,46 @@ def test_capture_manager_preserves_binning_through_async_save():
     assert manager.status()["phase"] == "done"
     assert fake.received[0][0] == b"binned-frame"
     assert fake.received[0][2]["binning"] == 2
+
+
+
+def test_binned_debayer_off_saves_monochrome_jpg_png_and_original_science(tmp_path):
+    from astropi.capture.verify import check_capture
+    raw = np.full((HEIGHT // 2, WIDTH // 2), 1024 << 4, dtype="<u2").tobytes()
+    for binning, pixels in ((2, raw), (1, sample_raw())):
+        result = verified_storage(tmp_path).save(
+            pixels, FORMATS, gain=20, exposure_us=50_000,
+            received_at=WHEN, stretch="fixed", binning=binning, debayer=False
+        )
+        folder = tmp_path / result["directory"]
+        metadata = json.loads((folder / "metadata.json").read_text())
+        assert metadata["quicklook_debayer"] is False
+        assert metadata["binning"] == binning
+        assert (folder / "sv705c.raw16").read_bytes() == pixels
+        assert check_capture(folder)["raw_pixels_equal"] is True
+        for fmt in ("jpg", "png"):
+            image = Image.open(folder / ("sv705c." + fmt))
+            assert image.mode == "L"
+            assert image.size == (metadata["width"] // 2, metadata["height"] // 2)
+
+
+def test_capture_sequence_freezes_binning_colour_choice():
+    store = FakeSave()
+    manager = CaptureManager(store)
+    manager.request(["jpg"], count=2, debayer=False)
+    for i in range(2):
+        assert manager.accept_frame(f"shot{i}".encode(), gain=0, exposure_us=100000,
+                                    stretch="auto", binning=2)
+        deadline = time.monotonic() + 3
+        while manager.status()["phase"] == "saving" and time.monotonic() < deadline:
+            time.sleep(0.01)
+    assert manager.status()["phase"] == "done"
+    assert [record[2]["debayer"] for record in store.received] == [False, False]
+
+
+def test_reject_nonboolean_debayer_capture_options(tmp_path):
+    for invalid in (None, 0, "off", 1, []):
+        with pytest.raises(ValueError, match="Debayer"):
+            quicklook_image(sample_raw(), debayer=invalid)
+        with pytest.raises(ValueError, match="Debayer"):
+            CaptureManager(FakeSave()).request(["jpg"], debayer=invalid)

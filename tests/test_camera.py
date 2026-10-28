@@ -314,15 +314,24 @@ def test_binning_geometry_is_sensor_documented_1x_2x_only():
             frame_dimensions(bad)
 
 
-def test_binned_preview_monochrome_correct_dimensions_and_preserves_source():
+def test_binned_preview_colour_and_monochrome_preserve_source():
     raw = np.full((HEIGHT // 2, WIDTH // 2), 384 << 4, dtype="<u2")
+    raw[0::2, 1::2] = 3500 << 4  # GRBG provisional red sites
+    raw[1::2, 0::2] = 200 << 4   # blue sites
     before = raw.copy()
-    for debayer in (True, False):
-        jpeg = raw16_to_jpeg(raw, stretch="fixed", debayer=debayer, binning=2)
-        image = Image.open(io.BytesIO(jpeg))
-        assert image.mode == "L"
-        assert image.size == (WIDTH // 4, HEIGHT // 4)
-    assert raw16_statistics(raw, binning=2)["raw_mean_adu"] == 384
+    colour = Image.open(io.BytesIO(
+        raw16_to_jpeg(raw, stretch="fixed", debayer=True, binning=2)
+    ))
+    assert colour.mode == "RGB"
+    assert colour.size == (WIDTH // 4, HEIGHT // 4)
+    rgb = np.asarray(colour).astype(np.float32)
+    assert rgb[:, :, 0].mean() > rgb[:, :, 1].mean() + 30
+    assert rgb[:, :, 1].mean() > rgb[:, :, 2].mean() + 30
+    mono = Image.open(io.BytesIO(
+        raw16_to_jpeg(raw, stretch="fixed", debayer=False, binning=2)
+    ))
+    assert mono.mode == "L"
+    assert mono.size == colour.size
     assert np.array_equal(raw, before)
     with __import__("pytest").raises(ValueError):
         raw16_to_jpeg(raw, binning=1)
@@ -441,3 +450,22 @@ def test_sdk_binning_roi_verified_by_actual_readback():
     driver.streaming = True
     with pytest.raises(RuntimeError, match="Stop camera"):
         driver.configure_binning(2)
+
+
+
+def test_capture_request_freezes_debayer_setting():
+    class CaptureRecorder:
+        def __init__(self):
+            self.last = None
+        def request(self, formats, **kwargs):
+            self.last = (formats, kwargs)
+            return "job"
+    capture = CaptureRecorder()
+    camera = CameraWorker(capture=capture)
+    camera._phase = "running"
+    camera.set_debayer(False)
+    assert camera.request_capture(["fits", "jpg"]) == "job"
+    assert capture.last[1]["debayer"] is False
+    camera.set_debayer(True)
+    assert camera.request_capture(["fits", "jpg"]) == "job"
+    assert capture.last[1]["debayer"] is True
