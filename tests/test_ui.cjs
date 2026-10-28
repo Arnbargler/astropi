@@ -8,6 +8,7 @@ const path = require("node:path");
 const EX = [1000,2000,5000,10000,25000,50000,100000,250000,500000,750000,
   1000000,2000000,5000000,10000000,15000000,20000000,25000000,30000000];
 const GAIN = [0,5,10,20,30,50,75,100];
+const BINNING = [1, 2];
 
 function harness() {
   const elements = new Map(), intervals = new Map(), calls = [];
@@ -25,6 +26,7 @@ function harness() {
   let camera = {
     phase: "running", has_frame: false, frame_number: 0,
     gain: 0, exposure_us: 100143, settings_applied_id: 0,
+    binning: 1, width: 3856, height: 2180,
     preview_fps: 6.0, capture_fps: 20, preview_processing_ms: 60,
     preview_mode: "auto", debayer: true,
     raw_mean_adu: 150, raw_p99_adu: 300, raw_saturated_percent: 0
@@ -49,6 +51,11 @@ function harness() {
       host:{cpu_temperature_c:42,uptime_seconds:3600},
       utc:"2026-10-27T19:00:00Z"
     })};
+    if (url === "/api/camera/binning") {
+      camera={...camera,binning:payload.binning,
+        width:3856/payload.binning,height:2180/payload.binning};
+      return {ok:true,json:async()=>({ok:true,binning:payload.binning})};
+    }
     if (url === "/api/camera/progress") return {ok:true,json:async()=>({...camera,capture:{...capture}})};
     if (url === "/api/mount/status") return {ok:true,json:async()=>({...mount})};
     if (url === "/api/mount/environment/read") {
@@ -532,4 +539,40 @@ test("NTP unavailable shows honest error while mount remains connected",async()=
   assert.match(h.el("mount-time-sync-error").textContent,/not confirmed NTP/);
   assert.equal(h.el("mount-east").disabled,false,
     "manual Alt/Az is still available without a verified sky clock");
+});
+
+
+test("camera binning buttons appear under Gain and select correct API values",async()=>{
+  const html=fs.readFileSync(path.join(__dirname,"../astropi/templates/index.html"),"utf8");
+  assert.ok(html.indexOf('id="binning-buttons"') > html.indexOf('id="gain-buttons"'));
+  assert.match(html,/id="binning-1"/);
+  assert.match(html,/id="binning-2"/);
+  assert.doesNotMatch(html,/id="binning-3"/);
+  assert.doesNotMatch(html,/id="binning-4"/);
+  const h=harness();
+  await h.flush();
+  assert.equal(h.el("binning-2").disabled,true);
+  await h.el("take-control").dispatch("click");
+  assert.equal(h.el("binning-2").disabled,false);
+  await h.el("binning-2").dispatch("change");
+  assert.equal(h.calls.filter(x=>x.url==="/api/camera/binning").length,1);
+  assert.deepEqual(h.calls.filter(x=>x.url==="/api/camera/binning")[0].payload,
+                   {binning:2});
+  assert.equal(h.el("binning-2").checked,true);
+  assert.match(h.el("binning-readback").textContent,/1928×1090/);
+  await h.el("binning-1").dispatch("change");
+  assert.equal(h.el("binning-1").checked,true);
+});
+
+test("binning buttons disabled while a capture or sequence is saving",async()=>{
+  const h=harness();
+  await h.flush();
+  await h.el("take-control").dispatch("click");
+  h.updateCapture({phase:"saving",total_frames:5,completed_frames:2});
+  await h.intervals.get(50)();
+  assert.equal(h.el("binning-1").disabled,true);
+  assert.equal(h.el("binning-2").disabled,true);
+  h.updateCapture({phase:"idle",total_frames:0});
+  await h.intervals.get(50)();
+  assert.equal(h.el("binning-2").disabled,false);
 });
