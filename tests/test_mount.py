@@ -11,6 +11,8 @@ from astropi.config import Settings
 from astropi.mount.worker import (
     MountWorker, MountProtocolError, QUERIES, angle_degrees, ra_hours, known_flags
 )
+# Capture real NTP probe before autouse fake replaces the module symbol.
+from astropi.mount.worker import system_ntp_synchronized as real_system_ntp_synchronized
 from astropi.web import create_app
 
 
@@ -748,11 +750,11 @@ def test_ntp_status_checks_systemd_report_not_merely_service_enabled(monkeypatch
 
     monkeypatch.setattr(module.subprocess, "run", lambda *a, **k:
                         CompletedProcess(args=[], returncode=0, stdout="yes\n"))
-    assert system_ntp_synchronized()
+    assert real_system_ntp_synchronized()
     monkeypatch.setattr(module.subprocess, "run", lambda *a, **k:
                         CompletedProcess(args=[], returncode=0, stdout="no\n"))
-    assert not system_ntp_synchronized()
+    assert not real_system_ntp_synchronized()
     def timeout(*args, **kwargs):
         raise TimeoutExpired(cmd="timedatectl", timeout=2)
     monkeypatch.setattr(module.subprocess, "run", timeout)
-    assert not system_ntp_synchronized()
+    assert not real_system_ntp_synchronized()
