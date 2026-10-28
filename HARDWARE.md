@@ -148,6 +148,14 @@ A live jog requires heartbeats no more than **600 ms** apart and is forcibly end
 
 **Important limit:** Neither Python nor a network heartbeat can ensure stopping after Pi power failure, process death, a severed USB serial cable or a stuck mount controller. Previous standalone probes saw further position change after Stop. Keep the physical Cancel/power cutoff within reach, allow motor deceleration and verify visually. See SETUP.md for stationary Stop first, then ONE short manual test. Extended fault safety remains untested.
 
+## Three-second mount safety limit and speed selection (2026-10-28)
+
+**Verified on actual mount:** User held a direction beyond 3s and observed the browser report **"Stop requested" while still holding**, followed by the mount **stopping itself at ~3s**. This validates the **independent three-second jog hard cutoff** at the existing slow `:R5#` rate. User also confirmed earlier E, N and S short-jog/release behaviour. **The 600ms missing-heartbeat watchdog, sudden Pi/USB failure and West jog remain unverified on hardware.**
+
+**New rate-selection code — hardware-unverified:** Adds Slow 8× (`:R5#`, physically verified), Medium 20× (`:Rv20.00#`) and Fast 60× (`:Rv60.00#`). AM3N hardware manual lists 8×, 20× and 60× sidereal rates; previous probes successfully sent the same variable-rate command family at `:Rv120.00#`, but **20× and 60× have not yet been tested via AstroPi**. For every new jog, code first sends the known `:R5#` baseline, then the selected higher rate, then the selected directional command. Rate strings are whitelisted on server. Slow has 3s hard limit, Medium 2s, Fast 1s; **all have the same 600ms heartbeat timeout and require separate arming**. Selection is unavailable while armed/moving, and reconnect resets to Slow. The UI shows the *requested* rate, not independent speed feedback.
+
+Always keep physical Cancel/power cutoff accessible; serial disconnect can defeat software Stop.
+
 ## What remains unresolved (not pre-development blockers)
 
 1. **Pi browser status, SV705C preview and 50ms two-thread colour/mono rates are verified.** One-shot recording produced four completed capture directories on Pi USB with different combinations of FITS/RAW16/JPG/PNG. All 11 file sizes and SHA-256 checksums verified against metadata on the Pi; FITS 12-bit Bayer pixel equality against RAW16 verified for one real capture; first five-frame sequence completed and reported five saved directories on Pi USB. Ten-frame completion and four-frame cancellation during a requested ten-frame sequence are Pi-verified, with zero incomplete folders. Endurance beyond ten frames, fault recovery and auto-start remain unverified/unfinished.

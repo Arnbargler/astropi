@@ -171,8 +171,9 @@ That first screenshot pair showed real manual movement and reported settling.
 After reboot, the user completed a controlled E-jog/release trial and confirmed
 that movement and stopping behaved as expected. No exact measured travel or
 hold time was supplied for the isolated test; North and South jog/release were subsequently reported working on the real
-mount at the deliberately slow R5 speed. West and actual watchdog expiry
-remain unverified on real hardware. The observed 5′57″ is approximately 3s at the
+mount at the deliberately slow R5 speed. West and 600ms missed-heartbeat expiry remain unverified. The independent
+3s hard jog cutoff was verified on the physical AM3N: the operator held
+a direction and saw Stop requested, then observed automatic stopping. The observed 5′57″ is approximately 3s at the
 previously tested ~2′/s R5 rate; confirm the hold time before further tests.
 
 This is a **controlled movement trial**. Keep cables, cameras and people
@@ -201,3 +202,28 @@ while moving; the software cannot guarantee a Stop when communications die.
 
 Only rate `:R5#`, manual `:Mn#/:Ms#/:Me#/:Mw#`, and Stop `:Q#`
 are available in this milestone. No automated Home, GoTo or tracking.
+
+
+## New manual speed choices — on-Pi testing pending
+
+The manual mount panel now offers radio-style speed choices:
+
+- **Slow 8×**: `:R5#` — previously verified on real AM3N; max 3s/jog.
+- **Medium 20×**: `:Rv20.00#` — new selection; max 2s/jog.
+- **Fast 60×**: `:Rv60.00#` — new selection; max 1s/jog.
+
+All options have the same **600ms missing-heartbeat Stop**, one-jog arming,
+operator permissions and viewer emergency Stop. Every jog first sends
+the verified `:R5#` baseline to avoid inheriting an arbitrary old speed.
+Medium/Fast are rate requests, **not hardware-verified accurate speeds**.
+Reconnecting the mount resets the selection to Slow. Changing speed during
+an armed/active jog is disabled.
+
+After deployment, do NOT jump directly to Fast. With cables and mount clear,
+physical Cancel/power cutoff in hand and mounted load secure, first confirm
+Slow still stops normally. Then try **one short Medium/East press ~0.3s**,
+release and wait for stable coordinates. Stop immediately if behaviour differs.
+Only after this is confirmed should Fast be considered, with an even shorter
+test press. Longer 20×/60× travel, emergency failures or severed USB are
+NOT safe to simulate casually. Document any actual angular change and stop
+latency. No GoTo, Home or tracking added.
