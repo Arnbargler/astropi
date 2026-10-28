@@ -67,7 +67,10 @@ These rates follow known AM-series driver commands; exact angular speeds have no
 
 **Stored observing site:** latitude **+45.2933° N**, `+45*17:36`; longitude **−75.8571° east-positive** (AM3N convention west-positive `+075*51:26`). **The operator confirms these mount-stored coordinates are the permanent actual observing site** (not temporary test values). Currently read-only in app; the planned offline sky atlas will use this fixed site even without a mount connection, and compare against the mount's site on Connect. Never silently overwrite it. Standalone site setters `:St+45*17:36#` and `:Sg+075*51:26#` previously returned success; **current app does not set site**.
 
-**Automatic clock sync on each explicit Connect:** check `timedatectl show -p NTPSynchronized --value` equals yes; send `:SG+00:00#`, `:SCMM/DD/YY#`, `:SLHH:MM:SS#`, require single-byte `1` acknowledgment from each; read back with `:GG#`, `:GC#`, `:GL#` and compare within six seconds of Pi UTC. **Confirmed on live firmware 1.8.8**: 2026-10-28, mount UTC time 08:47:34, offset +00:00, existing site unchanged. UI says **Mount time (UTC)**; it is intentionally not Ontario local time. If NTP not yet synchronized, report error and retry on a later Connect. No manual-time field mode yet.
+**Automatic clock sync on each explicit Connect (AM3N only):** check `timedatectl show -p NTPSynchronized --value` equals yes; send `:SG+00:00#`, `:SCMM/DD/YY#`, `:SLHH:MM:SS#`, require single-byte `1` acknowledgment from each; read back with `:GG#`, `:GC#`, `:GL#` and compare within six seconds of Pi UTC. **Confirmed on live firmware 1.8.8**: 2026-10-28, mount UTC time 08:47:34, offset +00:00, existing site unchanged. UI says **Mount time (UTC)**; it is intentionally not Ontario local time. If NTP not yet synchronized, report error and retry on a later Connect.
+**This is mount-specific; the planned VirtualSky atlas simply uses Pi UTC
+from `/api/status` and does not require an NTP check or warning.**
+No manual-time field mode yet.
 
 **Standalone native Home test**: `:hC#` reached altitude/azimuth 0/0 via near-zenith/azimuth-wrap; this is not alignment and **Home is not implemented in browser**. Park `:hP#`, sky GoTo and tracking have not been validated. The AM3N M12 counterweight bolt hole can reach internal wiring with an overlong bolt: do not insert one.
 

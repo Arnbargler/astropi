@@ -43,7 +43,8 @@ real permanent observing location (AM3N serial encoding is
 **west-positive**). App reads these values; **do not overwrite them**.
 On explicit mount Connect, only if Pi NTP is synchronized, set and
 verify AM3N UTC date/time and offset zero; fail visibly on bad ACK or
-readback. Pi has **no RTC**. Neither mount RA/Dec nor native Home
+readback. **This existing mount-control safety condition remains unchanged
+and is independent of the atlas.** Pi has **no RTC**. Neither mount RA/Dec nor native Home
 proves optical sky alignment; verify site and alignment before
 introducing GoTo.
 
@@ -58,8 +59,12 @@ exists, but **VirtualSky and catalogue/search are not yet installed**.
   schematic symbols only, **no photographic imagery**, online lookup,
   CDN or Internet requirement. Wrap chart integration in a replaceable
   adapter.
-- Display local sky from the **permanent site** using Pi UTC plus
-  explicit NTP status, with warnings for untrusted time/site.
+- Display local sky from the **permanent site**, using current **Pi UTC**
+  already supplied by `/api/status` when Find opens and on subsequent
+  status updates. Accept the Pi's time as-is: **no atlas NTP status field,
+  time-accuracy check, or unsynchronized-clock warning** is required,
+  now or as a planned follow-up. A mount-site mismatch may still be shown
+  when the AM3N is connected; never overwrite the stored site.
 - Pan/zoom; stars/planets, horizon/cardinal directions,
   constellation lines/labels and coordinate grids.
 - Bundle all **110 Messier objects** for basic `M1`–`M110` search,

@@ -113,8 +113,11 @@ The on-demand **Refresh Clock / Site** button shows date, time, UTC
 offset, sidereal time, and persistent site latitude/longitude (west-positive
 in the mount protocol). The operator confirms the stored site is the
 **permanent observing location: +45.2933° N, −75.8571° east-positive**.
-The future offline atlas will use this site and Pi UTC with NTP status;
-it must not modify the mount's site. AstroPi still treats reported
+The future offline atlas will use this site and the Pi UTC time already
+returned by `/api/status`, without an atlas NTP test or clock-accuracy
+warning. This is a deliberate permanent scope decision; it does not
+affect the AM3N's existing Connect-time NTP verification. The atlas
+must not modify the mount's site. AstroPi still treats reported
 RA/Dec as unaligned.
 
 ## Diagnostics

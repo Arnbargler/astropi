@@ -70,9 +70,11 @@ packaged VirtualSky** planetarium inside the existing Find tab (not a
 separate `/atlas` route). It is a **schematic pointing aid**, not a gallery:
 no photographic sky tiles, Internet lookup or CDN.
 
-Initial scope: permanent site, trustworthy Pi UTC with visible NTP status,
-pan/zoom, stars/planets, constellation lines/labels, horizon/cardinals,
-optional sky grids and all **110 Messier objects**. Clicking and simple
+Initial scope: permanent site and the Pi's current UTC time (already
+provided by `/api/status`), pan/zoom, stars/planets, constellation
+lines/labels, horizon/cardinals, optional sky grids and all **110 Messier
+objects**. Atlas clock accuracy/NTP checks and warnings are explicitly
+out of scope indefinitely; use the Pi's time as-is. Clicking and simple
 M-number search should centre/select a target and show its **name,
 RA and Dec**, but **must not move the mount**. Full NGC/IC/OpenNGC search,
 mount marker, alignment, GoTo and focusing aids come later.

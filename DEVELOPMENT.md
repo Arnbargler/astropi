@@ -10,7 +10,7 @@ The user confirmed the three-tab UI works on the Pi on 2026-10-28.
 | Source | Responsibility |
 | --- | --- |
 | `run.py`, `astropi/web.py`, `control.py` | Foreground Flask; routes and 15-second single-operator lease; viewer Stop |
-| `astropi/config.py`, `status.py` | Paths, USB/host state and Pi UTC; **no standalone host NTP status field yet** |
+| `astropi/config.py`, `status.py` | Paths, USB/host state and Pi UTC; atlas reuses `/api/status` UTC without a new time endpoint |
 | `astropi/camera/sdk.py`, `worker.py` | SVBONY ctypes; sole SDK thread, acquisition, settings, binning session restart, one-slot preview mailbox |
 | `astropi/camera/preview.py` | JPEG colour/mono, stretches, sparse raw statistics |
 | `astropi/capture/{manager,formats,storage,verify}.py` | Pi-owned jobs, science/quicklook formats, UUID-safe writes, read-only integrity verification |
@@ -26,8 +26,9 @@ The user confirmed the three-tab UI works on the Pi on 2026-10-28.
 `/api/capture`, `/api/capture/{sequence,cancel}`,
 `/api/mount/{connect,disconnect,jog,jog-heartbeat,stop,environment/read}`.
 
-**Absent:** `/atlas`, independent Pi NTP status API, catalogue/search,
-GoTo, Home, Park, tracking and arbitrary serial-command endpoints.
+**Absent:** `/atlas`, catalogue/search, GoTo, Home, Park, tracking
+and arbitrary serial-command endpoints. **No separate atlas time/NTP
+endpoint is needed**; `/api/status` already includes Pi UTC.
 
 ## Persistent browser UI — implemented and Pi-checked
 
@@ -86,7 +87,9 @@ only when frame number changes. **No WebSockets.**
    is the final fallback.
 5. **Time and site:** explicit AM3N Connect requires verified Pi NTP
    to sync UTC offset/date/time with ACKs/readback; failure is honestly
-   displayed and does not forbid *manual* jogging. The mount-stored
+   displayed and does not forbid *manual* jogging. **Do not change this
+   existing mount behaviour while implementing the atlas**; the decision
+   to skip atlas clock validation is separate. The mount-stored
    permanent site is **+45.2933° N, −75.8571° east-positive**.
    **Never silently overwrite it.** The Pi has no RTC. Reported RA/Dec
    and mount Home do not establish optical sky alignment.
@@ -105,11 +108,14 @@ mount controller.
    No CDN, online lookups or photographic tiles. Avoid VirtualSky's
    online name-resolution `objects` mode.
 2. **Time/site:** initialise chart at permanent +45.2933° /
-   −75.8571° even without mount connection. `/api/status` already
-   exposes Pi UTC **but not `NTPSynchronized`**; add read-only host
-   NTP status, and warn rather than silently trusting a browser clock.
-   If connected, compare the *read-only* mount site; show mismatch
-   without changing the AM3N.
+   −75.8571° even without a mount connection. Obtain current **Pi UTC**
+   from the existing `/api/status` response when Find opens, then
+   advance the atlas clock and use the regular status polls to correct
+   drift. **Do not add an atlas NTP check, status API, clock-accuracy
+   warning or follow-up work for unsynchronized Pi time**; the operator
+   explicitly chose to accept the Pi's clock indefinitely. If the
+   AM3N is connected, optionally compare its *read-only* stored site,
+   showing a location mismatch without modifying the mount.
 3. **Chart UI:** chart occupies most of Find beside existing mount
    controls; pan/zoom, constellation lines/labels, horizon/cardinals,
    stars/planets and optional coordinate grids. Resize on tab reveal.
@@ -118,7 +124,8 @@ mount controller.
    click and object API on the pinned VirtualSky version. Absolutely
    **no mount movement** from chart interaction.
 5. **Tests and field check:** Python and Node regressions, entirely
-   offline page loads, sensible site/time warnings, chart selection,
+   offline page loads, correct Pi UTC usage and site coordinates
+   (but no NTP warning), chart selection,
    responsive layout, tab/lease/capture persistence, viewer Stop and
    jog departure Stop. Check in a real Pi browser before marking as
    hardware verified.
@@ -138,5 +145,6 @@ serial-fault or telescope pointing verification.
 
 Separate follow-ups: systemd service; long capture endurance; induced
 USB/serial failures; FITS 2×2 `BAYERPAT` and metadata; 2×2 saved
-quicklook colour; field use without NTP. Older experiments are in Git
-history, not instructions to re-enable obsolete features.
+quicklook colour. **Do not reopen atlas NTP/clock-accuracy work.**
+Older experiments are in Git history, not instructions to re-enable
+obsolete features.
