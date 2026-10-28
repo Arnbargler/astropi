@@ -406,3 +406,44 @@ def test_sequence_quicklook_stretch_frozen_at_start():
         time.sleep(0.01)
     assert manager.status()["phase"] == "done"
     assert [x[2]["stretch"] for x in store.received] == ["fixed", "fixed"]
+
+
+
+def test_2x2_binning_writes_correct_raw_fits_and_monochrome_quicklooks(tmp_path):
+    from astropi.capture.verify import check_capture
+    from astropi.camera.sdk import frame_bytes
+    raw = np.full((HEIGHT // 2, WIDTH // 2), 400 << 4, dtype="<u2")
+    raw[0, 0] = 0
+    raw[0, 1] = 4095 << 4
+    assert raw.nbytes == frame_bytes(2)
+    result = verified_storage(tmp_path).save(
+        raw.tobytes(), FORMATS, gain=30, exposure_us=100_000,
+        received_at=WHEN, stretch="fixed", binning=2
+    )
+    folder = tmp_path / result["directory"]
+    manifest = json.loads((folder / "metadata.json").read_text())
+    assert manifest["binning"] == 2
+    assert manifest["width"] == 1928
+    assert manifest["height"] == 1090
+    assert manifest["bayer"] == "unverified at 2x2"
+    assert manifest["quicklook_dimensions"] == [964, 545]
+    assert (folder / "sv705c.raw16").read_bytes() == raw.tobytes()
+    for kind in ("jpg", "png"):
+        quicklook = Image.open(folder / ("sv705c." + kind))
+        assert quicklook.mode == "L"
+        assert quicklook.size == (964, 545)
+    fits = (folder / "sv705c.fits").read_bytes()
+    assert b"XBINNING" in fits[:2880]
+    assert b"YBINNING" in fits[:2880]
+    assert b"BAYERPAT" not in fits[:2880]
+    assert check_capture(folder)["raw_pixels_equal"] is True
+    assert not list(tmp_path.rglob("*.partial"))
+
+
+def test_binning_2_does_not_accept_full_resolution_input(tmp_path):
+    with pytest.raises(StorageError,match="Wrong RAW16 size"):
+        verified_storage(tmp_path).save(
+            sample_raw(), ("raw",), gain=0, exposure_us=100_000,
+            received_at=WHEN, stretch="auto", binning=2
+        )
+    assert not (tmp_path / "captures").exists()
