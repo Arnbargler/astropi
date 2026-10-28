@@ -68,6 +68,10 @@ class FakeCamera:
         if type(enabled) is not bool:
             raise ValueError("Debayer must be boolean")
         return enabled
+    def set_binning(self, binning):
+        if type(binning) is not int or binning not in (1, 2):
+            raise ValueError("Invalid binning")
+        return binning
     def capture_status(self):
         return {"phase": "idle", "id": None, "files": []}
     def request_capture(self, formats):
@@ -295,3 +299,115 @@ def test_rapid_preset_clicks_coalesce_to_latest_request():
             pass
         else:
             raise AssertionError("Nonboolean debayer was accepted")
+
+
+
+def test_binning_geometry_is_sensor_documented_1x_2x_only():
+    from astropi.camera.sdk import frame_dimensions, frame_bytes, SUPPORTED_BINNING
+    assert SUPPORTED_BINNING == (1, 2)
+    assert frame_dimensions(1) == (3856, 2180)
+    assert frame_dimensions(2) == (1928, 1090)
+    assert frame_bytes(1) == RAW_BYTES
+    assert frame_bytes(2) == 4_203_520
+    for bad in (0, 3, 4, None, "2", 2.0, True):
+        with __import__("pytest").raises(ValueError):
+            frame_dimensions(bad)
+
+
+def test_binned_preview_monochrome_correct_dimensions_and_preserves_source():
+    raw = np.full((HEIGHT // 2, WIDTH // 2), 384 << 4, dtype="<u2")
+    before = raw.copy()
+    for debayer in (True, False):
+        jpeg = raw16_to_jpeg(raw, stretch="fixed", debayer=debayer, binning=2)
+        image = Image.open(io.BytesIO(jpeg))
+        assert image.mode == "L"
+        assert image.size == (WIDTH // 4, HEIGHT // 4)
+    assert raw16_statistics(raw, binning=2)["raw_mean_adu"] == 384
+    assert np.array_equal(raw, before)
+    with __import__("pytest").raises(ValueError):
+        raw16_to_jpeg(raw, binning=1)
+
+
+def test_binning_endpoint_requires_lease_and_whitelisted_levels(tmp_path):
+    config = Settings(tmp_path, "expected", tmp_path / "serial", tmp_path / "usb")
+    client = create_app(settings=config, camera=FakeCamera()).test_client()
+    assert client.post("/api/camera/binning", json={"binning":2}).status_code == 403
+    token = client.post("/api/control/take").get_json()["token"]
+    headers = {"X-AstroPi-Control": token}
+    for bad in (3, 4, 0, None, True, "2"):
+        assert client.post("/api/camera/binning", json={"binning":bad},
+                           headers=headers).status_code == 400
+    assert client.post("/api/camera/binning", json={"binning":2},
+                       headers=headers).get_json()["binning"] == 2
+
+
+def test_worker_switches_binning_by_closing_and_reopening_sdk_session(monkeypatch):
+    import threading
+    import time
+    from astropi.camera import worker as module
+    from astropi.camera.sdk import frame_bytes
+
+    monkeypatch.setattr(module,"raw16_to_jpeg",lambda *args,**kwargs:b"\xff\xd8preview")
+    monkeypatch.setattr(module,"raw16_statistics",lambda *args,**kwargs:{
+        "raw_mean_adu":10.0,"raw_p99_adu":20,"raw_saturated_percent":0.0})
+    events=[]
+    sessions=[]
+    class Driver:
+        def __init__(self):
+            self.index=len(sessions)
+            sessions.append(self)
+        def open(self):
+            events.append((self.index,"open"))
+        def configure_binning(self, binning):
+            events.append((self.index,"bin",binning))
+        def set_control(self,control,value):
+            return value
+        def start(self):
+            events.append((self.index,"start"))
+        def get_frame(self,buffer,wait_ms):
+            time.sleep(0.01)
+        def close(self):
+            events.append((self.index,"close"))
+
+    worker=CameraWorker(driver_factory=Driver)
+    assert worker.start()
+    deadline=time.monotonic()+4
+    while worker.status()["phase"]!="running" and time.monotonic()<deadline:
+        time.sleep(.01)
+    assert worker.status()["phase"]=="running"
+    assert worker.set_binning(2)==2
+    deadline=time.monotonic()+5
+    while not (len(sessions)>=2 and worker.status()["phase"]=="running") and time.monotonic()<deadline:
+        time.sleep(.01)
+    assert worker.status()["phase"]=="running"
+    assert worker.status()["binning"]==2
+    assert worker.status()["width"]==1928
+    assert worker.status()["height"]==1090
+    assert events.index((0,"close")) < events.index((1,"open"))
+    assert (1,"bin",2) in events
+    assert worker.set_binning(1)==1
+    deadline=time.monotonic()+5
+    while not (len(sessions)>=3 and worker.status()["phase"]=="running") and time.monotonic()<deadline:
+        time.sleep(.01)
+    assert worker.status()["binning"]==1
+    assert worker.status()["phase"]=="running"
+    assert (2,"bin",2) not in events
+    worker.stop()
+    worker._thread.join(timeout=4)
+    assert not worker._thread.is_alive()
+
+
+def test_change_binning_rejected_during_capture():
+    import pytest
+    from astropi.camera.worker import CameraWorker
+    class BusyCapture:
+        def status(self):
+            return {"phase":"saving"}
+    worker=CameraWorker(capture=BusyCapture())
+    worker._phase="running"
+    with pytest.raises(RuntimeError,match="capture"):
+        worker.set_binning(2)
+    assert worker.status()["binning"]==1
+    for bad in (3,4,"2"):
+        with pytest.raises(ValueError):
+            worker.set_binning(bad)
