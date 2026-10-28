@@ -11,8 +11,8 @@ features. Treat Git history, not the current docs, as the troubleshooting log.
 | `run.py` | Flask foreground entry point (no systemd service yet) |
 | `astropi/config.py`, `status.py` | hardware paths, USB presence, recording mount/UUID, Pi metrics; read-only status never opens devices |
 | `astropi/control.py`, `web.py` | single operator token/lease, Flask API, worker state; no SDK or mount serial I/O on Flask request threads |
-| `astropi/camera/sdk.py` | SVBONY SDK wrapper, camera enum/open/stream/restore/close |
-| `astropi/camera/worker.py` | sole camera SDK thread, separate one-slot JPEG preview worker; SDK frame buffer copied before recording |
+| `astropi/camera/sdk.py` | SVBONY SDK wrapper, camera enum/open/stream/restore/close, 1×/2× binning and post-bin ROI |
+| `astropi/camera/worker.py` | sole camera SDK thread, separate one-slot JPEG preview worker; SDK frame buffer copied before recording. Reconfigure bin by closing/reopening a full SDK session in this same owner thread, never switching ROI mid-stream |
 | `astropi/camera/preview.py` | disposable GRBG display preview + sparse stats |
 | `astropi/capture/manager.py` | single shot or 2–100 counted-frame job, per-frame write boundary and cancellation, independent of browser |
 | `astropi/capture/formats.py` | original RAW16, science FITS and colour quicklooks |
@@ -27,8 +27,8 @@ features. Treat Git history, not the current docs, as the troubleshooting log.
 - `GET /api/status`, `/api/camera/progress`, `/api/camera/frame.jpg`,
   `/api/capture/status`, `/api/mount/status`.
 - `POST /api/control/take`, `/heartbeat`, `/release`.
-- `POST /api/camera/start`, `/stop`, `/settings`, `/preview-mode`,
-  `/debayer`; `/api/capture`, `/api/capture/sequence`,
+- `POST /api/camera/start`, `/stop`, `/settings`, `/binning`,
+  `/preview-mode`, `/debayer`; `/api/capture`, `/api/capture/sequence`,
   `/api/capture/cancel`.
 - `POST /api/mount/connect`, `/disconnect`, `/jog`,
   `/jog-heartbeat`, `/stop`, `/environment/read`.
@@ -46,7 +46,9 @@ camera preview uses polling, not WebSockets. The controls are for a
   once per streaming session. Do not interleave SDK calls across threads;
   camera preview can drop frames rather than accumulate unlimited work.
 - Every output format of a saved frame derives from one immutable RAW16
-  source. FITS retains 12-bit GRBG values, with correct BZERO and byte order.
+  source. FITS retains 12-bit samples, with correct BZERO and byte order.
+  1×1 is GRBG; 2×2 Bayer interpretation is still unverified, so do not
+  falsely label binned FITS as GRBG or apply colour quicklook demosaic.
   Recorded frames have SHA-256 manifest; incomplete writes remain unpublished.
 - Never write recording data unless the **specific mounted USB UUID** is
   verified. Missing/incorrect USB must not fill the boot microSD.
@@ -76,8 +78,10 @@ Suggested next steps **after the operator tests this cleanup**:
    Stellarium/INDI or AM3N Wi-Fi instead of duplicating a planetarium.
    Do not enable competing USB and Wi-Fi movement controllers blindly.
 2. Systemd startup/recovery and longer camera/storage error/endurance tests.
-3. Deferred offline sky atlas (VirtualSky, OpenNGC/Messier), manual two-star
-   alignment, focus tools, ROI/binning and optional field time entry.
+3. Verify 2×2 binning on the actual Pi and camera (ROI acceptance, sample
+   range, mono quicklooks, FITS/RAW16 exact-match); future arbitrary ROI and
+   colour Bayer handling only after physical proof. Then the deferred offline
+   sky atlas, manual alignment, focus tools and optional field time entry.
 
 Keep handoff documents concise; replace obsolete facts in place instead
 of appending a new milestone diary. Do not remove safety regression tests

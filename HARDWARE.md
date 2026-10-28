@@ -16,6 +16,17 @@ AM3N stable serial alias: `/dev/serial/by-id/usb-ZWO_Systems_ZWO_Device_123456-i
 
 ## SV705C integration quirks
 
+- **Binning:** SV705C manufacturer's specifications and manual explicitly
+  list **1×1 and 2×2** only. An earlier SDK probe listed 1/2/3/4
+  capability values but 3×3 and 4×4 are NOT claimed as supported on this
+  camera. `SVBSetROIFormat` accepts **post-binning** output dimensions:
+  3856×2180 at bin=1, 1928×1090 at bin=2. It must be set before video
+  capture starts; switching binning closes the old SDK camera session and
+  opens a new one. 2×2 RAW16 is 4,203,040 bytes. **2×2 behaviour is
+  simulation-tested, not yet verified with the real Pi/camera**; until Bayer
+  arrangement is observed, its quicklooks are monochrome and FITS omits
+  `BAYERPAT`, but RAW16 bytes and binned FITS numerical pixels are retained.
+  See [SVBONY published specs](https://www.svbony.com/products/sv705c-color-planetary-camera-imx585).
 - Required flow: enumerate, call `SVBGetCameraInfo` to obtain real CameraID (do not hard-code), open, set full-frame 3856×2180 ROI and RAW16 enum 4, **start one continuous stream**, read frames, restore controls and close on exit. An earlier stop/start in the same SDK session returned timeout code **11**.
 - Gain is SDK control **0**; exposure is control **1** in microseconds. SDK readback rounds values: 10,000→10,007 µs, 50,000→50,148 µs and 1,000,000→1,000,143 µs. Image brightness responded to changes. No photometric calibration claim.
 - RAW16 frame = **16,812,160 bytes**, 3856×2180 little-endian uint16, with 12-bit Bayer **GRBG** values shifted left by four bits. FITS stores full-resolution native samples (big-endian BITPIX16, BZERO=32768, BSCALE=1); RAW16 unchanged. FITS exposure start is estimated, not a hardware timestamp. Browser preview ~964×545, JPEG/PNG saved quicklooks 1928×1090; these are *not* calibrated full demosaics.

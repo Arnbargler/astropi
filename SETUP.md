@@ -37,7 +37,17 @@ the page. Internet exposure/authentication is not supported.
 ## Camera, recording and verification
 
 Click **Take Control**, **Start preview**, choose exposure/gain and wait for
-SDK readbacks. Preview can use colour or mono, fixed or auto display stretch.
+SDK readbacks. **Binning** buttons just below Gain select 1×1 (full sensor
+3856×2180) or 2×2 (1928×1090). Binning can be changed when stopped or
+running: while running, the Pi first stops and closes the existing camera
+SDK session, then opens a fresh session with the new binning. Changing binning
+is blocked while a capture or sequence is waiting/saving; any in-progress
+exposure may delay a change until the SDK read completes. The camera may
+briefly show Reconfiguring. Preview can use colour or mono, fixed or auto
+display stretch. **2×2 is not yet tested on real camera hardware**;
+its preview/JPEG/PNG quicklooks are monochrome until the binned Bayer layout
+is verified. Scientific RAW16 and FITS keep the binned numeric samples,
+and saved metadata and FITS dimensions include the binning factor.
 Check desired RAW16/FITS/JPG/PNG formats (FITS/JPG default), then **Capture
 & Save** for one frame, or set **Frames in sequence** to 2–100 and press
 **Start Sequence**. **Cancel Sequence** completes any in-progress write before

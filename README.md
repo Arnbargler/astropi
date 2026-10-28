@@ -9,7 +9,11 @@ The Linux desktop is a browser/development client, not a required server.
 
 - **Camera:** Full-frame 3856×2180, 12-bit GRBG in RAW16; live colour and
   monochrome preview, manual exposure/gain, fixed/auto preview stretch.
-  Measured 50 ms preview: ~14.8 colour / ~16.6 mono FPS on Pi.
+  **New: manufacturer-supported 1×1 and 2×2 hardware binning buttons below Gain,**
+  with a fresh SDK session after change and bin-aware recording. 2×2 is
+  code-tested but **awaits Pi camera verification**. Binned quicklooks and
+  preview are monochrome until the colour Bayer arrangement is confirmed.
+  Measured 50 ms preview: ~14.8 colour / ~16.6 mono FPS at 1× on Pi.
 - **Recording:** Individually selected RAW16, FITS, JPEG and PNG; one-shot
   or consecutive sequences of 2–100 frames. USB-only storage guarded by
   filesystem UUID, SHA-256 manifest, fsync and atomic publication; no microSD
