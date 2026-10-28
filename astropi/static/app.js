@@ -21,12 +21,11 @@ let sequenceActive = false;
 let mountPhase = "disconnected";
 let mountRequestPending = false;
 let mountMotionPhase = "idle";
-let mountArmed = false;
 let heldMountDirection = null;
 let mountStopPending = false;
 let mountHeartbeatBusy = false;
 let mountEnvironmentPhase = "idle";
-const mountSpeeds = ["slow", "medium", "fast"];
+const mountSpeeds = ["slow", "medium", "fast", "slew", "max"];
 let selectedMountSpeed = "slow";
 function showMountSpeed(speed) {
   selectedMountSpeed = speed;
@@ -70,18 +69,19 @@ function updateButtons() {
     !["connecting", "connected"].includes(mountPhase);
   $("mount-stop").disabled = mountPhase !== "connected" || mountStopPending;
   $("mount-read-environment").disabled = !owner || mountPhase !== "connected" ||
-    mountRequestPending || mountMotionPhase !== "idle" || mountArmed ||
+    mountRequestPending || mountMotionPhase !== "idle" || Boolean(heldMountDirection) ||
     mountEnvironmentPhase === "queued" || mountEnvironmentPhase === "reading";
-  $("mount-arm").disabled = !owner || mountPhase !== "connected" ||
-    mountMotionPhase !== "idle" || mountArmed || mountRequestPending;
   for (const speed of mountSpeeds) {
     $("mount-speed-" + speed).disabled = !owner || mountPhase !== "connected" ||
-      mountMotionPhase !== "idle" || mountArmed || mountRequestPending ||
+      mountMotionPhase !== "idle" || mountRequestPending ||
       Boolean(heldMountDirection);
   }
   for (const direction of ["north", "south", "east", "west"]) {
     $("mount-" + direction).disabled = !owner || mountPhase !== "connected" ||
-      !mountArmed || mountMotionPhase !== "idle" || mountRequestPending;
+      (mountMotionPhase !== "idle" && heldMountDirection !== direction) ||
+      (Boolean(heldMountDirection) && heldMountDirection !== direction) ||
+      mountRequestPending ||
+      ["queued", "reading"].includes(mountEnvironmentPhase);
   }
   const saveReady = owner && currentPhase === "running" &&
     storageReady && !captureBusy && !captureRequestPending &&
@@ -206,7 +206,7 @@ $("release-control").addEventListener("click", async () => {
 });
 for (const speed of mountSpeeds) {
   $("mount-speed-" + speed).addEventListener("change", () => {
-    if (mountArmed || mountMotionPhase !== "idle" || heldMountDirection) {
+    if (mountMotionPhase !== "idle" || heldMountDirection) {
       showMountSpeed(selectedMountSpeed);
       return;
     }
@@ -220,7 +220,6 @@ async function stopMount() {
   heldMountDirection = null;
   if (mountStopPending || mountPhase !== "connected") return;
   mountStopPending = true;
-  mountArmed = false;
   // Lock out speed changes immediately, before the serial owner has
   // acknowledged and verified a complete Stop.
   mountMotionPhase = "stopping";
@@ -238,22 +237,12 @@ async function stopMount() {
   }
 }
 $("mount-stop").addEventListener("click", stopMount);
-$("mount-arm").addEventListener("click", async () => {
-  if (!token || mountPhase !== "connected") return;
-  try {
-    await post("/api/mount/arm");
-    mountArmed = true;
-    write("mount-motion", "One jog enabled · press and hold a direction");
-    write("mount-error", "");
-    updateButtons();
-  } catch(error) {
-    write("mount-error", error.message);
-    await refreshMount();
-  }
-});
 async function beginMountHold(direction) {
-  if (heldMountDirection || !mountArmed || !token) return;
+  if (heldMountDirection || !token || mountPhase !== "connected" ||
+      mountMotionPhase !== "idle" ||
+      ["queued", "reading"].includes(mountEnvironmentPhase)) return;
   heldMountDirection = direction;
+  mountMotionPhase = "starting";
   updateButtons();
   try {
     await post("/api/mount/jog", {direction, speed:selectedMountSpeed});
@@ -305,7 +294,8 @@ async function mountHoldHeartbeat() {
   }
 }
 $("mount-read-environment").addEventListener("click", async () => {
-  if (!token || mountPhase !== "connected" || mountEnvironmentPhase === "reading") return;
+  if (!token || mountPhase !== "connected" || mountMotionPhase !== "idle" ||
+      heldMountDirection || ["queued","reading"].includes(mountEnvironmentPhase)) return;
   mountEnvironmentPhase = "queued";
   updateButtons();
   try {
@@ -346,7 +336,6 @@ function showMount(data) {
     showMountSpeed("slow");  // reconnect always starts conservatively
   mountPhase = nextPhase;
   mountMotionPhase = data.motion_phase || "idle";
-  mountArmed = Boolean(data.motion_armed);
   mountEnvironmentPhase = data.environment_phase || "idle";
   if (mountPhase !== "connected") heldMountDirection = null;
   const env = mountPhase === "connected" ? data.environment : null;
@@ -366,8 +355,8 @@ function showMount(data) {
   write("mount-environment-error", data.environment_error || "");
   write("mount-phase", "Connection: " + mountPhase);
   const motionDescription = {
-    idle: data.stop_stable ? "Reported axes stable after Stop · movement disabled" :
-      (mountArmed ? "One jog enabled · hold a direction" : "Movement disabled"),
+    idle: data.stop_stable ? "Reported axes stable after Stop · hold to move" :
+      "Hold a direction to move",
     starting: "Starting manual jog · hold button",
     moving: "Jog " + (data.jog_speed || "slow") + " in progress · release for Stop",
     stopping: "Stop requested · checking position stability…",

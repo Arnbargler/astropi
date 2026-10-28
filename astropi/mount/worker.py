@@ -36,6 +36,8 @@ JOG_SPEEDS = {
     "slow": ":R5#",          # ~8x, verified on Pi
     "medium": ":Rv20.00#",  # ~20x, user-reported normal operation
     "fast": ":Rv60.00#",    # ~60x, user-reported normal operation
+    "slew": ":R8#",        # 720x, INDI AM driver documented preset
+    "max": ":R9#",         # 1440x, INDI AM driver documented preset
 }
 JOG_RATE = JOG_SPEEDS["slow"]  # backward-compatible default
 STOP_COMMAND = ":Q#"
@@ -191,30 +193,23 @@ class MountWorker:
             )
             return True
 
-    def arm(self):
-        """Requires operator lease at the Flask layer; one arm per jog."""
-        with self._lock:
-            if not self._state["connected"] or self._state["phase"] != "connected":
-                raise RuntimeError("Connect the mount before arming")
-            if (self._state["motion_phase"] != "idle" or self._stop_pending or
-                    self._environment_pending or self._environment_in_progress):
-                raise RuntimeError("Mount must be idle and not reading its clock/site before arming")
-            self._armed = True
-            self._state["motion_armed"] = True
-            return True
-
     def jog(self, direction, speed="slow"):
         if type(direction) is not str or direction not in JOG_COMMANDS:
             raise ValueError("Unknown mount direction")
         if type(speed) is not str or speed not in JOG_SPEEDS:
-            raise ValueError("Unknown mount jog speed; select slow, medium or fast")
+            raise ValueError("Unknown mount jog speed")
         with self._lock:
-            if not self._state["connected"] or not self._armed:
-                raise RuntimeError("Enable manual movement first")
+            if not self._state["connected"] or self._state["phase"] != "connected":
+                raise RuntimeError("Connect the mount before moving")
             if self._state["motion_phase"] != "idle":
                 raise RuntimeError("Only one direction at a time")
-            if self._stop_pending or self._stop.is_set():
-                raise RuntimeError("A Stop or disconnect is pending")
+            if (self._stop_pending or self._stop.is_set() or
+                    self._environment_pending or self._environment_in_progress):
+                raise RuntimeError("Stop, disconnect or clock/site read pending")
+            # Internal motion token: only a valid active jog may renew
+            # its heartbeat. No separate browser-side arm action.
+            self._armed = True
+            self._state["motion_armed"] = True
             self._pending_direction = direction
             self._pending_speed = speed
             self._motion_deadline = self._clock() + DEADMAN_SECONDS

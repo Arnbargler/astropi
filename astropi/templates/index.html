@@ -149,7 +149,7 @@
     </section>
     <section class="cards" aria-label="System status">
       <article class="card mount-card">
-        <h3>ZWO AM3N · Manual safety test</h3>
+        <h3>ZWO AM3N · Mount control</h3>
         <div class="metric" id="mount-usb">Checking…</div>
         <p id="mount-serial">Checking serial alias…</p>
         <div class="button-row">
@@ -194,8 +194,15 @@
               <input id="mount-speed-fast" name="mount-speed" type="radio" value="fast" disabled>
               <span>Fast <small>60×</small></span>
             </label>
+            <label for="mount-speed-slew" class="mount-speed-choice">
+              <input id="mount-speed-slew" name="mount-speed" type="radio" value="slew" disabled>
+              <span>Slew <small>720×</small></span>
+            </label>
+            <label for="mount-speed-max" class="mount-speed-choice">
+              <input id="mount-speed-max" name="mount-speed" type="radio" value="max" disabled>
+              <span>Max <small>1440×</small></span>
+            </label>
           </div>
-          <button id="mount-arm" disabled>Enable one manual jog</button>
           <div class="mount-directions" role="group" aria-label="Press and hold to jog mount">
             <button type="button" id="mount-north" disabled aria-label="Hold to move altitude north">N ↑</button>
             <button type="button" id="mount-west" disabled aria-label="Hold to move azimuth west">W ←</button>
@@ -203,9 +210,9 @@
             <button type="button" id="mount-east" disabled aria-label="Hold to move azimuth east">E →</button>
             <button type="button" id="mount-south" disabled aria-label="Hold to move altitude south">S ↓</button>
           </div>
-          <p id="mount-motion" role="status" aria-live="polite">Movement disabled</p>
+          <p id="mount-motion" role="status" aria-live="polite">Hold a direction to move</p>
           <p id="mount-motion-warning" role="alert" class="mount-error"></p>
-          <p class="mount-small">Slow 8× is Pi-verified. Medium 20× and Fast 60× are experimental until tested on the mount. Each jog must be re-armed. Hold a direction for as long as needed; release to stop. The 600 ms missing-heartbeat watchdog is still active, including if you leave the button or switch tabs.</p>
+          <p class="mount-small">Five manual rates: Slow 8×, Medium 20×, Fast 60×, Slew 720×, Max 1440×. The two highest rates are newly available and need a real-mount check. Hold a button to move; release it to stop. The 600 ms missing-heartbeat watchdog and Stop button remain active.</p>
         </div>
         <p id="mount-flags">Status flags: —</p>
         <p id="mount-raw-status" class="mount-small">Raw :GU#: —</p>
