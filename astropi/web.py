@@ -209,8 +209,8 @@ def create_app(settings: Settings | None = None, camera=None, lease=None, mount=
         try:
             formats = validate_formats(payload.get("formats"))
             count = payload.get("count")
-            if type(count) is not int or not 2 <= count <= 100:
-                return jsonify(error="Sequence count must be an integer from 2 to 100"), 400
+            if type(count) is not int or not 2 <= count <= CaptureManager.MAX_FRAMES:
+                return jsonify(error=f"Sequence count must be an integer from 2 to {CaptureManager.MAX_FRAMES}"), 400
             capture_id = worker.request_capture(list(formats), count=count)
         except ValueError as exc:
             return jsonify(error=str(exc)), 400

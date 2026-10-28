@@ -35,6 +35,7 @@ function showMountSpeed(speed) {
     $("mount-speed-" + option).checked = option === speed;
 }
 const saveFormats = ["fits", "raw", "jpg", "png"];
+const captureCounts = [1, 5, 50, 100, 150, 200];
 const $ = id => document.getElementById(id);
 const write = (id, value) => { $(id).textContent = value; };
 const nearest = (values, number) => values.reduce((a, b) =>
@@ -89,11 +90,10 @@ function updateButtons() {
   const saveReady = owner && currentPhase === "running" &&
     storageReady && !captureBusy && !captureRequestPending &&
     saveFormats.some(fmt => $("capture-" + fmt).checked);
-  $("capture-now").disabled = !saveReady;
-  const count = Number($("sequence-count").value);
-  $("start-sequence").disabled = !saveReady || !Number.isInteger(count) ||
-    count < 2 || count > 100;
-  $("sequence-count").disabled = !owner || captureBusy || captureRequestPending;
+  for (const count of captureCounts)
+    $("capture-" + count).disabled = !saveReady;
+  for (const fmt of saveFormats)
+    $("capture-" + fmt).disabled = !owner || captureBusy || captureRequestPending;
   $("cancel-sequence").disabled = !owner || !sequenceActive;
   for (const bin of [1, 2])
     $("binning-" + bin).disabled = !owner || binningChangePending ||
@@ -482,43 +482,9 @@ $("debayer-off").addEventListener("click", () => changeDebayer(false));
 for (const fmt of saveFormats) {
   $("capture-" + fmt).addEventListener("change", updateButtons);
 }
-$("sequence-count").addEventListener("input", updateButtons);
-$("start-sequence").addEventListener("click", async () => {
-  if (captureBusy || captureRequestPending) return;
-  const count = Number($("sequence-count").value);
-  const formats = saveFormats.filter(fmt => $("capture-" + fmt).checked);
-  if (!Number.isInteger(count) || count < 2 || count > 100 || !formats.length) {
-    write("capture-error", "Choose 2–100 frames and at least one format");
-    return;
-  }
-  captureRequestPending = true;
-  updateButtons();
-  write("capture-error", "");
-  write("capture-results", "");
-  write("sequence-progress", "Starting sequence…");
-  try {
-    const reply = await post("/api/capture/sequence", {count, formats});
-    write("capture-state", "Sequence " + reply.id + " accepted");
-    write("sequence-progress", "0 / " + count + " frames saved");
-  } catch(error) {
-    write("capture-error", error.message);
-    write("sequence-progress", "Sequence was not started");
-  } finally {
-    captureRequestPending = false;
-    updateButtons();
-  }
-});
-$("cancel-sequence").addEventListener("click", async () => {
-  try {
-    await post("/api/capture/cancel");
-    write("capture-state", "Cancellation requested; finishing any active write…");
-    write("capture-error", "");
-  } catch(error) {
-    write("capture-error", error.message);
-  }
-});
-$("capture-now").addEventListener("click", async () => {
-  if (captureBusy || captureRequestPending) return;
+async function requestFrames(count) {
+  if (!captureCounts.includes(count) || captureBusy || captureRequestPending ||
+      $("capture-" + count).disabled) return;
   const formats = saveFormats.filter(fmt => $("capture-" + fmt).checked);
   if (!formats.length) {
     write("capture-error", "Select at least one file format");
@@ -528,15 +494,37 @@ $("capture-now").addEventListener("click", async () => {
   updateButtons();
   write("capture-error", "");
   write("capture-results", "");
-  write("capture-state", "Requesting next full-resolution camera frame…");
+  write("sequence-progress", count > 1 ? "Starting " + count + " frames…" : "");
+  write("capture-state", count > 1 ? "Starting sequence…" : "Requesting next frame…");
   try {
-    const reply = await post("/api/capture", {formats});
-    write("capture-state", "Capture " + reply.id + " queued; waiting for the next frame…");
+    if (count === 1) {
+      const reply = await post("/api/capture", {formats});
+      write("capture-state", "Capture " + reply.id + " queued");
+    } else {
+      const reply = await post("/api/capture/sequence", {count, formats});
+      write("capture-state", "Sequence " + reply.id + " accepted");
+      write("sequence-progress", "0 / " + count + " frames saved");
+    }
   } catch (error) {
     write("capture-error", error.message);
     write("capture-state", "Capture not started");
+    write("sequence-progress", "");
   } finally {
     captureRequestPending = false;
+    updateButtons();
+  }
+}
+for (const count of captureCounts)
+  $("capture-" + count).addEventListener("click", () => requestFrames(count));
+$("cancel-sequence").addEventListener("click", async () => {
+  if (!sequenceActive || $("cancel-sequence").disabled) return;
+  $("cancel-sequence").disabled = true;
+  try {
+    await post("/api/capture/cancel");
+    write("capture-state", "Cancellation requested; completing active write…");
+    write("capture-error", "");
+  } catch (error) {
+    write("capture-error", error.message);
     updateButtons();
   }
 });

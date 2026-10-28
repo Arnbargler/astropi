@@ -29,25 +29,26 @@
         <div class="preview-footer"><span id="camera-phase">Camera stopped</span><span id="frame-count">0 JPEG frames · — preview fps · — raw fps</span></div>
       </article>
     <section class="card save-panel" aria-label="Capture and save">
-      <div class="save-header">
-        <div><h3>Capture &amp; exposure sequence</h3>
-        </div>
-        <button id="capture-now" disabled>Capture &amp; Save</button>
+      <h3>Capture</h3>
+      <div class="save-formats" role="group" aria-label="Save formats">
+        <label class="format-option"><input id="capture-fits" type="checkbox" checked><span class="format-name">FITS</span><span class="format-switch" aria-hidden="true"></span></label>
+        <label class="format-option"><input id="capture-raw" type="checkbox"><span class="format-name">RAW16</span><span class="format-switch" aria-hidden="true"></span></label>
+        <label class="format-option"><input id="capture-jpg" type="checkbox" checked><span class="format-name">JPG</span><span class="format-switch" aria-hidden="true"></span></label>
+        <label class="format-option"><input id="capture-png" type="checkbox"><span class="format-name">PNG</span><span class="format-switch" aria-hidden="true"></span></label>
       </div>
-      <div class="save-formats" role="group" aria-label="Recording file formats">
-        <label class="format-option"><input id="capture-fits" type="checkbox" checked><span><strong>FITS</strong></span></label>
-        <label class="format-option"><input id="capture-raw" type="checkbox"><span><strong>RAW16</strong></span></label>
-        <label class="format-option"><input id="capture-jpg" type="checkbox" checked><span><strong>JPG</strong></span></label>
-        <label class="format-option"><input id="capture-png" type="checkbox"><span><strong>PNG</strong></span></label>
+      <div class="capture-presets" role="group" aria-label="Frames to capture">
+        <button type="button" id="capture-1" aria-label="Capture 1 frame" disabled>1</button>
+        <button type="button" id="capture-5" aria-label="Capture 5 frames" disabled>5</button>
+        <button type="button" id="capture-50" aria-label="Capture 50 frames" disabled>50</button>
+        <button type="button" id="capture-100" aria-label="Capture 100 frames" disabled>100</button>
+        <button type="button" id="capture-150" aria-label="Capture 150 frames" disabled>150</button>
+        <button type="button" id="capture-200" aria-label="Capture 200 frames" disabled>200</button>
+        <button type="button" id="cancel-sequence" aria-label="Cancel current sequence" disabled>Cancel</button>
       </div>
-      <div class="sequence-controls">
-        <label for="sequence-count">Frames in sequence</label>
-        <input id="sequence-count" type="number" min="2" max="100" step="1" value="10" inputmode="numeric">
-        <button id="start-sequence" disabled>Start Sequence</button>
-        <button id="cancel-sequence" disabled>Cancel Sequence</button>
+      <div class="capture-status-row">
+        <span id="sequence-progress" role="status" aria-live="polite"></span>
+        <span id="capture-state" role="status" aria-live="polite">Idle</span>
       </div>
-      <div id="sequence-progress" role="status" aria-live="polite"></div>
-      <p id="capture-state" role="status" aria-live="polite">Idle</p>
       <p id="capture-error" role="alert"></p>
       <div id="capture-results"></div>
     </section>

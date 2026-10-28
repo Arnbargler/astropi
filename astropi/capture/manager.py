@@ -16,7 +16,7 @@ class CaptureBusy(RuntimeError):
 
 
 class CaptureManager:
-    MAX_FRAMES = 100
+    MAX_FRAMES = 200
 
     def __init__(self, storage):
         self.storage = storage
