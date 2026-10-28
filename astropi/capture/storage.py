@@ -76,7 +76,12 @@ class CaptureStorage:
         os.fsync(dir_fd)
         return len(payload), hashlib.sha256(payload).hexdigest()
 
-    def save(self, raw, formats, *, gain, exposure_us, received_at, stretch, sequence=None):
+    def save(self, raw, formats, *, gain, exposure_us, received_at, stretch,
+             sequence=None, binning=1):
+        from astropi.camera.sdk import frame_dimensions, frame_bytes
+        width, height = frame_dimensions(binning)
+        if memoryview(raw).nbytes != frame_bytes(binning):
+            raise StorageError("Wrong RAW16 size for configured binning")
         self.preflight(formats)  # Repeat check after capture and before writes.
         # Pin the verified mounted filesystem by opening its root; no fallback
         # to the same pathname on microSD if the USB device disappears.
@@ -111,25 +116,30 @@ class CaptureStorage:
                             payload = raw
                         elif fmt == "fits":
                             payload = fits_bytes(
-                                raw, gain=gain, exposure_us=exposure_us, received_at=received_at
+                                raw, gain=gain, exposure_us=exposure_us,
+                                received_at=received_at, binning=binning
                             )
                         else:
                             if quicklook is None:
-                                quicklook = quicklook_image(raw, stretch=stretch)
+                                quicklook = quicklook_image(raw, stretch=stretch,
+                                                            binning=binning)
                             payload = quicklook_bytes(quicklook, fmt)
                         name = f"sv705c.{EXTENSIONS[fmt]}"
                         count, digest = self._atomic_write(shot_fd, name, payload)
                         files.append(dict(format=fmt.upper(), path=relative + "/" + name,
                                           bytes=count, sha256=digest))
                     metadata = dict(
-                        camera="SVBONY SV705C", width=3856, height=2180,
-                        pixel_format="RAW16_LE", bayer="GRBG", bits_valid=12,
+                        camera="SVBONY SV705C", width=width, height=height,
+                        binning=binning, pixel_format="RAW16_LE",
+                        bayer="GRBG" if binning == 1 else "unverified at 2x2",
+                        bits_valid=12,
                         native_left_shift=4, gain=gain,
                         exposure_us=exposure_us,
                         time_received_utc=received_at.isoformat(),
                         time_source="Pi host UTC, SDK hardware timestamp unavailable",
                         quicklook_stretch=stretch,
-                        quicklook_dimensions=[1928, 1090],
+                        quicklook_dimensions=list(quicklook.size) if quicklook else
+                            [width // 2, height // 2],
                         fits_data="unsigned 12-bit ADU with FITS BZERO=32768",
                         files=files,
                     )

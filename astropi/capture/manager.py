@@ -89,7 +89,7 @@ class CaptureManager:
             # If saving, the writer finishes the current full frame first.
             return self._state["id"]
 
-    def accept_frame(self, raw, *, gain, exposure_us, stretch):
+    def accept_frame(self, raw, *, gain, exposure_us, stretch, binning=1):
         """SDK thread submits only one immutable raw frame per completed write."""
         with self._lock:
             if not self._pending or self._state["phase"] != "waiting":
@@ -110,22 +110,25 @@ class CaptureManager:
             self._writer_thread = threading.Thread(
                 target=self._save,
                 args=(identifier, frame, formats, gain, exposure_us,
-                      stretch, received_at, index, count),
+                      stretch, received_at, index, count, binning),
                 name="sv705c-capture-save", daemon=False,
             )
             self._writer_thread.start()
             return True
 
     def _save(self, identifier, frame, formats, gain, exposure_us,
-              stretch, received_at, index, count):
+              stretch, received_at, index, count, binning):
         try:
             # Sequence details are included per-frame in metadata.json.
-            result = self.storage.save(
-                frame, formats, gain=gain, exposure_us=exposure_us,
+            params = dict(
+                gain=gain, exposure_us=exposure_us,
                 stretch=stretch, received_at=received_at,
                 sequence=dict(id=identifier, index=index, count=count)
                          if count > 1 else None,
             )
+            if binning != 1:
+                params["binning"] = binning
+            result = self.storage.save(frame, formats, **params)
         except Exception as exc:
             with self._lock:
                 if self._state["id"] == identifier:

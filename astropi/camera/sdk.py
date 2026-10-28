@@ -116,7 +116,7 @@ class SVBDriver:
 
     def get_frame(self, buffer, wait_ms):
         self._ok("SVBGetVideoData", self.camera_id, C.cast(buffer, C.c_void_p),
-                 RAW_BYTES, int(wait_ms))
+                 C.sizeof(buffer), int(wait_ms))
 
     def close(self):
         if not self.opened:

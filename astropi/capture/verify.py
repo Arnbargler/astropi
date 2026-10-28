@@ -66,14 +66,23 @@ def check_capture(folder):
     if not fits.exists():
         return {"files": len(files), "fits_checked": False, "raw_pixels_equal": None}
 
+    from astropi.camera.sdk import frame_dimensions
+    binning = manifest.get("binning", 1)
+    width, height = frame_dimensions(binning)
+    if manifest.get("width", width) != width or manifest.get("height", height) != height:
+        raise ValueError("Capture metadata dimensions do not match binning")
     header, offset = _fits_header(fits)
     expected = {"SIMPLE": True, "BITPIX": 16, "NAXIS": 2,
-                "NAXIS1": 3856, "NAXIS2": 2180,
-                "BZERO": 32768, "BSCALE": 1, "BAYERPAT": "GRBG"}
+                "NAXIS1": width, "NAXIS2": height,
+                "BZERO": 32768, "BSCALE": 1,
+                "XBINNING": binning, "YBINNING": binning}
+    if binning == 1:
+        expected["BAYERPAT"] = "GRBG"
+    elif "BAYERPAT" in header:
+        raise ValueError("2x2 FITS Bayer pattern is unverified; omit BAYERPAT")
     for key, value in expected.items():
         if header.get(key) != value:
             raise ValueError(f"FITS header mismatch: {key}")
-    width, height = expected["NAXIS1"], expected["NAXIS2"]
     if fits.stat().st_size % 2880:
         raise ValueError("FITS file length not 2880-byte aligned")
     rawpath = folder / "sv705c.raw16"

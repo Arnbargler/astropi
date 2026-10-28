@@ -13,7 +13,7 @@ import numpy as np
 from PIL import Image
 
 from astropi.camera.preview import _stretch_lut
-from astropi.camera.sdk import WIDTH, HEIGHT, RAW_BYTES
+from astropi.camera.sdk import WIDTH, HEIGHT, frame_bytes, frame_dimensions
 
 FORMATS = ("raw", "fits", "jpg", "png")
 EXTENSIONS = {"raw": "raw16", "fits": "fits", "jpg": "jpg", "png": "png"}
@@ -27,10 +27,11 @@ def validate_formats(formats):
     return tuple(fmt for fmt in FORMATS if fmt in formats)
 
 
-def raw_pixels(raw):
-    if memoryview(raw).nbytes != RAW_BYTES:
-        raise ValueError("Unexpected full-frame RAW16 buffer length")
-    return np.frombuffer(raw, dtype="<u2", count=WIDTH * HEIGHT).reshape(HEIGHT, WIDTH)
+def raw_pixels(raw, *, binning=1):
+    width, height = frame_dimensions(binning)
+    if memoryview(raw).nbytes != frame_bytes(binning):
+        raise ValueError("Unexpected SV705C RAW16 buffer length")
+    return np.frombuffer(raw, dtype="<u2", count=width * height).reshape(height, width)
 
 
 def _card(key, value):
@@ -51,22 +52,22 @@ def _card(key, value):
     return f"{key:<8}= {field:>20}".ljust(80).encode("ascii")
 
 
-def fits_bytes(raw, *, exposure_us, gain, received_at):
+def fits_bytes(raw, *, exposure_us, gain, received_at, binning=1):
     """Return a valid 2D primary FITS HDU with unsigned 12-bit CFA pixel values.
 
     DATE-OBS is an estimated exposure START (receipt - requested duration).
     The SVBONY SDK supplies no hardware exposure timestamps here.
     """
-    pixels = raw_pixels(raw)
+    pixels = raw_pixels(raw, binning=binning)
+    width, height = frame_dimensions(binning)
     # FITS BITPIX=16 encodes signed int16 big-endian. Subtract BZERO so FITS
     # readers reconstruct physical unsigned 0..4095 sensor digital numbers.
     image = ((pixels >> 4).astype(np.int32) - 32768).astype(">i2").tobytes()
     start = received_at - timedelta(microseconds=exposure_us)
     cards = [
         _card("SIMPLE", True), _card("BITPIX", 16), _card("NAXIS", 2),
-        _card("NAXIS1", WIDTH), _card("NAXIS2", HEIGHT),
+        _card("NAXIS1", width), _card("NAXIS2", height),
         _card("BSCALE", 1), _card("BZERO", 32768),
-        _card("BAYERPAT", "GRBG"),
         _card("INSTRUME", "SVBONY SV705C"),
         _card("EXPTIME", exposure_us / 1_000_000),
         _card("GAIN", gain),
@@ -74,21 +75,30 @@ def fits_bytes(raw, *, exposure_us, gain, received_at):
         _card("DATE-END", received_at.strftime("%Y-%m-%dT%H:%M:%S.%f")[:26]),
         _card("TIMESYS", "UTC"),
         _card("TIMEQUAL", "ESTIMATED"),
-        _card("XBINNING", 1), _card("YBINNING", 1),
+        _card("XBINNING", binning), _card("YBINNING", binning),
         b"END".ljust(80),
     ]
+    # Do not claim a known Bayer pattern for 2x2 until its SDK output has
+    # been inspected on the actual camera. Preserve full binned RAW samples.
+    if binning == 1:
+        cards.insert(7, _card("BAYERPAT", "GRBG"))
     header = b"".join(cards)
     header += b" " * (-len(header) % 2880)
     return header + image + (b"\0" * (-len(image) % 2880))
 
 
-def quicklook_image(raw, stretch="auto"):
-    """Half-resolution GRBG superpixel colour; NOT calibrated/demosaiced science."""
-    pixels = raw_pixels(raw)
+def quicklook_image(raw, stretch="auto", *, binning=1):
+    """Half-resolution quicklook; binned Bayer interpretation is unverified."""
+    pixels = raw_pixels(raw, binning=binning)
+    width, height = frame_dimensions(binning)
+    if binning == 2:
+        # Monochrome rather than falsely interpreting the 2x2 SDK output as GRBG.
+        plane = pixels[::2, ::2] >> 4
+        return Image.fromarray(_stretch_lut(plane, stretch)[plane], "L")
     red = pixels[0::2, 1::2] >> 4
     blue = pixels[1::2, 0::2] >> 4
     green = ((pixels[0::2, 0::2] >> 4) + (pixels[1::2, 1::2] >> 4)) // 2
-    rgb = np.empty((HEIGHT // 2, WIDTH // 2, 3), dtype=np.uint8)
+    rgb = np.empty((height // 2, width // 2, 3), dtype=np.uint8)
     for channel, plane in enumerate((red, green, blue)):
         rgb[:, :, channel] = _stretch_lut(plane, stretch)[plane]
     return Image.fromarray(rgb, "RGB")
