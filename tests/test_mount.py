@@ -229,7 +229,7 @@ class MotionPort(FakePort):
     """Only accepts the three explicitly allowed *types* of manual command."""
     def write(self, data):
         cmd = data.decode("ascii")
-        if cmd in (":R5#", ":Q#", ":Mn#", ":Ms#", ":Me#", ":Mw#"):
+        if cmd in (":R5#", ":Rv20.00#", ":Rv60.00#", ":Q#", ":Mn#", ":Ms#", ":Me#", ":Mw#"):
             self.commands.append(cmd)
             self.last = cmd
             return
@@ -391,5 +391,87 @@ def test_hard_jog_time_limit_with_ongoing_heartbeats(tmp_path):
     assert ":Q#" in factory.ports[0].commands
     assert worker.status()["last_stop_reason"] == "Maximum jog duration reached"
     assert not worker.status()["motion_armed"]
+    worker.disconnect()
+    worker._thread.join(timeout=3)
+
+
+
+def test_manual_speed_presets_have_safe_whitelist_and_time_caps(tmp_path):
+    from astropi.mount.worker import JOG_SPEEDS
+    assert JOG_SPEEDS == {
+        "slow": (":R5#", 3.0),
+        "medium": (":Rv20.00#", 2.0),
+        "fast": (":Rv60.00#", 1.0),
+    }
+    alias=tmp_path / "port"
+    alias.touch()
+    factory=MotionFactory()
+    worker=MountWorker(alias,serial_factory=factory,poll_interval=0.06)
+    worker.connect()
+    wait_until(lambda:worker.status()["connected"])
+    for speed,(rate,seconds) in JOG_SPEEDS.items():
+        worker.arm()
+        with pytest.raises(ValueError):
+            worker.jog("east",speed=":Rv1440#")
+        with pytest.raises(ValueError):
+            worker.jog("east",speed=1440)
+        worker.jog("east",speed=speed)
+        wait_until(lambda:worker.status()["motion_phase"]=="moving")
+        port=factory.ports[0]
+        assert port.commands.index(rate) < max(i for i,v in enumerate(port.commands) if v==":Me#")
+        assert worker.status()["jog_speed"]==speed
+        remaining=worker._hard_deadline-worker._clock()
+        assert 0 < remaining <= seconds
+        worker.emergency_stop()
+        wait_until(lambda:worker.status()["stop_stable"],timeout=5)
+        assert not worker.status()["motion_armed"]
+    worker.disconnect()
+    worker._thread.join(timeout=3)
+
+
+def test_fast_speed_caps_at_one_second_even_with_keepalive(tmp_path):
+    alias=tmp_path / "port"
+    alias.touch()
+    factory=MotionFactory()
+    worker=MountWorker(alias,serial_factory=factory,poll_interval=0.06)
+    worker.connect()
+    wait_until(lambda:worker.status()["connected"])
+    worker.arm()
+    worker.jog("north",speed="fast")
+    wait_until(lambda:":Mn#" in factory.ports[0].commands)
+    end=time.monotonic()+2.3
+    while time.monotonic()<end and ":Q#" not in factory.ports[0].commands:
+        try:
+            worker.heartbeat("north")
+        except RuntimeError:
+            break
+        time.sleep(0.12)
+    assert ":Q#" in factory.ports[0].commands
+    assert worker.status()["last_stop_reason"]=="Maximum jog duration reached"
+    worker.disconnect()
+    worker._thread.join(timeout=3)
+
+
+def test_unknown_jog_speed_http_rejected_without_any_motion(tmp_path):
+    alias=tmp_path / "port"
+    alias.touch()
+    factory=MotionFactory()
+    worker=MountWorker(alias,serial_factory=factory,poll_interval=0.06)
+    client=create_app(settings=Settings(tmp_path,"expected",alias,tmp_path/"usb"),
+                      mount=worker).test_client()
+    token=client.post("/api/control/take").get_json()["token"]
+    headers={"X-AstroPi-Control":token}
+    assert client.post("/api/mount/connect",headers=headers).status_code==202
+    wait_until(lambda:worker.status()["connected"])
+    assert client.post("/api/mount/arm",headers=headers).status_code==200
+    for invalid in (":Rv1440#",1440,{},None,"turbo"):
+        result=client.post("/api/mount/jog",headers=headers,json={
+            "direction":"east","speed":invalid})
+        assert result.status_code==400
+    assert ":Me#" not in factory.ports[0].commands
+    assert client.post("/api/mount/jog",headers=headers,json={
+        "direction":"east","speed":"medium"}).status_code==202
+    wait_until(lambda:":Rv20.00#" in factory.ports[0].commands)
+    assert client.post("/api/mount/stop").status_code==202
     worker.disconnect()
     worker._thread.join(timeout=3)
