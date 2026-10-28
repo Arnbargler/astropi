@@ -51,6 +51,7 @@ class SVBDriver:
             "SVBOpenCamera": [C.c_int],
             "SVBCloseCamera": [C.c_int],
             "SVBSetROIFormat": [C.c_int] * 6,
+            "SVBGetROIFormat": [C.c_int] + [C.POINTER(C.c_int)] * 5,
             "SVBSetOutputImageType": [C.c_int, C.c_int],
             "SVBSetControlValue": [C.c_int, C.c_int, C.c_long, C.c_int],
             "SVBGetControlValue": [C.c_int, C.c_int, C.POINTER(C.c_long), C.POINTER(C.c_int)],
@@ -109,6 +110,15 @@ class SVBDriver:
         if self.streaming:
             raise RuntimeError("Stop camera acquisition before configuring binning")
         self._ok("SVBSetROIFormat", self.camera_id, 0, 0, width, height, binning)
+        x, y, got_width, got_height, got_bin = (C.c_int() for _ in range(5))
+        self._ok("SVBGetROIFormat", self.camera_id, C.byref(x), C.byref(y),
+                 C.byref(got_width), C.byref(got_height), C.byref(got_bin))
+        actual = (x.value, y.value, got_width.value, got_height.value, got_bin.value)
+        expected = (0, 0, width, height, binning)
+        if actual != expected:
+            raise RuntimeError(
+                f"SDK binning ROI readback mismatch: expected {expected}, got {actual}"
+            )
 
     def start(self):
         self._ok("SVBStartVideoCapture", self.camera_id)
