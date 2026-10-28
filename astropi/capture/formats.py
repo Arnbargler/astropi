@@ -1,10 +1,9 @@
-"""Conservative scientific formats and colour quicklooks for SV705C RAW16.
+"""Lossless science output and optional colour/mono quicklooks from SV705C RAW16.
 
-RAW preserves byte-for-byte original SDK data (little endian, 12 bit << 4).
-FITS is unsigned 12-bit Bayer samples, full sensor resolution, standards-safe
-signed BIG-endian BITPIX=16 storage with BZERO=32768 / BSCALE=1. The resulting
-physical values are 0..4095. No interpolation, stretch or data loss in FITS.
-JPEG/PNG are colour 2x2 Bayer superpixel quicklooks at half linear resolution.
+RAW16 preserves SDK bytes; FITS preserves all original 12-bit numeric samples.
+JPEG/PNG display colour is a GRBG 2x2 superpixel at half output resolution.
+For 2x2 binning, the sensor supports Bayer-preserving binning but the SDK's
+Bayer phase is provisionally assumed GRBG pending real colour-target verification.
 """
 from datetime import timedelta
 from io import BytesIO
@@ -87,13 +86,17 @@ def fits_bytes(raw, *, exposure_us, gain, received_at, binning=1):
     return header + image + (b"\0" * (-len(image) % 2880))
 
 
-def quicklook_image(raw, stretch="auto", *, binning=1):
-    """Half-resolution quicklook; binned Bayer interpretation is unverified."""
+def quicklook_image(raw, stretch="auto", *, binning=1, debayer=True):
+    """Half-output-size GRBG colour quicklook or un-demosaiced green-site mono.
+
+    Binned GRBG phase is provisional; never changes the underlying RAW/FITS.
+    """
+    if type(debayer) is not bool:
+        raise ValueError("Debayer must be on or off")
     pixels = raw_pixels(raw, binning=binning)
     width, height = frame_dimensions(binning)
-    if binning == 2:
-        # Monochrome rather than falsely interpreting the 2x2 SDK output as GRBG.
-        plane = pixels[::2, ::2] >> 4
+    if not debayer:
+        plane = pixels[0::2, 0::2] >> 4
         return Image.fromarray(_stretch_lut(plane, stretch)[plane], "L")
     red = pixels[0::2, 1::2] >> 4
     blue = pixels[1::2, 0::2] >> 4

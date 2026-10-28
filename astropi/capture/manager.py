@@ -24,6 +24,7 @@ class CaptureManager:
         self._pending = False
         self._stop_after_write = False
         self._sequence_stretch = None
+        self._capture_debayer = True
         self._state = self._initial()
         self._writer_thread = None
 
@@ -52,9 +53,11 @@ class CaptureManager:
                 "waiting", "saving",
             )
 
-    def request(self, selected, count=1, stretch=None):
-        """Start capture. One-shot remains the default for existing API."""
+    def request(self, selected, count=1, stretch=None, debayer=True):
+        """Start capture; freeze display colour mode across the entire job."""
         formats = validate_formats(selected)
+        if type(debayer) is not bool:
+            raise ValueError("Debayer must be on or off")
         if stretch is not None and stretch not in ("auto", "fixed"):
             raise ValueError("Quicklook stretch must be auto or fixed")
         if type(count) is not int or not 1 <= count <= self.MAX_FRAMES:
@@ -74,6 +77,7 @@ class CaptureManager:
             self._pending = True
             self._stop_after_write = False
             self._sequence_stretch = stretch if count > 1 else None
+            self._capture_debayer = debayer
             return identifier
 
     def cancel(self):
@@ -101,6 +105,7 @@ class CaptureManager:
             count = self._state["total_frames"]
             if self._sequence_stretch is not None:
                 stretch = self._sequence_stretch
+            debayer = self._capture_debayer
             self._state["current_frame"] = index
             self._state["phase"] = "saving"
             received_at = datetime.now(timezone.utc)
@@ -110,14 +115,14 @@ class CaptureManager:
             self._writer_thread = threading.Thread(
                 target=self._save,
                 args=(identifier, frame, formats, gain, exposure_us,
-                      stretch, received_at, index, count, binning),
+                      stretch, received_at, index, count, binning, debayer),
                 name="sv705c-capture-save", daemon=False,
             )
             self._writer_thread.start()
             return True
 
     def _save(self, identifier, frame, formats, gain, exposure_us,
-              stretch, received_at, index, count, binning):
+              stretch, received_at, index, count, binning, debayer):
         try:
             # Sequence details are included per-frame in metadata.json.
             params = dict(
@@ -128,6 +133,8 @@ class CaptureManager:
             )
             if binning != 1:
                 params["binning"] = binning
+            if not debayer:
+                params["debayer"] = False
             result = self.storage.save(frame, formats, **params)
         except Exception as exc:
             with self._lock:

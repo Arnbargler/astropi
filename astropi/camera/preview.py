@@ -1,8 +1,10 @@
 """Fast display-only SV705C previews; RAW16 source buffers are never mutated.
 
-Both paths generate ~964x545 display JPEGs from the 3856x2180 GRBG mosaic.
-Debayer ON: inexpensive colour sampling of 4x4 Bayer blocks.
-Debayer OFF: monochrome sampling of green photosites (no colour interpolation).
+Display-only JPEGs at ~964x545 for either 1x1 or 2x2 SV705C RAW16.
+Debayer ON: inexpensive GRBG colour sampling; binned 2x2 keeps its own
+Bayer mosaic on the Sony IMX585. The binned SDK Bayer *phase* is a working
+GRBG assumption pending comparison with an actual colour target on the Pi.
+Debayer OFF: fast monochrome sampling of green photosites.
 """
 from io import BytesIO
 
@@ -39,13 +41,25 @@ def raw16_to_jpeg(raw, stretch="auto", debayer=True, *, binning=1) -> bytes:
 
     pixels = np.frombuffer(raw, dtype="<u2", count=width * height).reshape(height, width)
     if binning == 2:
-        # SV705C 2x2 Bayer semantics have not yet been verified on Pi.
-        # Show a truthful mono preview rather than assume GRBG survived binning.
-        mono = pixels[::2, ::2] >> 4
+        # IMX585 supports Bayer-preserving 2x2 binning. Decode the SDK's
+        # provisional GRBG phase until a red/blue scene verifies it.
+        # A 2x2 colour superpixel keeps preview size ~964x545.
+        if not debayer:
+            mono = pixels[0::2, 0::2] >> 4
+            out = BytesIO()
+            Image.fromarray(_stretch_lut(mono, stretch)[mono], "L").save(
+                out, format="JPEG", quality=80
+            )
+            return out.getvalue()
+        red = pixels[0::2, 1::2] >> 4
+        blue = pixels[1::2, 0::2] >> 4
+        green = ((pixels[0::2, 0::2] >> 4) +
+                 (pixels[1::2, 1::2] >> 4)) // 2
+        rgb = np.empty((*red.shape, 3), dtype=np.uint8)
+        for channel, plane in enumerate((red, green, blue)):
+            rgb[:, :, channel] = _stretch_lut(plane, stretch)[plane]
         out = BytesIO()
-        Image.fromarray(_stretch_lut(mono, stretch)[mono], "L").save(
-            out, format="JPEG", quality=80
-        )
+        Image.fromarray(rgb, "RGB").save(out, format="JPEG", quality=80)
         return out.getvalue()
     if not debayer:
         # Bayer GRBG begins with green. One green pixel per 4x4 mosaic block.

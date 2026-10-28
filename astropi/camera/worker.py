@@ -94,7 +94,8 @@ class CameraWorker:
                 raise RuntimeError("Capture storage not configured")
             # No SDK calls here; capture is queued for the next RAW frame.
             return self._captures.request(
-                formats, count=count, stretch=self._preview_mode
+                formats, count=count, stretch=self._preview_mode,
+                debayer=self._debayer,
             )
 
     def cancel_capture(self):

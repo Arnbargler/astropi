@@ -125,7 +125,9 @@
             <button type="button" id="debayer-off" class="stretch-choice" aria-pressed="false" disabled>Off</button>
           </div>
         </div>
-        <p class="hint">Stretch A/F: adaptive or fixed brightness. At 1×1, Debayer On: colour; Off: monochrome. At 2×2 the preview and quicklooks are monochrome until Bayer layout is verified; RAW16 and FITS still preserve the binned samples.</p>
+        <p class="hint">Stretch A/F: adaptive or fixed brightness. Debayer On: colour; Off: monochrome for both 1×1 and 2×2.
+          Binned 2×2 colour uses provisional GRBG phase—confirm red/blue
+          orientation on the real SV705C. RAW16 and FITS always preserve sensor values.</p>
         <p id="raw-metrics">Raw sensor signal: waiting for frames…</p>
         <p id="settings-message" role="status" class="settings-message"></p>
         <p id="camera-error" role="alert"></p>

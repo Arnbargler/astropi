@@ -77,7 +77,7 @@ class CaptureStorage:
         return len(payload), hashlib.sha256(payload).hexdigest()
 
     def save(self, raw, formats, *, gain, exposure_us, received_at, stretch,
-             sequence=None, binning=1):
+             sequence=None, binning=1, debayer=True):
         from astropi.camera.sdk import frame_dimensions, frame_bytes
         width, height = frame_dimensions(binning)
         if memoryview(raw).nbytes != frame_bytes(binning):
@@ -121,8 +121,10 @@ class CaptureStorage:
                             )
                         else:
                             if quicklook is None:
-                                quicklook = quicklook_image(raw, stretch=stretch,
-                                                            binning=binning)
+                                quicklook = quicklook_image(
+                                    raw, stretch=stretch, binning=binning,
+                                    debayer=debayer,
+                                )
                             payload = quicklook_bytes(quicklook, fmt)
                         name = f"sv705c.{EXTENSIONS[fmt]}"
                         count, digest = self._atomic_write(shot_fd, name, payload)
@@ -137,7 +139,7 @@ class CaptureStorage:
                         exposure_us=exposure_us,
                         time_received_utc=received_at.isoformat(),
                         time_source="Pi host UTC, SDK hardware timestamp unavailable",
-                        quicklook_stretch=stretch,
+                        quicklook_stretch=stretch, quicklook_debayer=debayer,
                         quicklook_dimensions=list(quicklook.size) if quicklook else
                             [width // 2, height // 2],
                         fits_data="unsigned 12-bit ADU with FITS BZERO=32768",
