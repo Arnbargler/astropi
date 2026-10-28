@@ -1,132 +1,110 @@
 # AstroPi
 
-Pi-hosted observatory controller for **one SVBONY SV705C** camera and **one
-ZWO AM3N** mount (Alt/Az). Browser UI on the trusted LAN; Raspberry Pi owns
-acquisition, file writing, mount serial I/O and ongoing capture sequences.
-The Linux desktop is a browser/development client, not a required server.
+Observatory controller running on a **Raspberry Pi 4B (4 GB)** with Debian 13
+Trixie, one **SVBONY SV705C** camera and one **ZWO AM3N** Alt/Az mount.
+Flask serves a trusted-LAN browser application at
+`http://astropi.local:8080/`. The Pi owns camera acquisition, mount serial
+I/O and captures; the desktop/browser is only a client.
 
-## Current state — verified 2026-10-28
+## Working state — 2026-10-28
 
-- **Camera:** Full-frame 3856×2180, 12-bit GRBG in RAW16; live colour and
-  monochrome preview, manual exposure and gain presets
-  (0/50/100/260/350/450/550/650), fixed/auto preview stretch.
-  **New: manufacturer-supported 1×1 and 2×2 hardware binning buttons below Gain,**
-  with a fresh SDK session after change and bin-aware recording. 2×2 is
-  Pi-verified for 2×2 RAW/FITS capture: the user saved ~4 MiB files and
-  opened the FITS in Siril. **2×2 colour preview is now operator-verified
-  visually correct with Debayer On; Debayer Off produces monochrome**.
-  Sony's IMX585 documentation describes Bayer-preserving 2×2 binning;
-  AstroPi uses GRBG for binned preview and JPG/PNG quicklooks. RAW16 and
-  FITS pixel data remain unchanged.
-  Measured 50 ms preview: ~14.8 colour / ~16.6 mono FPS at 1× on Pi.
-- **Recording:** Individually selected RAW16, FITS, JPEG and PNG; one-shot
-  or consecutive sequences up to 200 frames. USB-only storage guarded by
-  filesystem UUID, SHA-256 manifest, fsync and atomic publication; no microSD
-  fallback. On Pi: 11/11 saved-file hashes matched; FITS matched RAW16 at
-  every sensor pixel. A 10-frame sequence completed and another cancelled
-  cleanly at 4/10. Browser closure does not end an active Pi capture.
-- **Mount:** AM3N firmware 1.8.8; serial Connect/Disconnect/Reconnect, model,
-  reported Alt/Az and RA/Dec, status flags, date/time and stored site.
-  Direct press-and-hold N/S/E/W controls (no separate Arm), release-to-Stop,
-  five speed choices (8×, 20×, 60×, 720×, 1440×), prominent Stop,
-  600 ms missed-jog-heartbeat timeout and settling checks. **No fixed
-  duration limit.** E/N/S and slow-speed Stop were checked on the real mount;
-  operator also reported speed selection and revised controls working.
-  Exact angular rates and abnormal serial-loss Stop remain unverified.
-- **Clock:** Every explicit mount Connect checks Pi NTP synchronization,
-  writes UTC offset 0/date/time to the AM3N, requires setter ACKs and verifies
-  clock readback. **Verified on actual AM3N**: mount date 10/28/26,
-  UTC time 08:47:34, offset +00:00; site unchanged.
-  "Mount time (UTC)" is *not* Ontario wall time.
-- **Host:** Raspberry Pi 4B 4 GB, Debian 13 Trixie ARM64, Python 3.13.
-  Camera SDK and USB storage are installed on the Pi (not in Git).
+**Implemented and operator-tested on the Pi:** the persistent
+**Focus / Find / Fotograph** three-tab interface. Tabs do not reload the
+page or restart hardware sessions.
 
-### Not implemented or not yet field-verified
+| Tab | Available now | Not yet available |
+| --- | --- | --- |
+| **Focus** | Shared live preview and SV705C settings | Digital zoom, star-centred ROI, peaking, HFR/focus graph |
+| **Find** | AM3N Connect/Disconnect, telemetry, manual jogging, clock/site display; atlas placeholder | VirtualSky, target selection, alignment, GoTo, tracking |
+| **Fotograph** (default) | Full camera preview/settings, capture formats/counts, USB/host status | Stacking and other deferred imaging tools |
 
-**No sky alignment, astronomical GoTo, tracking, Park, offline star atlas,
-plate solving, live stacking, fixed-interval sequence scheduling, or automatic
-service startup.** Native mount Home was manually tested in earlier terminal
-probes but **is not a browser action**. Mount RA/Dec are reported values, not
-independently verified telescope pointing. The Pi has no RTC: sync requires
-NTP, and manual field-time entry is a possible later feature. Extended
-in-app recording endurance and deliberately induced USB/storage faults have
-not been verified. We may later evaluate Stellarium control over AM3N Wi-Fi
-or an INDI server, avoiding simultaneous conflicting USB/Wi-Fi commands.
+Sticky global camera/mount/capture status and **STOP MOUNT** are visible
+on every tab, including to viewers. The *same* preview and settings DOM
+moves between Focus and Fotograph. Switching tabs keeps the operator lease,
+camera stream and ongoing Pi-owned captures. Leaving Find while jogging
+requests Stop. Backend motion safeguards remain in force; software Stop
+is not a substitute for physical Cancel/power.
 
-## Interface: current dashboard and agreed next design
+### Camera and recording
 
-**Implemented (step 1, 2026-10-28):** one persistent browser application
-with three tabs, **Focus / Find / Fotograph** (intentional spelling).
-The original dashboard has been split into dedicated workspaces, with no
-page navigation or new camera/mount sessions:
+- Sensor **3856×2180**, native 12-bit GRBG in RAW16. Supported hardware
+  binning: **1×1 / 2×2** (1928×1090), switched through a fresh SDK
+  session. Operator verified correct **2×2 colour preview** on the SV705C.
+  RAW/FITS saves and binned FITS viewing in Siril were also field-tested.
+- Exposure presets **1 ms–30 s**; gain buttons
+  **0, 50, 100, 260, 350, 450, 550, 650**. Operator reports the revised
+  gain settings produce expected visible changes. SDK's actual maximum
+  and sensor HCG threshold have not been independently measured.
+- Debayer **On/Off**, fixed/automatic preview stretch and sparse raw-signal
+  statistics; there is **no histogram or white-balance control** yet.
+- Independent format switches **FITS, RAW16, JPG, PNG** and capture buttons
+  **1, 5, 50, 100, 150, 200, Cancel**. Sequences are Pi-owned and continue
+  when the browser closes, **not after a Pi/Python restart**.
+- Captures require the **verified USB data filesystem UUID**. SHA-256
+  manifests, preflight checks, fsync and atomic publication protect output;
+  **never fall back to the system microSD**. Independent FITS/RAW16 pixel
+  verification is available. Binned FITS currently omits `BAYERPAT`;
+  binned capture manifests still say `"unverified at 2x2"` despite the
+  visually verified *preview*. Neither metadata path has been changed.
 
-- **Focus:** the same live SV705C preview and camera settings as Fotograph;
-  digital zoom and star-sharpness aids remain future work.
-- **Find:** existing manual AM3N controls/status, alongside an explicit
-  placeholder for the forthcoming offline VirtualSky atlas. No chart yet.
-- **Fotograph (default tab):** existing full-frame preview, exposure/gain,
-  binning/stretch/debayer, FITS/RAW16/JPG/PNG, capture buttons
-  **1/5/50/100/150/200/Cancel**, image sequences and USB/host status.
+### Mount and clock
 
-The global sticky status strip displays camera/mount/capture state and
-**STOP MOUNT** on all tabs, including for viewers. Existing preview and
-settings elements are moved between Focus and Fotograph; they are not
-duplicated. Tab changes preserve the operator lease, camera SDK session
-and Pi-owned captures; leaving Find requests Stop on an active manual jog
-and retains the mount's 600ms heartbeat failsafe. The underlying workers,
-camera/frame APIs and recording system were not changed.
+AM3N manual N/S/E/W press-and-hold with five speeds
+(**8× / 20× / 60× / 720× / 1440×**), release-to-Stop, a **600 ms**
+lost-heartbeat Stop and motion-settling checks. No arbitrary jog
+duration limit. A viewer can request emergency Stop without the operator
+token. Mount serial is owned by one backend worker.
 
-**Immediate next milestone (step 2):** Find tab with **fully local VirtualSky**,
-no photographic imagery or network/CDN dependency, real-time local-sky
-view using the permanent observing site +45.2933° N, −75.8571°
-east-positive, Pi UTC/NTP status, stars/constellations/planets, horizon,
-pan/zoom, grid controls, and **110 Messier targets** with local selection,
-RA/Dec details and M-number search. Defer full OpenNGC, mount marker,
-alignment, GoTo and tracking. See [DEVELOPMENT.md](DEVELOPMENT.md) for
-the staged implementation plan.
+On explicit Connect, the Pi requires NTP synchronization before sending
+UTC date/time to the mount; ACKs and readback are checked. Failure is
+reported, not disguised. The mount-stored **permanent observing site**
+is **+45.2933° N, −75.8571° east-positive** (75.8571° W).
+It is **read-only** in AstroPi. Reported RA/Dec are *not* verified
+optical pointing; there is **no alignment, GoTo, tracking control,
+Home or Park** in the browser.
 
-On 2026-10-28 the operator confirmed correct SV705C 2×2 colours on real
-hardware; the pending binned preview colour check is closed.
+## Next agreed task: offline VirtualSky in Find
 
-## Start / update
+The first UI migration step is complete. Next implement the **locally
+packaged VirtualSky** planetarium inside the existing Find tab (not a
+separate `/atlas` route). It is a **schematic pointing aid**, not a gallery:
+no photographic sky tiles, Internet lookup or CDN.
 
-See [SETUP.md](SETUP.md) for install, launch, UI use and diagnostics.
-On the Pi, with existing Flask stopped:
+Initial scope: permanent site, trustworthy Pi UTC with visible NTP status,
+pan/zoom, stars/planets, constellation lines/labels, horizon/cardinals,
+optional sky grids and all **110 Messier objects**. Clicking and simple
+M-number search should centre/select a target and show its **name,
+RA and Dec**, but **must not move the mount**. Full NGC/IC/OpenNGC search,
+mount marker, alignment, GoTo and focusing aids come later.
+
+Implementation stages, test criteria and source ownership are in
+[DEVELOPMENT.md](DEVELOPMENT.md). Selected long-term scope is in
+[REQUIREMENTS.md](REQUIREMENTS.md).
+
+## Operate and continue development
+
+Start/update the Pi and run verification using [SETUP.md](SETUP.md).
+Quick launch (after stopping the previous process safely):
 
 ```bash
 cd ~/astropi
 git pull --ff-only
 source .venv/bin/activate
-python -m pip install -r requirements-dev.txt
-python -m pytest -q
 python run.py --host 0.0.0.0 --port 8080
 ```
 
-Open http://astropi.local:8080/ and hard-refresh after changes.
-Run the camera and mount **independently**; no mount movement is sent at
-startup. The Flask development server is LAN-only, **not Internet-facing**.
+The Flask development server is **trusted LAN only**, not Internet-facing.
+No systemd auto-start service is installed. No camera or mount operation
+starts merely because the page loads.
 
-## Repository orientation (for the next development session)
+**Read in order for a new AI instance:**
 
-1. **README.md** — current verified status and non-features.
-2. **REQUIREMENTS.md** — selected feature IDs and scope decisions.
-3. **HARDWARE.md** — hardware, paths, protocol, verified quirks and limits.
-4. **DEVELOPMENT.md** — actual code ownership, test strategy and next work.
-5. **SETUP.md** — operational commands and troubleshooting.
+1. **README.md** — verified current state and the immediate next task.
+2. **REQUIREMENTS.md** — selected scope, including deferred features.
+3. **HARDWARE.md** — real devices, SDK/protocol quirks and field evidence.
+4. **DEVELOPMENT.md** — file ownership, invariants, VirtualSky plan/tests.
+5. **SETUP.md** — Pi operation and diagnostics.
 
-Source: `astropi/camera/` SDK + preview worker;
-`astropi/capture/` science formats, UUID-safe USB writer and independent verifier;
-`astropi/mount/worker.py` sole mount serial owner;
-`astropi/web.py` Flask API and operator lease;
-`astropi/static/` + `templates/` browser UI;
-`tests/` fake-hardware and browser regressions. CI tests Python and Node.
-
-**Preserve:** single SDK owner, single mount serial owner, immutable RAW16
-source, verified USB UUID with no microSD fallback, operator-gated motion,
-release/heartbeat Stop and honest status on unsuccessful mount time sync.
-Do not infer a feature is implemented merely because it appears in
-requirements or was explored in a standalone terminal probe.
-
-Detailed historical hardware experiments and superseded setup instructions
-remain in Git history (not in the current handoff); start with the current
-documents instead.
+Git history holds old experiments. Do not resurrect superseded behaviour
+(such as the old camera stop/restart workaround or mount jog time limits)
+from historical notes.

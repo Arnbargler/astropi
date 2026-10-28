@@ -2,8 +2,8 @@
 
 Display-only JPEGs at ~964x545 for either 1x1 or 2x2 SV705C RAW16.
 Debayer ON: inexpensive GRBG colour sampling; binned 2x2 keeps its own
-Bayer mosaic on the Sony IMX585. The binned SDK Bayer *phase* is a working
-GRBG assumption pending comparison with an actual colour target on the Pi.
+Bayer mosaic on the Sony IMX585. The operator visually confirmed correct
+2x2 colour preview on the actual SV705C (2026-10-28) with GRBG decoding.
 Debayer OFF: fast monochrome sampling of green photosites.
 """
 from io import BytesIO

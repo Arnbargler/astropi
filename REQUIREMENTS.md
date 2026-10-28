@@ -1,122 +1,110 @@
-# AstroPi requirements and scope
+# AstroPi — selected requirements
 
-**Selected features, not all implemented.** IDs deliberately match the
-original 70-item feature menu. For **current implementation status**, read
-[README.md](README.md); for verified commands use [HARDWARE.md](HARDWARE.md).
+**These are scope decisions, not a list of completed features.** Read
+[README.md](README.md) for what works, [HARDWARE.md](HARDWARE.md) for
+field evidence and [DEVELOPMENT.md](DEVELOPMENT.md) for the next build.
+IDs correspond to the original 70-item feature menu.
 
-## Camera
+## Camera (SVBONY SV705C only)
 
-- **#1** SV705C via Linux SVBONY SDK; one camera only.
-- **#4** Responsive browser preview with modest network/CPU overhead.
-- **#5** Manual exposure and gain.
-- **#6** Supported ROI/resolution/binning choices. **1×1 and 2×2 hardware
-  binning** are implemented and physically verified on the SV705C; the operator
-  also confirmed correct 2×2 preview colours. Arbitrary ROI remains future.
-- **#8** Display debayer/colour and white balance without changing sensor RAW.
-- **#9** Histogram and display stretching.
-- **#10** Focus peaking overlay.
-- **#11** FWHM/HFD or comparable star sharpness metric and focus graph.
-- **#12** Simple focus zoom choices (no complicated arbitrary region UI).
+| IDs | Selected scope | Current state |
+| --- | --- | --- |
+| **#1, #4, #5** | One SV705C, responsive preview, manual exposure/gain | **Implemented**, Pi-tested |
+| **#6** | Supported ROI/resolution/binning | **1×1 and 2×2 binning implemented/field-tested**; arbitrary ROI deferred |
+| **#8** | Display-only colour/debayer and white balance; preserve RAW | **Debayer On/Off implemented**; separate white-balance adjustment deferred |
+| **#9** | Histogram and display stretching | **Auto/Fixed stretch + raw statistics implemented**; histogram deferred |
+| **#10–12** | Peaking, star sharpness metric/graph (FWHM/HFD/HFR) and simple zoom | **Deferred** until after Find/VirtualSky |
 
-## Mount — ZWO AM3N, Alt/Az only
+Exposure presets run 1 ms–30 s. Gain presets are
+**0/50/100/260/350/450/550/650**, deliberately selected by the
+operator without a camera-capability query; the operator has observed
+the expected image response. Sensor HCG threshold and max gain have
+not been independently calibrated.
 
-- **#14** Serial connection, live reported coordinates and status.
-- **#15** Hold-to-move N/S/E/W controls.
-- **#16** Selectable slew speed (original choice called for a slider; current
-  interface uses **five presets**: 8×, 20×, 60×, 720×, 1440×).
-- **#17** Prominent Stop, deadman on button release/browser loss, no conflicting
-  direction commands; verify stable axes rather than assuming a sent Stop means
-  motion ceased. **No arbitrary 3s jog cutoff** in the current design.
-- **#18** GoTo **from atlas target selection only**, not manual RA/Dec entry.
-- **#19** Tracking control/status; firmware performs continuous Alt/Az tracking.
-- **#20** Native Home and separate Park, after controlled verification. Home
-  does not imply astronomical alignment.
-- **#21** Approximate north/level initial alignment at known Home.
-- **#22** Manual two-star alignment.
-- **#26** Optional additional manually centred alignment stars.
+## Mount (ZWO AM3N, Alt/Az only)
 
-**Time and site:** On each explicit serial Connect, use the Pi's NTP-confirmed
-UTC to set AM3N UTC offset zero, date and time; require replies and readback
-verification. This is implemented and Pi-verified. The operator confirms
-the site's stored latitude **+45.2933° N** and longitude **−75.8571°
-east-positive** are the **permanent actual observing location**, not a
-temporary test position. AM3N serial longitude is **west-positive**
-(+75.8571° for this site). Read/compare mount site; **do not overwrite it**.
-The offline atlas should use these coordinates even when the mount is
-disconnected, and label any site mismatch or unavailable time sync.
-Validate site and alignment before future sky GoTo. The Pi has no RTC.
+| IDs | Selected scope | Current state |
+| --- | --- | --- |
+| **#14–17** | Serial Connect, reported coordinates, hold N/S/E/W, five speeds, Stop and deadman | **Implemented**, with field checks |
+| **#18** | GoTo **only by choosing an atlas target**, never manual RA/Dec entry | Deferred |
+| **#19** | Tracking control/status; AM3N firmware handles Alt/Az tracking | Deferred (some status flags are read-only) |
+| **#20** | Native Home and separate Park, carefully verified | Deferred; earlier standalone Home probe is **not** a UI feature |
+| **#21–22, #26** | Initial north/level, manual two-star and optional extra-star alignment | Deferred |
 
-## Find tab / offline sky atlas (agreed, not implemented)
+Five existing manual speed presets: **8× / 20× / 60× / 720× /
+1440×**. No arbitrary fixed jogging-time cutoff. Keep a global
+viewer-accessible Stop, release/blur/tab-switch Stop, 600 ms missing-
+heartbeat watchdog, serial-owner command whitelists and stable-axis
+verification. Software Stop cannot guarantee physical motor stopping.
 
-- **#28** Local OpenNGC (NGC/IC) plus Messier catalogue; full NGC/IC
-  integration is a **later** milestone, not a dependency for v0.1.
-- **#29** Embed **VirtualSky**, with local JS/JSON assets, schematic DSO
-  symbols (no astronomical photos), pan/zoom/selection and a replaceable
-  adapter; no CDN, online lookup, or Internet dependency.
-- **#30** Full local catalogue search independent of plotted-object filters
-  once OpenNGC is added. **v0.1** starts with all 110 Messier objects,
-  simple M-number search, centred selection, and name/RA/Dec details.
-- **#32** Reported/estimated mount marker is deferred until its alignment
-  limitations are clearly represented; it is **not** a v0.1 feature.
+**Permanent site:** user confirms the AM3N-stored latitude
+**+45.2933° N** and east-positive longitude **−75.8571°** are the
+real permanent observing location (AM3N serial encoding is
+**west-positive**). App reads these values; **do not overwrite them**.
+On explicit mount Connect, only if Pi NTP is synchronized, set and
+verify AM3N UTC date/time and offset zero; fail visibly on bad ACK or
+readback. Pi has **no RTC**. Neither mount RA/Dec nor native Home
+proves optical sky alignment; verify site and alignment before
+introducing GoTo.
 
-**VirtualSky v0.1** uses the permanent mount site and Pi UTC time, with
-explicit NTP/synchronization status and an honest warning when time or site
-cannot be trusted. Chart controls: mouse pan/zoom, constellation lines and
-labels, horizon and cardinal directions, optional coordinate grids, and
-stars/planets/Messier markers. It is a **pointing aid**, not a gallery;
-never download photographic survey tiles or silently use a remote resolver.
-Clicking/searching a target is informational only: **no movement/GoTo** in v0.1.
+## Offline atlas — Find tab (next task)
 
-## Capture
+**#28–30, #32** are selected long-term requirements. The tab shell
+exists, but **VirtualSky and catalogue/search are not yet installed**.
 
-- **#38** Preserve full-quality raw exposures and FITS with useful metadata.
-- **#39** JPEG/PNG exports and preview-only processing.
-- **#40** Counted exposure sequences run on the Pi, independently of browser.
-- **#48** Selectable per-format saving of individual exposures; never silently
-  write to OS microSD if the specified USB data filesystem is absent or full.
+**VirtualSky v0.1:**
+- Embed locally packaged VirtualSky and its own JS/JSON assets in the
+  **existing Find tab** of the persistent browser application;
+  schematic symbols only, **no photographic imagery**, online lookup,
+  CDN or Internet requirement. Wrap chart integration in a replaceable
+  adapter.
+- Display local sky from the **permanent site** using Pi UTC plus
+  explicit NTP status, with warnings for untrusted time/site.
+- Pan/zoom; stars/planets, horizon/cardinal directions,
+  constellation lines/labels and coordinate grids.
+- Bundle all **110 Messier objects** for basic `M1`–`M110` search,
+  click/centre and **name/RA/Dec** details. Selection is informational;
+  **no GoTo/mount motion** in v0.1.
 
-No manual bit-depth selector (#7). Full sensor science uses 12-bit values
-in 16-bit containers; efficient previews may be 8-bit. FITS and RAW retain
-the original mosaic sample values for later desktop processing.
+**Later:** full local **OpenNGC NGC/IC** catalogue (#28), full catalogue
+search independent of plot filters (#30), and a carefully labelled
+reported/estimated mount marker (#32). Alignment and GoTo are still
+separate later milestones.
 
-## Interface and operation
+## Capture and safety
 
-- **#53** Responsive desktop/tablet/phone browser controls.
-- **#54** Subdued dark theme, not an all-red display.
-- **#56** Pi owns exposures/sequences through browser closure.
-- **#57** Camera/mount/USB/host status, useful errors and ongoing progress.
-- **#59** Many LAN viewers, **one operator lease**. Backend enforces ownership
-  for settings and motion. Emergency Stop may be requested by a viewer.
-  No passwords/accounts for the trusted LAN; don't expose the Flask development
-  server to the Internet.
+- **#38–40:** Original RAW16 science samples, correct FITS metadata,
+  display-only JPEG/PNG quicklooks, and counted Pi-owned captures
+  (**implemented**).
+- **#48:** Explicit per-format choices, USB-only storage with verified
+  mount/UUID and **no microSD fallback** (**implemented**).
+- No manual bit-depth switch (#7): 12 valid sensor bits in 16-bit
+  containers; 8-bit preview may be used without altering RAW/FITS.
+- Sequences continue through browser/tab closure but not server/Pi
+  restart; cancellation stops at a safe write boundary. No unbounded
+  capture queue.
 
-**Implemented tab shell (2026-10-28):** a single persistent AstroPi browser
-application with three tabs, **Focus / Find / Fotograph**. There is no
-separate `/atlas` route or reload-based navigation. One camera SDK worker,
-mount serial worker, capture manager and operator lease serve all tabs.
+## UI and operation
 
-- **Focus:** currently displays the same shared preview and camera
-  settings as Fotograph; click-centred zoom/peaking/HFR remain deferred.
-- **Find:** existing manual AM3N controls/status with a clearly labelled
-  **future atlas** placeholder. VirtualSky, target selection, sky alignment,
-  mount marker and GoTo are not yet implemented.
-- **Fotograph (initial tab):** existing full preview, exposure/gain, binning,
-  display settings, FITS/RAW16/JPG/PNG and counted captures/USB/host status.
-- Shared sticky status and **emergency STOP MOUNT on every tab**, including
-  viewers. Operator token/heartbeat and Pi-owned capture persist across
-  switches. Leaving Find stops an active manual jog; a hidden Find cannot
-  initiate a jog. Chart browsing will not issue mount movement commands.
+- **#53–54:** Responsive dark UI, not all-red (**implemented**).
+- **#56–57:** Pi-owned sequences and honest camera/mount/USB/host status
+  (**implemented**).
+- **#59:** Multiple LAN viewers, **one 15 s lease-based operator**;
+  only the owner changes settings/moves the mount, but any viewer may
+  request Stop (**implemented**). Trusted LAN only, **no user accounts**;
+  never expose Flask's development server publicly.
+- **Focus / Find / Fotograph** are **implemented as three persistent
+  tabs**, not separate pages. The same preview/settings nodes move
+  between Focus and Fotograph. Find holds manual mount controls and
+  future atlas. Global Stop must never be hidden by tabs; leaving Find
+  during a jog requests Stop. Switching tabs preserves operator
+  ownership and Pi recording.
 
-**Next:** integrate the fully offline VirtualSky chart into Find without
-restructuring the hardware workers. Keep mount and capture safety tests.
+## Explicit exclusions
 
-## Exclusions and deferred decisions
-
-- SV705C only; no SC571CC, ToupTek, cooling or camera switching.
-- Deep-sky, Alt/Az only; no planetary video workflow.
-- **No plate solving or automatic closed-loop centring** (#23–25 excluded).
-  Alignment/pointing correction will initially be manual.
-- **No live stacking, registration, automatic derotation or stack stretch**
-  (#44–47 excluded); stack individual frames on a desktop afterward.
-- No features from the original menu outside the selected IDs without a new
-  user decision. No automatic Home/GoTo/track command on service startup.
+SV705C only; no alternative cameras, cooling or camera switching.
+Deep-sky Alt/Az work, **not** planetary video. No automatic Home/GoTo/
+tracking on startup. No plate solving/closed-loop centring (#23–25);
+initial corrections are manual. No live stacking, registration,
+derotation or stack processing (#44–47); process saved science data
+later on a desktop. Do not silently add unselected original menu IDs.

@@ -78,6 +78,8 @@ def check_capture(folder):
                 "XBINNING": binning, "YBINNING": binning}
     if binning == 1:
         expected["BAYERPAT"] = "GRBG"
+    # Existing 2x2 FITS metadata contract: BAYERPAT omitted even though
+    # the operator has visually verified correct 2x2 colour preview.
     elif "BAYERPAT" in header:
         raise ValueError("2x2 FITS Bayer pattern is unverified; omit BAYERPAT")
     for key, value in expected.items():

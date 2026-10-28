@@ -34,12 +34,16 @@ AM3N stable serial alias: `/dev/serial/by-id/usb-ZWO_Systems_ZWO_Device_123456-i
   2×2 colour preview renders correctly on the real SV705C** (visual field
   verification). JPG/PNG quicklooks use the same GRBG interpretation;
   a separate saved-quicklook colour check is not recorded. The FITS writer
-  currently omits `BAYERPAT` for 2×2; that metadata behaviour has not
-  yet been changed. RAW16 bytes and FITS numeric pixels remain unaltered.
+  currently omits `BAYERPAT` for 2×2, the read-only verifier expects
+  this omission, and the saved `metadata.json` still says
+  `"bayer": "unverified at 2x2"`. This older **metadata** behaviour
+  does not undo the verified colour *preview*. Changing it requires
+  its own writer/verifier/tests update. RAW16 bytes and FITS numeric
+  pixels remain unaltered.
   See [SVBONY published specs](https://www.svbony.com/products/sv705c-color-planetary-camera-imx585).
 - Required flow: enumerate, call `SVBGetCameraInfo` to obtain real CameraID (do not hard-code), open, set full-frame 3856×2180 ROI and RAW16 enum 4, **start one continuous stream**, read frames, restore controls and close on exit. An earlier stop/start in the same SDK session returned timeout code **11**.
-- Gain is SDK control **0**; exposure is control **1** in microseconds. Browser gain presets are **0, 50, 100, 260, 350, 450, 550, 650**, selected by the operator; the SDK maximum has **not** been independently queried or high-gain hardware-tested. SDK readback rounds values: 10,000→10,007 µs, 50,000→50,148 µs and 1,000,000→1,000,143 µs. Image brightness responded to changes. No photometric calibration claim.
-- RAW16 frame = **16,812,160 bytes**, 3856×2180 little-endian uint16, with 12-bit Bayer **GRBG** values shifted left by four bits. FITS stores full-resolution native samples (big-endian BITPIX16, BZERO=32768, BSCALE=1); RAW16 unchanged. FITS exposure start is estimated, not a hardware timestamp. Browser preview ~964×545, JPEG/PNG saved quicklooks 1928×1090; these are *not* calibrated full demosaics.
+- Gain is SDK control **0**; exposure is control **1** in microseconds. The operator has tested the expanded browser gain presets **0, 50, 100, 260, 350, 450, 550, 650** and reports the expected visible image response. This is **not** an independently confirmed SDK gain maximum or calibrated HCG transition. SDK readback rounds values: 10,000→10,007 µs, 50,000→50,148 µs and 1,000,000→1,000,143 µs. Image brightness responded to changes. No photometric calibration claim.
+- RAW16 frame = **16,812,160 bytes**, 3856×2180 little-endian uint16, with 12-bit Bayer **GRBG** values shifted left by four bits. FITS stores full-resolution native samples (big-endian BITPIX16, BZERO=32768, BSCALE=1); RAW16 unchanged. FITS exposure start is estimated, not a hardware timestamp. Browser preview ~964×545 at either binning level; saved JPEG/PNG quicklooks are 1928×1090 at 1×1 or 964×545 at 2×2. These are *not* calibrated full demosaics.
 - Pi 50ms live rates: RAW acquisition ~15.8 FPS; colour preview ~14.8 FPS (62ms processing); sampled-green mono ~16.6 FPS (14ms processing).
 - **Standalone 20-minute endurance probe**: 600/600 full RAW frames retrieved, 120/120 saved/verified by SHA-256 (~1.88 GiB), zero SDK timeouts, CPU 46.7–51.6°C, throttled flags 0x0. One camera USB3 reset was logged near startup without observed lost frames. This probe is *not* proof of equivalent 120-frame browser recording endurance.
 - **Browser captures**: 11/11 file size/hash matches across four format combinations; independent full-frame FITS↔RAW16 check matched all 8,406,080 samples. Pi sequences of 5 and 10 frames completed; a 10-frame request cancelled at 4/10 with zero incomplete directories.
@@ -66,6 +70,14 @@ These rates follow known AM-series driver commands; exact angular speeds have no
 **Automatic clock sync on each explicit Connect:** check `timedatectl show -p NTPSynchronized --value` equals yes; send `:SG+00:00#`, `:SCMM/DD/YY#`, `:SLHH:MM:SS#`, require single-byte `1` acknowledgment from each; read back with `:GG#`, `:GC#`, `:GL#` and compare within six seconds of Pi UTC. **Confirmed on live firmware 1.8.8**: 2026-10-28, mount UTC time 08:47:34, offset +00:00, existing site unchanged. UI says **Mount time (UTC)**; it is intentionally not Ontario local time. If NTP not yet synchronized, report error and retry on a later Connect. No manual-time field mode yet.
 
 **Standalone native Home test**: `:hC#` reached altitude/azimuth 0/0 via near-zenith/azimuth-wrap; this is not alignment and **Home is not implemented in browser**. Park `:hP#`, sky GoTo and tracking have not been validated. The AM3N M12 counterweight bolt hole can reach internal wiring with an overlong bolt: do not insert one.
+
+## Browser UI field check
+
+On 2026-10-28 the operator confirmed the **Focus / Find / Fotograph**
+three-tab layout works as expected on the actual Pi, including the
+revised gain controls. This does not independently test emergency Stop
+under injected faults, telescope pointing, or extended recording after
+the UI refactor. VirtualSky remains a **placeholder**, not installed.
 
 ## Not verified / future
 

@@ -34,15 +34,15 @@ Flask currently runs in the foreground; **no automatic startup service is
 installed**. No camera or mount serial session starts merely by loading
 the page. Internet exposure/authentication is not supported.
 
-**Implemented three-tab browser UI (step 1): Focus / Find / Fotograph**.
+**Implemented three-tab browser UI: Focus / Find / Fotograph**.
 Fotograph is selected initially and retains existing imaging/capture
 controls; Focus shares the same preview and camera settings; Find
 contains existing manual mount controls and a placeholder for the future
 offline VirtualSky pointing chart (no atlas/GoTo installed yet).
 The operator token and Pi-owned exposures persist between tabs. Leaving
 Find while jogging requests Stop; **STOP MOUNT** is in the sticky status
-strip on every tab, including for viewers. After pulling this change,
-confirm the moved mount controls and shared preview work on the real Pi.
+strip on every tab, including for viewers. The operator confirmed
+the three-tab interface works on the real Pi on 2026-10-28.
 
 ## Camera, recording and verification
 
@@ -69,8 +69,9 @@ Select RAW16/FITS/JPG/PNG via the four format switches (FITS/JPG default),
 then press **1, 5, 50, 100, 150 or 200** to save that many frames. The **1**
 button saves a single exposure; all other choices start an independently
 managed Pi sequence. **Cancel** stops the active multi-frame sequence after
-finishing any in-progress write. No user-entered sequence count is needed. Exposure/gain, saved quicklook stretch and saved Debayer mode
-are frozen for each sequence (independent of later preview toggles).
+finishing any in-progress write. No user-entered sequence count is needed. Exposure/gain, saved quicklook
+stretch and saved Debayer mode are frozen for each sequence, independent
+of subsequent preview toggles.
 
 Saved captures: `/media/astropi-data/captures/<timestamp-id>/`. Each
 contains the selected formats and `metadata.json` with file hashes,
@@ -108,7 +109,7 @@ Do not deliberately unplug USB while motors are moving; serial loss can defeat
 software Stop. Use the physical hand-controller Cancel/power if necessary.
 **No astronomical GoTo, tracking, Home or Park button exists.**
 
-The on-demand **Read Mount Clock & Site** button shows date, time, UTC
+The on-demand **Refresh Clock / Site** button shows date, time, UTC
 offset, sidereal time, and persistent site latitude/longitude (west-positive
 in the mount protocol). The operator confirms the stored site is the
 **permanent observing location: +45.2933° N, −75.8571° east-positive**.
@@ -129,6 +130,8 @@ curl -s http://127.0.0.1:8080/api/status | python3 -m json.tool
 If manual movement or NTP verification fails, capture the UI error and the
 read-only mount status **after the mount has stopped**. Do not open the same
 USB serial port in a second diagnostic process while AstroPi owns it.
-Optional on any machine with Node.js 22+: `node --test tests/test_ui.cjs` (already run in GitHub CI). No Node installation is required to launch AstroPi on the Pi.
+Optional on a development machine with Node.js 22+:
+`node --test tests/test_ui.cjs`. Node is **not** required to run
+AstroPi on the Pi; GitHub CI also runs these browser regression tests.
 For architecture and verified hardware quirks see [DEVELOPMENT.md](DEVELOPMENT.md)
 and [HARDWARE.md](HARDWARE.md).

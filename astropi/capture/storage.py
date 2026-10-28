@@ -130,6 +130,9 @@ class CaptureStorage:
                         count, digest = self._atomic_write(shot_fd, name, payload)
                         files.append(dict(format=fmt.upper(), path=relative + "/" + name,
                                           bytes=count, sha256=digest))
+                    # This legacy 2x2 metadata marker has not yet been
+                    # updated; preview colour was visually verified, but
+                    # changing capture metadata is a separate tested task.
                     metadata = dict(
                         camera="SVBONY SV705C", width=width, height=height,
                         binning=binning, pixel_format="RAW16_LE",

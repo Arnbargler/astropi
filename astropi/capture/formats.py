@@ -2,8 +2,9 @@
 
 RAW16 preserves SDK bytes; FITS preserves all original 12-bit numeric samples.
 JPEG/PNG display colour is a GRBG 2x2 superpixel at half output resolution.
-For 2x2 binning, the sensor supports Bayer-preserving binning but the SDK's
-Bayer phase is provisionally assumed GRBG pending real colour-target verification.
+The 2x2 colour preview was visually confirmed correct on actual hardware
+(2026-10-28); saved JPG/PNG quicklooks use the same GRBG interpretation
+but were not independently field-checked. Science RAW/FITS stay unaltered.
 """
 from datetime import timedelta
 from io import BytesIO
@@ -77,8 +78,10 @@ def fits_bytes(raw, *, exposure_us, gain, received_at, binning=1):
         _card("XBINNING", binning), _card("YBINNING", binning),
         b"END".ljust(80),
     ]
-    # Do not claim a known Bayer pattern for 2x2 until its SDK output has
-    # been inspected on the actual camera. Preserve full binned RAW samples.
+    # Existing writer emits BAYERPAT at 1x1 only. At 2x2 the header omits
+    # it even though the colour *preview* was visually verified on hardware.
+    # This metadata behaviour needs a separate writer + verifier change.
+    # Preserve all binned RAW pixel values in the science FITS.
     if binning == 1:
         cards.insert(7, _card("BAYERPAT", "GRBG"))
     header = b"".join(cards)
@@ -89,7 +92,8 @@ def fits_bytes(raw, *, exposure_us, gain, received_at, binning=1):
 def quicklook_image(raw, stretch="auto", *, binning=1, debayer=True):
     """Half-output-size GRBG colour quicklook or un-demosaiced green-site mono.
 
-    Binned GRBG phase is provisional; never changes the underlying RAW/FITS.
+    Operator verified the 2x2 preview colours, but saved quicklook colours
+    have not been independently checked; RAW/FITS are never altered.
     """
     if type(debayer) is not bool:
         raise ValueError("Debayer must be on or off")

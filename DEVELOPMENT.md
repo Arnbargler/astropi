@@ -1,161 +1,142 @@
-# AstroPi development handoff
+# AstroPi — development handoff
 
-Read **README → REQUIREMENTS → HARDWARE → DEVELOPMENT**.
-This is a working Pi application; the requirements also describe future
-features. Treat Git history, not the current docs, as the troubleshooting log.
+**Read README → REQUIREMENTS → HARDWARE → DEVELOPMENT → SETUP.**
+Code/tests establish implementation truth; requirements also include future work.
+The user confirmed the three-tab UI works on the Pi on 2026-10-28.
+**Next task: local VirtualSky in Find, not focus aids or GoTo.**
 
-## Current code layout
+## Code map
 
-| Module | Owner / responsibility |
+| Source | Responsibility |
 | --- | --- |
-| `run.py` | Flask foreground entry point (no systemd service yet) |
-| `astropi/config.py`, `status.py` | hardware paths, USB presence, recording mount/UUID, Pi metrics; read-only status never opens devices |
-| `astropi/control.py`, `web.py` | single operator token/lease, Flask API, worker state; no SDK or mount serial I/O on Flask request threads |
-| `astropi/camera/sdk.py` | SVBONY SDK wrapper, camera enum/open/stream/restore/close, 1×/2× binning and post-bin ROI |
-| `astropi/camera/worker.py` | sole camera SDK thread, separate one-slot JPEG preview worker; SDK frame buffer copied before recording. Reconfigure bin by closing/reopening a full SDK session in this same owner thread, never switching ROI mid-stream |
-| `astropi/camera/preview.py` | disposable GRBG display preview + sparse stats |
-| `astropi/capture/manager.py` | single shot or 2–200 counted-frame job, per-frame write boundary and cancellation, independent of browser |
-| `astropi/capture/formats.py` | original RAW16, science FITS and colour quicklooks |
-| `astropi/capture/storage.py` | USB UUID guard, space preflight, pinned directory-fd writes, fsync, atomic publication and SHA-256 manifest |
-| `astropi/capture/verify.py` | retained read-only integrity/FITS pixel verifier, useful for regression and later field diagnostics |
-| `astropi/mount/worker.py` | **only** serial owner: AM3N query, UTC sync on Connect, direction/speed whitelists, Stop and deadman |
-| `astropi/templates/index.html`, `astropi/static/*` | browser UI, polling, pointer controls, captures and mount feedback |
-| `tests/*`, `.github/workflows/tests.yml` | fake camera/USB/mount tests and Node browser regressions, run by GitHub Actions |
+| `run.py`, `astropi/web.py`, `control.py` | Foreground Flask; routes and 15-second single-operator lease; viewer Stop |
+| `astropi/config.py`, `status.py` | Paths, USB/host state and Pi UTC; **no standalone host NTP status field yet** |
+| `astropi/camera/sdk.py`, `worker.py` | SVBONY ctypes; sole SDK thread, acquisition, settings, binning session restart, one-slot preview mailbox |
+| `astropi/camera/preview.py` | JPEG colour/mono, stretches, sparse raw statistics |
+| `astropi/capture/{manager,formats,storage,verify}.py` | Pi-owned jobs, science/quicklook formats, UUID-safe writes, read-only integrity verification |
+| `astropi/mount/worker.py` | Sole AM3N serial worker: telemetry, verified UTC sync, manual jog/Stop/deadman |
+| `astropi/templates/index.html`, `astropi/static/{app.js,style.css}` | Persistent Focus/Find/Fotograph UI |
+| `tests/`, `.github/workflows/tests.yml` | Fake-hardware Python tests and Node 22 browser regressions |
 
-## Implemented Flask API
+**GET routes:** `/`, `/api/status`, `/api/camera/progress`,
+`/api/camera/frame.jpg`, `/api/capture/status`, `/api/mount/status`.
 
-- `GET /api/status`, `/api/camera/progress`, `/api/camera/frame.jpg`,
-  `/api/capture/status`, `/api/mount/status`.
-- `POST /api/control/take`, `/heartbeat`, `/release`.
-- `POST /api/camera/start`, `/stop`, `/settings`, `/binning`,
-  `/preview-mode`, `/debayer`; `/api/capture`, `/api/capture/sequence`,
-  `/api/capture/cancel`.
-- `POST /api/mount/connect`, `/disconnect`, `/jog`,
-  `/jog-heartbeat`, `/stop`, `/environment/read`.
-  There is **no /api/mount/arm**, generic serial-command endpoint,
-  GoTo, Home, Park, tracking or automatic site setter.
+**POST routes:** `/api/control/{take,heartbeat,release}`,
+`/api/camera/{start,stop,settings,binning,preview-mode,debayer}`,
+`/api/capture`, `/api/capture/{sequence,cancel}`,
+`/api/mount/{connect,disconnect,jog,jog-heartbeat,stop,environment/read}`.
 
-Gain presets in UI and worker are **0/50/100/260/350/450/550/650**. The
-operator chose these values without requesting an SDK capability query.
-Maintain the same whitelist in both places; high-gain behaviour awaits
-physical verification on the SV705C.
+**Absent:** `/atlas`, independent Pi NTP status API, catalogue/search,
+GoTo, Home, Park, tracking and arbitrary serial-command endpoints.
 
-The camera and mount workers are independent. Web poll routes read cached
-state and image data; mount I/O must stay in one serial thread. Browser
-camera preview uses polling, not WebSockets. The controls are for a
-**trusted LAN** and token leases are coordination, not authentication.
+## Persistent browser UI — implemented and Pi-checked
 
-## Invariants not to break
+One document at `/`. `activateTab` in `app.js` shows/hides
+**Focus / Find / Fotograph**. The **same**
+`#shared-preview-card` and `#shared-camera-controls` DOM nodes are
+relocated between Focus and Fotograph. Do not clone their IDs, duplicate
+the JPEG preview stream, or navigate/reload on tab selection.
 
-- The SVBONY SDK is initialized from real camera enumeration and opened
-  once per streaming session. Do not interleave SDK calls across threads;
-  camera preview can drop frames rather than accumulate unlimited work.
-- Every output format of a saved frame derives from one immutable RAW16
-  source. FITS retains 12-bit samples, with correct BZERO and byte order.
-  1×1 is GRBG; Sony documents Bayer-preserving 2×2 binning, and the
-  operator visually verified correct colours in the 2×2 preview on the
-  physical SV705C (2026-10-28). JPG/PNG quicklooks use the same GRBG
-  interpretation. Debayer Off generates monochrome preview and quicklooks.
-  Binned FITS currently omits BAYERPAT because the writer has not been
-  updated; do not claim this header is present without a code/test change.
-  Recorded frames have SHA-256 manifest; incomplete writes remain unpublished.
-- Never write recording data unless the **specific mounted USB UUID** is
-  verified. Missing/incorrect USB must not fill the boot microSD.
-  The Pi owns a recording after browser disconnect; crashing/rebooting the
-  Python process does **not** resume a recording.
-- AM3N Connect requires trusted NTP, UTC setters, ACKs and readback
-  before claiming clock VERIFIED. Stored site is currently read-only.
-- Movement uses whitelisted directions/rates, operator gating,
-  press-and-hold and 600ms missing-heartbeat Stop; release/focus loss,
-  operator release, intentional disconnect and viewer emergency Stop request
-  Stop. Wait for stable reported axes before another jog; sending `:Q#`
-  is not proof motors physically stopped. **No fixed jog time limit.**
-- Never treat reported RA/Dec or Home as a sky-alignment solution.
+- **Focus:** camera preview/settings; zoom and star focus measurements
+  are not built.
+- **Find:** manual AM3N controls/status; VirtualSky placeholder only.
+- **Fotograph (initial):** camera settings/preview, capture panel, USB and
+  host status.
+- Sticky global camera/mount/capture states and viewer-accessible
+  `#mount-stop` remain visible on every tab. Operator token, 5 s lease
+  heartbeat, capture state and Pi-owned jobs survive tab switches.
+  Leaving Find with manual motion requests Stop; hidden Find cannot
+  initiate a jog.
 
-## Browser layout: current vs next implementation
+Browser polls camera progress every **50 ms** (while active), mount
+status every **1 s**, full status every **3 s**; JPEG URLs are updated
+only when frame number changes. **No WebSockets.**
 
-**Current:** `astropi/templates/index.html` and
-`astropi/static/{app.js,style.css}` provide one full-width, responsive
-dashboard with a live camera view, capture controls, camera settings and
-manual mount controls. The compact capture controls use four format
-checkboxes and **1/5/50/100/150/200/Cancel**, with Pi-owned sequences.
-Preserve IDs, polling, controls, error/status feedback and the existing
-camera/mount safety tests during migration.
+## Must-preserve invariants
 
-**Implemented step 1:** one persistent HTML/JS app with
-**Focus / Find / Fotograph** tabs (no separate `/atlas` Flask page).
-`app.js` relocates the single `#shared-preview-card` and
-`#shared-camera-controls` between Focus and Fotograph slots via
-`appendChild`, preserving their IDs/event handlers and the one JPEG
-preview polling path. The operator token/heartbeat, camera/mount sessions,
-recording manager and capture progress continue across tab switches.
-A sticky global status strip includes **STOP MOUNT** for all viewers;
-leaving Find requests Stop before hiding a held jog, and hidden Find
-cannot start a jog. Existing focus-loss/600ms deadman still apply.
-There are no new mount commands or camera SDK changes.
+1. **Camera SDK:** one worker owns all SDK calls. Open by real
+   enumeration/CameraID; one continuous capture stream per SDK session.
+   Switching 1×1 ↔ 2×2 binning requires close/reopen, not a video
+   stop/start in the same session (previously caused SDK error 11).
+   Set exposure **before** gain. Exposure presets 1 ms–30 s; gain
+   whitelist **0/50/100/260/350/450/550/650** in both JS and Python.
+   Operator observed expected gain response; the actual SDK maximum
+   and HCG threshold have not been measured.
+2. **RAW/science:** one immutable SDK RAW16 buffer copy per frame.
+   12-bit GRBG values are left-shifted four bits in little-endian RAW16.
+   FITS stores 12-bit ADU with big-endian `BITPIX=16`,
+   `BSCALE=1`, `BZERO=32768`. User visually verified the
+   **2×2 preview colours**; saved JPG/PNG colour at 2×2 was not separately
+   field-checked. **2×2 FITS still omits `BAYERPAT`**, the verifier
+   expects omission, and the manifest still says
+   `"unverified at 2x2"`. Changing metadata requires a separate
+   code/test change; it is not a remaining *preview* colour problem.
+3. **Capture/storage:** only the specified mounted USB UUID is valid.
+   Preflight and recheck throughout write; pinned directory-fd, fsync,
+   SHA-256 and atomic `.partial` publication. **Never fall back to
+   OS microSD**. Jobs (up to 200 frames) are Pi-owned; the writer
+   finishes each save before another RAW frame is accepted.
+   Browser closure doesn't cancel jobs; process death/reboot does not
+   resume them. Settings locked during an active sequence.
+4. **Mount safety:** one serial owner, whitelisted directions/rates,
+   operator gating for motion, viewer emergency Stop. Hold-to-move and
+   release/blur/tab departure Stop, server **600 ms** deadman,
+   post-Stop reported-axis stability. No arbitrary 3-second cutoff.
+   A sent `:Q#` is not proof motors stopped; physical Cancel/power
+   is the final fallback.
+5. **Time and site:** explicit AM3N Connect requires verified Pi NTP
+   to sync UTC offset/date/time with ACKs/readback; failure is honestly
+   displayed and does not forbid *manual* jogging. The mount-stored
+   permanent site is **+45.2933° N, −75.8571° east-positive**.
+   **Never silently overwrite it.** The Pi has no RTC. Reported RA/Dec
+   and mount Home do not establish optical sky alignment.
+   Never auto-Home, GoTo, slew or track when opening AstroPi.
 
-- **Focus:** shared live preview and camera controls; click-to-centre
-  zoom, peaking and HFR remain deferred.
-- **Find:** existing manual mount controls/status and an honest VirtualSky
-  placeholder; the chart and Messier search are still future work.
-- **Fotograph (default):** existing preview, camera settings, capture
-  and host/USB status; acquisition and recording semantics are unchanged.
+## Next task: VirtualSky v0.1 inside Find (not yet installed)
 
-### Immediate work plan: offline VirtualSky v0.1 (not yet started)
+The atlas is an **offline schematic pointing aid, not an image gallery**.
+Keep it behind a replaceable adapter, embedded in the existing Find
+tab; **do not add a separate Flask `/atlas` page** or introduce another
+mount controller.
 
-1. **Tab shell — IMPLEMENTED:** persistent three-tab interface on `/`,
-   shared preview/settings DOM, operator lease/status, sticky global
-   emergency Stop and recording progress; no independent reloads.
-   UI/capture/mount regression tests accompany this change.
-2. **Vendor local VirtualSky:** add pinned upstream JS/data and required
-   supporting assets under `astropi/static/`, retain license/attribution,
-   and wrap its API behind a replaceable local JS adapter. No CDNs or
-   external object lookup: the upstream `objects` option can perform an
-   online lookUP when passed object names, so avoid that path.
-3. **Site/time:** initialise the chart at the operator-confirmed **fixed
-   permanent site +45.2933° N, −75.8571° east-positive**. Read/compare
-   the AM3N's stored site when available; do not change mount site.
-   Supply current **Pi UTC**, not an unverified client-clock assumption,
-   and expose Pi NTP status. Show warnings if sync is absent or mount
-   site conflicts; do not claim verified time/pointing without evidence.
-4. **Chart controls:** offline stars/planets, constellations/labels,
-   horizon/cardinals, draggable pan/zoom, and grid visibility. Ensure
-   the chart resizes cleanly on tab activation and small screens.
-5. **Messier aid:** load all **110** objects from local data with schematic
-   markers. Implement simple `M1`–`M110` search and click/select
-   information (name, RA, Dec) plus centre-on-target. Confirm the
-   VirtualSky click callback/object lookup behaviour before connecting
-   selection to a target: do not send any mount motion in v0.1.
-6. **Test + handoff:** run Python and Node regressions; add tests for
-   tab persistence, active-jog Stop on tab switch, global emergency
-   Stop, offline asset loading/no remote URL, NTP/site warnings,
-   Messier select/search and responsive layout. Update documentation
-   only after the features are actually working.
+1. **Local dependencies:** pin an upstream VirtualSky revision; vendor
+   `virtualsky`, stuQuery, planets/stars/constellations and
+   Messier data under `astropi/static/`. Record license/attribution.
+   No CDN, online lookups or photographic tiles. Avoid VirtualSky's
+   online name-resolution `objects` mode.
+2. **Time/site:** initialise chart at permanent +45.2933° /
+   −75.8571° even without mount connection. `/api/status` already
+   exposes Pi UTC **but not `NTPSynchronized`**; add read-only host
+   NTP status, and warn rather than silently trusting a browser clock.
+   If connected, compare the *read-only* mount site; show mismatch
+   without changing the AM3N.
+3. **Chart UI:** chart occupies most of Find beside existing mount
+   controls; pan/zoom, constellation lines/labels, horizon/cardinals,
+   stars/planets and optional coordinate grids. Resize on tab reveal.
+4. **Messier:** all **110** locally supplied objects; `M1`–`M110`
+   search, clickable marker, centre and name/RA/Dec details. Verify
+   click and object API on the pinned VirtualSky version. Absolutely
+   **no mount movement** from chart interaction.
+5. **Tests and field check:** Python and Node regressions, entirely
+   offline page loads, sensible site/time warnings, chart selection,
+   responsive layout, tab/lease/capture persistence, viewer Stop and
+   jog departure Stop. Check in a real Pi browser before marking as
+   hardware verified.
 
-**Deferred:** OpenNGC/NGC/IC full catalogue and filtered-object searching,
-mount marker, sky alignment, atlas GoTo/tracking, custom focus aids,
-image surveys/photos, and manual site/time override. No camera SDK
-thread or mount serial protocol changes in the v0.1 atlas stage.
+**Deferred after atlas v0.1:** full OpenNGC NGC/IC database and
+filter-independent search, reported mount marker, north/level and
+two-star alignment, atlas-selected GoTo/tracking, focus zoom/HFR,
+plate solving or stacking, manual time/site override.
 
-## Tests and outstanding verification
+## Testing / open verification
 
-Run both `python -m pytest -q` and
-`node --test tests/test_ui.cjs`. Workflow under
-`.github/workflows/tests.yml` runs on main, feature/fix branches and PRs.
-Mocks test SDK ownership, data conversion, USB fail-closed, sequences,
-serial command gating, heartbeat Stop, NTP ACK/readback and UI behaviour.
-Hardware-confirmed work is summarized in HARDWARE.md.
+Run `python -m pytest -q` and `node --test tests/test_ui.cjs`;
+GitHub Actions uses Python 3.13 and Node 22 on main and PRs.
+Tab migration tests passed, and the user reports the Pi interface
+functions as expected. This does **not** constitute fresh endurance,
+serial-fault or telescope pointing verification.
 
-**Next priority:** start **step 2, local VirtualSky assets and adapter**,
-then proceed through site/time, chart controls, Messier selection and
-offline/field testing. The step-1 UI needs real-Pi/browser confirmation.
-Keep mount GoTo/alignment and focus aids explicitly deferred.
-
-**Other later work:** systemd startup/recovery; storage/USB failure and
-long-running capture tests; 2×2 FITS `BAYERPAT` metadata (currently
-absent) and optional saved quicklook/binned RAW-FITS parity regressions.
-Do not enable competing USB/Wi-Fi mount controllers blindly.
-
-Keep handoff documents concise; replace obsolete facts in place instead
-of appending a new milestone diary. Do not remove safety regression tests
-merely because the original failure has been fixed.
+Separate follow-ups: systemd service; long capture endurance; induced
+USB/serial failures; FITS 2×2 `BAYERPAT` and metadata; 2×2 saved
+quicklook colour; field use without NTP. Older experiments are in Git
+history, not instructions to re-enable obsolete features.
