@@ -65,6 +65,17 @@ camera preview uses polling, not WebSockets. The controls are for a
   is not proof motors physically stopped. **No fixed jog time limit.**
 - Never treat reported RA/Dec or Home as a sky-alignment solution.
 
+## Browser layout
+
+The dashboard uses `astropi/templates/index.html` and
+`astropi/static/style.css`. The `.dashboard-grid` is three fluid columns
+near **1920×1080**: an imaging column (preview, capture, Pi/storage status),
+camera settings, then mount. Breakpoints: at 1550px use two columns,
+at 920px stack panels, retaining camera settings before recording.
+Avoid reinstating the old 1140px shell width or instructional prose; keep
+state and safety messages and existing DOM IDs. No JavaScript layout changes
+or hardware-control timing changes are intended in this iteration.
+
 ## Tests and outstanding verification
 
 Run both `python -m pytest -q` and

@@ -52,6 +52,21 @@ in-app recording endurance and deliberately induced USB/storage faults have
 not been verified. We may later evaluate Stellarium control over AM3N Wi-Fi
 or an INDI server, avoiding simultaneous conflicting USB/Wi-Fi commands.
 
+## Desktop dashboard layout
+
+Optimized for a typical **1920×1080** browser window. The workbench uses
+almost the full width: **camera preview, capture and storage/host status on
+the left; exposure/gain/binning and display controls in the middle; mount
+controls and telemetry on the right**. Mount manual Stop/jog is deliberately
+above the optional mount clock/site details. Capture results remain scrollable
+within their panel. Layout switches to two columns below 1550 CSS pixels and
+a single column below 920 pixels (vertical scrolling is expected).
+
+The page no longer repeats operating instructions; controls and live
+status/error messages remain. A short physical Stop warning stays visible.
+The user reports that 2×2 colour preview matches 1×1 visually; exact Bayer
+phase is still documented as visually checked rather than instrument-tested.
+
 ## Start / update
 
 See [SETUP.md](SETUP.md) for install, launch, UI use and diagnostics.

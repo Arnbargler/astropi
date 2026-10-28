@@ -576,3 +576,48 @@ test("binning buttons disabled while a capture or sequence is saving",async()=>{
   await h.intervals.get(50)();
   assert.equal(h.el("binning-2").disabled,false);
 });
+
+
+
+test("1080p dashboard is full-width, keeps all functional controls and stays responsive",()=>{
+  const html=fs.readFileSync(path.join(__dirname,"../astropi/templates/index.html"),"utf8");
+  const css=fs.readFileSync(path.join(__dirname,"../astropi/static/style.css"),"utf8");
+  assert.match(html,/class="dashboard-grid"/);
+  assert.match(html,/class="imaging-column"/);
+  assert.match(html,/class="health-strip"/);
+  assert.ok(html.indexOf('class="preview-card"') < html.indexOf('class="save-panel"'));
+  assert.ok(html.indexOf('class="save-panel"') < html.indexOf('class="controls"'));
+  assert.ok(html.indexOf('class="controls"') < html.indexOf('class="mount-card"'));
+  assert.ok(html.indexOf('class="mount-jog-panel"') < html.indexOf('class="mount-environment"'),
+    "Mount Stop and jog controls are more prominent than secondary clock readbacks");
+  for (const id of [
+    "preview-image","start-camera","stop-camera","exposure-buttons","gain-buttons",
+    "binning-buttons","stretch-auto","stretch-fixed","debayer-on","debayer-off",
+    "capture-fits","capture-raw","capture-jpg","capture-png","capture-now",
+    "start-sequence","cancel-sequence","capture-results","mount-connect",
+    "mount-disconnect","mount-stop","mount-speed-slow","mount-speed-max",
+    "mount-north","mount-south","mount-west","mount-east",
+    "mount-env-time","mount-env-latitude","mount-raw-status",
+    "storage-state","storage-free","pi-temp","pi-uptime"
+  ]) assert.match(html,new RegExp('id="'+id+'"'),"Missing control/status "+id);
+  const ids=Array.from(html.matchAll(/\bid="([^"]+)"/g),m=>m[1]);
+  assert.equal(new Set(ids).size,ids.length,"No repeated DOM ids");
+  assert.match(css,/\.shell\{width:100%;max-width:2160px/);
+  assert.doesNotMatch(css,/max-width:1140px/);
+  assert.match(css,/\.dashboard-grid\{display:grid;grid-template-columns:minmax\(0,1\.95fr\)/);
+  assert.match(css,/\.preview-frame\{width:100%;height:auto;aspect-ratio:3856\/2180/);
+  assert.match(css,/@media \(max-width:1550px\)/);
+  assert.match(css,/@media \(max-width:920px\)/);
+  assert.match(css,/\.imaging-column\{display:contents\}/);
+  assert.match(css,/@media \(max-width:650px\)/);
+  for(const obsolete of [
+    "Choose output formats independently",
+    "FITS/RAW16: 3856",
+    "Five manual rates:",
+    "Exposure/gain presets apply automatically",
+    "Binning change restarts the camera session",
+    "DEVELOPMENT BUILD"
+  ]) assert.ok(!html.includes(obsolete),"Obsolete on-screen instruction: "+obsolete);
+  assert.match(html,/Software Stop is not fail-safe/,
+    "Physical fallback warning is safety-critical");
+});
