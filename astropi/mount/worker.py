@@ -1,12 +1,12 @@
-"""One serial-owning AM3N worker: telemetry and *bounded* manual jogs.
+"""One serial-owning AM3N worker: telemetry, manual jogs and verified UTC sync.
 
-Manual movement is opt-in on every jog. Server-enforced heartbeat (600 ms)
-and hard-stop commands remain on the serial owner thread, independent of the
-browser refresh rate. Unplug/process/power failure CANNOT guarantee a stop;
-a physical Cancel/power-disconnect remains mandatory during real tests.
-No Home, GoTo, Park, tracking, time/site setters or arbitrary serial commands.
+Each explicit serial Connect automatically sets the mount clock from the Pi
+ONLY after systemd reports NTP synchronization, and verifies date/time from
+mount readback. No site changes, GoTo, Home, Park, tracking, manual time entry
+or arbitrary serial commands. A 600ms lost-heartbeat Stop still protects jogs.
 """
 from datetime import datetime, timezone
+import subprocess
 from pathlib import Path
 import re
 import threading
@@ -43,6 +43,9 @@ JOG_RATE = JOG_SPEEDS["slow"]  # backward-compatible default
 STOP_COMMAND = ":Q#"
 DEADMAN_SECONDS = 0.6
 STILL_TOLERANCE_DEG = 0.0006  # ~2 arcsec
+CLOCK_VERIFY_TOLERANCE_SECONDS = 6
+_CLOCK_DATE = re.compile(r"^(\d{2})/(\d{2})/(\d{2})$")
+_CLOCK_TIME = re.compile(r"^(\d{2}):(\d{2}):(\d{2})$")
 
 _ANGLE = re.compile(r"^([+-]?)(\d{1,3})\*(\d{2}):(\d{2}(?:\.\d+)?)$")
 _CLOCK = re.compile(r"^(\d{1,2}):(\d{2}):(\d{2}(?:\.\d+)?)$")
@@ -50,6 +53,55 @@ _CLOCK = re.compile(r"^(\d{1,2}):(\d{2}):(\d{2}(?:\.\d+)?)$")
 
 class MountProtocolError(RuntimeError):
     pass
+
+
+class ClockSyncError(RuntimeError):
+    """Automatic mount UTC synchronization was not verified."""
+
+
+def system_ntp_synchronized():
+    """Trust the Pi clock only once systemd reports an actual NTP sync.
+
+    We do not merely check NTP service enablement or assume that internet
+    access means the Pi clock was corrected after a cold boot.
+    """
+    try:
+        result = subprocess.run(
+            ["timedatectl", "show", "-p", "NTPSynchronized", "--value"],
+            capture_output=True, text=True, timeout=2, check=False,
+        )
+        return result.returncode == 0 and result.stdout.strip().lower() == "yes"
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+
+
+def parse_mount_utc(date_text, time_text):
+    """Strict AM3N MM/DD/YY + HH:MM:SS, with year 20YY (not 19YY)."""
+    date_match = _CLOCK_DATE.fullmatch(date_text)
+    time_match = _CLOCK_TIME.fullmatch(time_text)
+    if not date_match or not time_match:
+        raise ClockSyncError("Mount returned invalid clock date/time format")
+    month, day, year = (int(v) for v in date_match.groups())
+    hour, minute, second = (int(v) for v in time_match.groups())
+    try:
+        return datetime(2000 + year, month, day, hour, minute, second,
+                        tzinfo=timezone.utc)
+    except ValueError as exc:
+        raise ClockSyncError("Mount returned invalid calendar date/time") from exc
+
+
+def utc_sync_commands(moment):
+    """Use the AM3N-verified UTC-offset, date, then time command sequence."""
+    if not isinstance(moment, datetime) or moment.tzinfo is None:
+        raise ClockSyncError("Pi clock must provide a timezone-aware UTC time")
+    utc = moment.astimezone(timezone.utc)
+    if utc.year < 2025 or utc.year > 2099:
+        raise ClockSyncError("Pi clock year is implausible; refusing mount update")
+    return (
+        ":SG+00:00#",
+        f":SC{utc.month:02d}/{utc.day:02d}/{utc.year % 100:02d}#",
+        f":SL{utc.hour:02d}:{utc.minute:02d}:{utc.second:02d}#",
+    )
 
 
 def angle_degrees(value, *, signed=False, limit=90):
@@ -104,11 +156,16 @@ _TELEMETRY = {
 
 
 class MountWorker:
-    def __init__(self, serial_path, *, serial_factory=None, poll_interval=2.0, clock=time.monotonic):
+    def __init__(self, serial_path, *, serial_factory=None, poll_interval=2.0,
+                 clock=time.monotonic, ntp_checker=None, utc_clock=None):
         self.path = Path(serial_path)
         self._factory = serial_factory if serial_factory is not None else serial.Serial
         self._interval = poll_interval
         self._clock = clock
+        self._ntp_checker = ntp_checker if ntp_checker is not None else system_ntp_synchronized
+        self._utc_clock = utc_clock if utc_clock is not None else (
+            lambda: datetime.now(timezone.utc)
+        )
         self._lock = threading.Lock()
         self._armed = False
         self._direction = None
@@ -139,6 +196,8 @@ class MountWorker:
             "environment_updated_utc": None,
             "environment_error": None,
             "environment": None,
+            "time_sync_phase": "idle", "time_sync_error": None,
+            "time_sync_verified_utc": None, "time_sync_source": "Pi NTP (UTC)",
             **_TELEMETRY,
         }
 
@@ -170,7 +229,9 @@ class MountWorker:
                 last_stop_reason=None, last_stop_sent_utc=None,
                 stop_stable=False, motion_warning=None,
                 environment_phase="idle", environment_updated_utc=None,
-                environment_error=None, environment=None, **_TELEMETRY
+                environment_error=None, environment=None,
+                time_sync_phase="checking", time_sync_error=None,
+                time_sync_verified_utc=None, **_TELEMETRY
             )
             self._thread = threading.Thread(
                 target=self._run, name="am3n-readonly", daemon=True
@@ -367,6 +428,71 @@ class MountWorker:
                     )
                     # Remain disarmed and do not accept another jog.
 
+    def _write_clock(self, port, command):
+        """Setter ACK is one byte ('1'), unlike #-terminated read responses.
+
+        No browser endpoint can supply a command or trigger this independently.
+        """
+        if not re.fullmatch(
+            r":(?:SG\+00:00|SC\d{2}/\d{2}/\d{2}|SL\d{2}:\d{2}:\d{2})#",
+            command,
+        ):
+            raise ClockSyncError("Refusing unapproved mount clock command")
+        if self._stop.is_set():
+            raise InterruptedError("Mount disconnect requested")
+        port.write(command.encode("ascii"))
+        port.flush()
+        ack = port.read(1)
+        if ack != b"1":
+            raise ClockSyncError(f"Mount rejected {command[:3]} clock setter")
+
+    def _sync_clock_on_connect(self, port):
+        """Attempt automatic UTC sync ONCE, on the serial owner.
+
+        Failure is visible in status but does not disable manual mount use.
+        No GoTo/tracking is available, so unverified time never causes a
+        celestial slew. Operators can reconnect once Pi NTP becomes ready.
+        """
+        try:
+            if not self._ntp_checker():
+                raise ClockSyncError(
+                    "Pi has not confirmed NTP sync (timedatectl NTPSynchronized=no); "
+                    "mount clock was left unchanged. Reconnect after NTP sync."
+                )
+            moment = self._utc_clock()
+            commands = utc_sync_commands(moment)
+            with self._lock:
+                self._state["time_sync_phase"] = "syncing"
+            for command in commands:
+                self._write_clock(port, command)
+            offset = self._query(port, ":GG#")
+            date = self._query(port, ":GC#")
+            clock = self._query(port, ":GL#")
+            if offset != "+00:00":
+                raise ClockSyncError(f"Mount UTC offset readback mismatch: {offset!r}")
+            mount_time = parse_mount_utc(date, clock)
+            now = self._utc_clock().astimezone(timezone.utc)
+            delta = abs((mount_time - now).total_seconds())
+            if delta > CLOCK_VERIFY_TOLERANCE_SECONDS:
+                raise ClockSyncError(
+                    f"Mount clock verification failed: offset {delta:.1f}s"
+                )
+            with self._lock:
+                if not self._stop.is_set():
+                    self._state.update(
+                        time_sync_phase="verified", time_sync_error=None,
+                        time_sync_verified_utc=now.isoformat(),
+                        environment_phase="queued",
+                    )
+                    self._environment_pending = True
+        except (ClockSyncError, OSError, serial.SerialException, ValueError) as exc:
+            with self._lock:
+                if not self._stop.is_set():
+                    self._state.update(
+                        time_sync_phase="error", time_sync_error=str(exc),
+                        time_sync_verified_utc=None,
+                    )
+
     def _query(self, port, command):
         if command not in QUERIES:
             raise MountProtocolError("Refusing non-read-only mount command")
@@ -430,6 +556,7 @@ class MountWorker:
                 raise MountProtocolError("Empty mount firmware")
             with self._lock:
                 self._state.update(model=model, firmware=firmware)
+            self._sync_clock_on_connect(port)
             last_poll = -float("inf")
             while not self._stop.is_set():
                 self._service_motion(port)
@@ -477,5 +604,7 @@ class MountWorker:
                     motion_direction=None, motion_phase="idle",
                     stop_stable=False, environment_phase="idle",
                     environment=None, environment_updated_utc=None,
-                    environment_error=None, **_TELEMETRY,
+                    environment_error=None, time_sync_phase="idle",
+                    time_sync_error=None, time_sync_verified_utc=None,
+                    **_TELEMETRY,
                 )
