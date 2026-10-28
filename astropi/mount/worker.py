@@ -284,7 +284,12 @@ class MountWorker:
                 self._pending_direction = None
                 self._direction = direction
                 self._ever_moved = True  # ensure a finally-block Stop attempt
-                self._write_motion(port, JOG_SPEEDS[speed][0])
+                # Always establish the proven slow R5 baseline first. If an
+                # experimental :Rvxx.xx# rate is ignored, the mount should
+                # remain at the verified 8x rate, not inherit an unknown HC rate.
+                self._write_motion(port, JOG_RATE)
+                if speed != "slow":
+                    self._write_motion(port, JOG_SPEEDS[speed][0])
                 self._write_motion(port, JOG_COMMANDS[direction])
                 self._state["motion_phase"] = "moving"
 
