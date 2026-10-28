@@ -25,6 +25,7 @@ let mountArmed = false;
 let heldMountDirection = null;
 let mountStopPending = false;
 let mountHeartbeatBusy = false;
+let mountEnvironmentPhase = "idle";
 const mountSpeeds = ["slow", "medium", "fast"];
 let selectedMountSpeed = "slow";
 function showMountSpeed(speed) {
@@ -68,6 +69,9 @@ function updateButtons() {
   $("mount-disconnect").disabled = !owner || mountRequestPending ||
     !["connecting", "connected"].includes(mountPhase);
   $("mount-stop").disabled = mountPhase !== "connected" || mountStopPending;
+  $("mount-read-environment").disabled = !owner || mountPhase !== "connected" ||
+    mountRequestPending || mountMotionPhase !== "idle" || mountArmed ||
+    mountEnvironmentPhase === "queued" || mountEnvironmentPhase === "reading";
   $("mount-arm").disabled = !owner || mountPhase !== "connected" ||
     mountMotionPhase !== "idle" || mountArmed || mountRequestPending;
   for (const speed of mountSpeeds) {
@@ -300,6 +304,21 @@ async function mountHoldHeartbeat() {
     mountHeartbeatBusy = false;
   }
 }
+$("mount-read-environment").addEventListener("click", async () => {
+  if (!token || mountPhase !== "connected" || mountEnvironmentPhase === "reading") return;
+  mountEnvironmentPhase = "queued";
+  updateButtons();
+  try {
+    await post("/api/mount/environment/read");
+    write("mount-environment-error", "");
+    await refreshMount();
+  } catch (error) {
+    mountEnvironmentPhase = "error";
+    write("mount-environment-error", error.message);
+  } finally {
+    updateButtons();
+  }
+});
 $("mount-connect").addEventListener("click", () => mountAction("/api/mount/connect"));
 $("mount-disconnect").addEventListener("click", () => mountAction("/api/mount/disconnect"));
 async function mountAction(url) {
@@ -328,7 +347,23 @@ function showMount(data) {
   mountPhase = nextPhase;
   mountMotionPhase = data.motion_phase || "idle";
   mountArmed = Boolean(data.motion_armed);
+  mountEnvironmentPhase = data.environment_phase || "idle";
   if (mountPhase !== "connected") heldMountDirection = null;
+  const env = mountPhase === "connected" ? data.environment : null;
+  write("mount-environment-state", env ?
+    "Clock/site snapshot: " + (data.environment_updated_utc || "received") :
+    "Clock/site: " + mountEnvironmentPhase);
+  const fields = {
+    "mount-env-date": "date",
+    "mount-env-time": "local_time",
+    "mount-env-offset": "utc_offset",
+    "mount-env-sidereal": "sidereal_time",
+    "mount-env-latitude": "latitude",
+    "mount-env-longitude": "longitude_west"
+  };
+  for (const [id, key] of Object.entries(fields))
+    write(id, env && env[key] ? env[key] : "—");
+  write("mount-environment-error", data.environment_error || "");
   write("mount-phase", "Connection: " + mountPhase);
   const motionDescription = {
     idle: data.stop_stable ? "Reported axes stable after Stop · movement disabled" :

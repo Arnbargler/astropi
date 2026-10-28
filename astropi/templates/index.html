@@ -158,6 +158,20 @@
         </div>
         <p id="mount-phase" role="status">Mount disconnected</p>
         <p id="mount-model">Model / firmware: —</p>
+        <div class="mount-environment">
+          <button type="button" id="mount-read-environment" disabled>Read Mount Clock &amp; Site</button>
+          <p id="mount-environment-state" role="status">Clock/site not read</p>
+          <div class="mount-coordinates" aria-label="Mount stored clock and observing site">
+            <div><span>Mount date</span><strong id="mount-env-date">—</strong></div>
+            <div><span>Mount local time</span><strong id="mount-env-time">—</strong></div>
+            <div><span>UTC offset</span><strong id="mount-env-offset">—</strong></div>
+            <div><span>Sidereal time</span><strong id="mount-env-sidereal">—</strong></div>
+            <div><span>Stored latitude</span><strong id="mount-env-latitude">—</strong></div>
+            <div><span>Stored longitude (W+)</span><strong id="mount-env-longitude">—</strong></div>
+          </div>
+          <p class="mount-small">Read-only snapshot from AM3N. Values are not synchronized or independently verified against the Pi. Longitude is shown in the mount's west-positive convention.</p>
+          <p id="mount-environment-error" role="alert" class="mount-error"></p>
+        </div>
         <div class="mount-coordinates" aria-label="Mount reported coordinates">
           <div><span>Altitude</span><strong id="mount-altitude">—</strong></div>
           <div><span>Azimuth</span><strong id="mount-azimuth">—</strong></div>
