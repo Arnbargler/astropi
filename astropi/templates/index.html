@@ -19,12 +19,8 @@
         <button id="release-control" hidden>Release Control</button>
       </div>
     </header>
-    <section class="intro">
-      <div class="eyebrow">ASTROPI · OBSERVATORY CONTROL</div>
-      <h2>Observatory</h2>
-      <p>Live SV705C preview and USB-only recording with AM3N status, NTP clock sync and hold-to-move mount controls. Home, GoTo and tracking are not implemented.</p>
-    </section>
-    <section class="preview-layout">
+    <section class="dashboard-grid" aria-label="Observatory dashboard">
+      <div class="imaging-column">
       <article class="card preview-card">
         <div class="preview-frame">
           <img id="preview-image" alt="Live SV705C camera preview" hidden>
@@ -32,6 +28,36 @@
         </div>
         <div class="preview-footer"><span id="camera-phase">Camera stopped</span><span id="frame-count">0 JPEG frames · — preview fps · — raw fps</span></div>
       </article>
+    <section class="card save-panel" aria-label="Capture and save">
+      <div class="save-header">
+        <div><h3>Capture &amp; exposure sequence</h3>
+        </div>
+        <button id="capture-now" disabled>Capture &amp; Save</button>
+      </div>
+      <div class="save-formats" role="group" aria-label="Recording file formats">
+        <label class="format-option"><input id="capture-fits" type="checkbox" checked><span><strong>FITS</strong></span></label>
+        <label class="format-option"><input id="capture-raw" type="checkbox"><span><strong>RAW16</strong></span></label>
+        <label class="format-option"><input id="capture-jpg" type="checkbox" checked><span><strong>JPG</strong></span></label>
+        <label class="format-option"><input id="capture-png" type="checkbox"><span><strong>PNG</strong></span></label>
+      </div>
+      <div class="sequence-controls">
+        <label for="sequence-count">Frames in sequence</label>
+        <input id="sequence-count" type="number" min="2" max="100" step="1" value="10" inputmode="numeric">
+        <button id="start-sequence" disabled>Start Sequence</button>
+        <button id="cancel-sequence" disabled>Cancel Sequence</button>
+      </div>
+      <div id="sequence-progress" role="status" aria-live="polite"></div>
+      <p id="capture-state" role="status" aria-live="polite">Idle</p>
+      <p id="capture-error" role="alert"></p>
+      <div id="capture-results"></div>
+    </section>
+        <div class="health-strip" aria-label="System status">
+      <article class="card storage-card"><h3>Recording drive</h3><div class="metric" id="storage-state">Checking…</div>
+        <p id="storage-free">Checking free space…</p></article>
+      <article class="card host-card"><h3>Raspberry Pi</h3><div class="metric" id="pi-temp">Checking…</div>
+        <p id="pi-uptime">Checking uptime…</p></article>
+        </div>
+      </div>
       <article class="card controls">
         <h3>SVBONY SV705C</h3>
         <p id="camera-usb">Checking USB…</p>
@@ -108,7 +134,7 @@
           <label for="binning-2" class="preset-choice">2×2</label>
         </div>
         <p id="binning-readback" class="hint">Binning: 1×1 · 3856×2180</p>
-        <p id="binning-message" class="hint" role="status">Binning change restarts the camera session; unavailable while saving.</p>
+        <p id="binning-message" class="hint" role="status"></p>
         <div class="stretch-row">
           <span id="stretch-label">Stretch</span>
           <div class="stretch-switch" role="group" aria-labelledby="stretch-label">
@@ -125,41 +151,10 @@
             <button type="button" id="debayer-off" class="stretch-choice" aria-pressed="false" disabled>Off</button>
           </div>
         </div>
-        <p class="hint">Stretch A/F: adaptive or fixed brightness. Debayer On: colour; Off: monochrome for both 1×1 and 2×2.
-          Binned 2×2 colour uses provisional GRBG phase—confirm red/blue
-          orientation on the real SV705C. RAW16 and FITS always preserve sensor values.</p>
         <p id="raw-metrics">Raw sensor signal: waiting for frames…</p>
         <p id="settings-message" role="status" class="settings-message"></p>
         <p id="camera-error" role="alert"></p>
-        <p class="hint">Exposure/gain presets apply automatically. Recording is a separate, explicitly requested operation; preview alone never writes files.</p>
       </article>
-    </section>
-    <section class="card save-panel" aria-label="Capture and save">
-      <div class="save-header">
-        <div><h3>Capture &amp; exposure sequence</h3>
-          <p>Choose output formats independently. Single capture saves the next frame; sequence saves consecutive fresh full-resolution frames, one at a time.</p>
-        </div>
-        <button id="capture-now" disabled>Capture &amp; Save</button>
-      </div>
-      <div class="save-formats" role="group" aria-label="Recording file formats">
-        <label class="format-option"><input id="capture-fits" type="checkbox" checked><span><strong>FITS</strong><small>Full-res 12-bit Bayer · scientific</small></span></label>
-        <label class="format-option"><input id="capture-raw" type="checkbox"><span><strong>RAW16</strong><small>Exact 16-bit SDK bytes · original</small></span></label>
-        <label class="format-option"><input id="capture-jpg" type="checkbox" checked><span><strong>JPG</strong><small>Colour quick-look · lossy</small></span></label>
-        <label class="format-option"><input id="capture-png" type="checkbox"><span><strong>PNG</strong><small>Colour quick-look · lossless 8-bit</small></span></label>
-      </div>
-      <div class="sequence-controls">
-        <label for="sequence-count">Frames in sequence</label>
-        <input id="sequence-count" type="number" min="2" max="100" step="1" value="10" inputmode="numeric">
-        <button id="start-sequence" disabled>Start Sequence</button>
-        <button id="cancel-sequence" disabled>Cancel Sequence</button>
-      </div>
-      <p class="hint">FITS/RAW16: 3856 × 2180, untouched Bayer mosaic. JPG/PNG: colour 1928 × 1090 convenience images. Each sequence frame is independently saved with metadata, sequence ID, position and SHA-256 checksums. Gain/exposure remain fixed during the run.</p>
-      <div id="sequence-progress" role="status" aria-live="polite"></div>
-      <p id="capture-state" role="status" aria-live="polite">Ready to capture when the camera and recording drive are available.</p>
-      <p id="capture-error" role="alert"></p>
-      <div id="capture-results"></div>
-    </section>
-    <section class="cards" aria-label="System status">
       <article class="card mount-card">
         <h3>ZWO AM3N · Mount control</h3>
         <div class="metric" id="mount-usb">Checking…</div>
@@ -173,7 +168,7 @@
         <p id="mount-time-sync" role="status">Pi NTP → mount clock: waiting to connect</p>
         <p id="mount-time-sync-error" role="alert" class="mount-error"></p>
         <div class="mount-environment">
-          <button type="button" id="mount-read-environment" disabled>Read Mount Clock &amp; Site</button>
+          <button type="button" id="mount-read-environment" disabled>Refresh Clock / Site</button>
           <p id="mount-environment-state" role="status">Clock/site not read</p>
           <div class="mount-coordinates" aria-label="Mount stored clock and observing site">
             <div><span>Mount date</span><strong id="mount-env-date">—</strong></div>
@@ -183,7 +178,6 @@
             <div><span>Stored latitude</span><strong id="mount-env-latitude">—</strong></div>
             <div><span>Stored longitude (W+)</span><strong id="mount-env-longitude">—</strong></div>
           </div>
-          <p class="mount-small">Mount clock is automatically set to Pi NTP time (UTC) on Connect and verified by readback. This panel reads the stored values; the observing-site coordinates are not changed. Longitude uses the mount's west-positive convention.</p>
           <p id="mount-environment-error" role="alert" class="mount-error"></p>
         </div>
         <div class="mount-coordinates" aria-label="Mount reported coordinates">
@@ -194,7 +188,7 @@
         </div>
         <div class="mount-jog-panel">
           <button id="mount-stop" class="mount-stop" disabled>STOP MOUNT</button>
-          <p class="mount-caution">Emergency Stop is available to every viewer. It requests a motor stop; it is not proof of a completed halt. Keep the physical Cancel/power cutoff accessible.</p>
+          <p class="mount-caution">Software Stop is not fail-safe; keep physical Cancel/power accessible.</p>
           <div class="mount-speed" role="group" aria-label="Manual mount jog speed">
             <label for="mount-speed-slow" class="mount-speed-choice">
               <input id="mount-speed-slow" name="mount-speed" type="radio" value="slow" checked disabled>
@@ -220,26 +214,20 @@
           <div class="mount-directions" role="group" aria-label="Press and hold to jog mount">
             <button type="button" id="mount-north" disabled aria-label="Hold to move altitude north">N ↑</button>
             <button type="button" id="mount-west" disabled aria-label="Hold to move azimuth west">W ←</button>
-            <span class="mount-center">Hold to move</span>
+            <span class="mount-center">ALT / AZ</span>
             <button type="button" id="mount-east" disabled aria-label="Hold to move azimuth east">E →</button>
             <button type="button" id="mount-south" disabled aria-label="Hold to move altitude south">S ↓</button>
           </div>
           <p id="mount-motion" role="status" aria-live="polite">Hold a direction to move</p>
           <p id="mount-motion-warning" role="alert" class="mount-error"></p>
-          <p class="mount-small">Five manual rates: Slow 8×, Medium 20×, Fast 60×, Slew 720×, Max 1440×. The two highest rates are newly available and need a real-mount check. Hold a button to move; release it to stop. The 600 ms missing-heartbeat watchdog and Stop button remain active.</p>
         </div>
         <p id="mount-flags">Status flags: —</p>
         <p id="mount-raw-status" class="mount-small">Raw :GU#: —</p>
         <p id="mount-update" class="mount-small">Last telemetry: —</p>
         <p id="mount-error" role="alert" class="mount-error"></p>
-        <p class="mount-caution">Coordinates are reported by the mount, not proof of alignment. No Home, GoTo, Park, sky tracking or time/site setters. Hold a direction to move and release to Stop; the Pi also requests Stop after 600 ms without a valid movement heartbeat.</p>
       </article>
-      <article class="card"><h3>Recording drive</h3><div class="metric" id="storage-state">Checking…</div>
-        <p id="storage-free">Checking free space…</p><p>All captures require the correct mounted USB UUID. Never writes to microSD.</p></article>
-      <article class="card"><h3>Raspberry Pi</h3><div class="metric" id="pi-temp">Checking…</div>
-        <p id="pi-uptime">Checking uptime…</p></article>
     </section>
-    <footer>Trusted LAN only · Image checks every 50 ms; status every 3 seconds · Updated: <span id="last-update">—</span></footer>
+    <footer>Last update: <span id="last-update">—</span></footer>
   </main>
 </body>
 </html>
