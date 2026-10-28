@@ -16,11 +16,17 @@ import serial
 
 # Intentional hard-coded whitelist. NEVER let a client supply serial commands.
 QUERIES = frozenset((":GVP#", ":GV#", ":GU#", ":GA#", ":GZ#", ":GR#", ":GD#"))
-# The AM3N :R5# rate was previously physically verified (~8x sidereal).
-# :Q# and each directional stop have been confirmed in manual hardware probes.
-# Never accept raw client-supplied LX200 commands.
+# Rate mapping: :R5# and :Rv120.00# were physically verified in earlier
+# manual AM3N probes. ZWO AM3N supports 8x/20x/60x sidereal rates; 20x and
+# 60x command-specific behaviour still require controlled on-Pi tests.
+# NEVER accept a raw serial command or arbitrary speed from a web request.
 JOG_COMMANDS = {"north": ":Mn#", "south": ":Ms#", "east": ":Me#", "west": ":Mw#"}
-JOG_RATE = ":R5#"
+JOG_SPEEDS = {
+    "slow": (":R5#", 3.0),          # ~8x, verified on Pi
+    "medium": (":Rv20.00#", 2.0),  # 20x, hardware test pending
+    "fast": (":Rv60.00#", 1.0),    # 60x, hardware test pending
+}
+JOG_RATE = JOG_SPEEDS["slow"][0]  # backward-compatible default
 STOP_COMMAND = ":Q#"
 DEADMAN_SECONDS = 0.6
 MAX_JOG_SECONDS = 3.0  # independent cap even when client keeps heartbeating
@@ -95,6 +101,7 @@ class MountWorker:
         self._armed = False
         self._direction = None
         self._pending_direction = None
+        self._pending_speed = "slow"
         self._motion_deadline = 0.0
         self._hard_deadline = 0.0
         self._stop_pending = False
@@ -111,7 +118,8 @@ class MountWorker:
             "serial_path": str(self.path),
             "model": None, "firmware": None, "last_error": None,
             "motion_phase": "idle", "motion_armed": False,
-            "motion_direction": None, "last_stop_reason": None,
+            "motion_direction": None, "jog_speed": "slow",
+            "last_stop_reason": None,
             "last_stop_sent_utc": None, "stop_stable": False,
             "motion_warning": None,
             **_TELEMETRY,
@@ -128,6 +136,7 @@ class MountWorker:
             self._stop = threading.Event()
             self._armed = False
             self._direction = self._pending_direction = None
+            self._pending_speed = "slow"
             self._motion_deadline = 0.0
             self._hard_deadline = 0.0
             self._stop_pending = False
@@ -139,7 +148,7 @@ class MountWorker:
             self._state.update(
                 phase="connecting", connected=False, model=None,
                 firmware=None, last_error=None, motion_phase="idle",
-                motion_armed=False, motion_direction=None,
+                motion_armed=False, motion_direction=None, jog_speed="slow",
                 last_stop_reason=None, last_stop_sent_utc=None,
                 stop_stable=False, motion_warning=None, **_TELEMETRY
             )
@@ -175,9 +184,11 @@ class MountWorker:
             self._state["motion_armed"] = True
             return True
 
-    def jog(self, direction):
-        if direction not in JOG_COMMANDS or type(direction) is not str:
+    def jog(self, direction, speed="slow"):
+        if type(direction) is not str or direction not in JOG_COMMANDS:
             raise ValueError("Unknown mount direction")
+        if type(speed) is not str or speed not in JOG_SPEEDS:
+            raise ValueError("Unknown mount jog speed; select slow, medium or fast")
         with self._lock:
             if not self._state["connected"] or not self._armed:
                 raise RuntimeError("Enable manual movement first")
@@ -186,9 +197,13 @@ class MountWorker:
             if self._stop_pending or self._stop.is_set():
                 raise RuntimeError("A Stop or disconnect is pending")
             self._pending_direction = direction
+            self._pending_speed = speed
             self._motion_deadline = self._clock() + DEADMAN_SECONDS
-            self._hard_deadline = self._clock() + MAX_JOG_SECONDS
-            self._state.update(motion_phase="starting", motion_direction=direction)
+            self._hard_deadline = self._clock() + min(
+                MAX_JOG_SECONDS, JOG_SPEEDS[speed][1]
+            )
+            self._state.update(motion_phase="starting",
+                               motion_direction=direction, jog_speed=speed)
             return direction
 
     def heartbeat(self, direction):
@@ -200,7 +215,7 @@ class MountWorker:
             # A delayed keepalive cannot revive an expired jog.
             if self._clock() >= self._hard_deadline:
                 self._queue_stop_locked("Maximum jog duration reached")
-                raise RuntimeError("Three-second jog limit reached; Stop requested")
+                raise RuntimeError("Jog speed time limit reached; Stop requested")
             if self._clock() >= self._motion_deadline:
                 self._queue_stop_locked("Deadman heartbeat expired")
                 raise RuntimeError("Manual jog expired and Stop was requested")
@@ -228,7 +243,10 @@ class MountWorker:
             return True
 
     def _write_motion(self, port, command):
-        if command not in (JOG_RATE, STOP_COMMAND, *JOG_COMMANDS.values()):
+        if command not in (
+            STOP_COMMAND, *JOG_COMMANDS.values(),
+            *(rate for rate, _ in JOG_SPEEDS.values())
+        ):
             raise MountProtocolError("Refusing non-whitelisted motion command")
         port.write(command.encode("ascii"))
         port.flush()
@@ -262,10 +280,11 @@ class MountWorker:
                 self._state["motion_phase"] = "stopping"
             elif self._pending_direction is not None:
                 direction = self._pending_direction
+                speed = self._pending_speed
                 self._pending_direction = None
                 self._direction = direction
                 self._ever_moved = True  # ensure a finally-block Stop attempt
-                self._write_motion(port, JOG_RATE)
+                self._write_motion(port, JOG_SPEEDS[speed][0])
                 self._write_motion(port, JOG_COMMANDS[direction])
                 self._state["motion_phase"] = "moving"
 
