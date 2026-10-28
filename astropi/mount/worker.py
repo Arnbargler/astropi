@@ -175,7 +175,6 @@ class MountWorker:
         self._stop_pending = False
         self._environment_pending = False
         self._environment_in_progress = False
-        self._stop_reason = None
         self._ever_moved = False
         self._stop_sent_at = None
         self._stop_attempts = 0
@@ -234,7 +233,7 @@ class MountWorker:
                 time_sync_verified_utc=None, **_TELEMETRY
             )
             self._thread = threading.Thread(
-                target=self._run, name="am3n-readonly", daemon=True
+                target=self._run, name="am3n-serial", daemon=True
             )
             self._thread.start()
             return True
@@ -296,7 +295,6 @@ class MountWorker:
         self._pending_direction = None
         self._motion_deadline = 0.0
         self._stop_pending = True
-        self._stop_reason = reason
         self._state.update(
             motion_armed=False, motion_phase="stopping",
             last_stop_reason=reason, stop_stable=False, motion_warning=None

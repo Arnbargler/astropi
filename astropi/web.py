@@ -31,7 +31,6 @@ def create_app(settings: Settings | None = None, camera=None, lease=None, mount=
     @app.get("/api/status")
     def status():
         data = snapshot(config)
-        data["mode"] = "camera_preview_development"
         camera_state = worker.status()
         data["camera"].update(camera_state)
         data["camera"]["sdk_connected"] = camera_state["phase"] in ("running", "stopping")

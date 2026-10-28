@@ -1,7 +1,7 @@
-"""AM3N read-only protocol tests with an entirely simulated serial device.
+"""AM3N serial, motion and UTC-clock tests using simulated hardware.
 
-No genuine USB/serial access occurs in CI. Connect is explicit, and no tests
-authorize motion, tracking, clock/site or Home/Park setter commands.
+CI never accesses physical serial ports. Tests cover the approved manual
+motion and UTC clock command whitelist; not Home, Park or GoTo setters.
 """
 import time
 

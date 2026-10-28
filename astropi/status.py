@@ -70,7 +70,6 @@ def uptime() -> int | None:
 def snapshot(settings: Settings) -> dict:
     return {
         "utc": datetime.now(timezone.utc).isoformat(),
-        "mode": "read_only_skeleton",
         "camera": {"usb_detected": usb_present("f266", "9a0a", settings.usb_sysfs),
                    "sdk_connected": False},
         "mount": {"usb_detected": usb_present("03c3", "4001", settings.usb_sysfs),

@@ -89,7 +89,7 @@ button:hover:not(:disabled){background:#2a5669}button:disabled{opacity:.38;curso
 #sequence-progress{color:#a0d6c8;font-weight:600;font-size:13px;min-height:20px;font-variant-numeric:tabular-nums}
 
 
-/* AM3N first milestone: read-only mount connection and reported telemetry */
+/* AM3N status, telemetry and mount controls */
 .mount-card .metric{font-size:16px;margin:14px 0 6px}
 .mount-card{display:flex;flex-direction:column;gap:7px}
 .mount-card .button-row{display:flex;flex-wrap:wrap;gap:8px;margin:7px 0}
@@ -102,7 +102,7 @@ button:hover:not(:disabled){background:#2a5669}button:disabled{opacity:.38;curso
 .mount-card .mount-caution{font-size:11px;color:#a8b9c4;border-top:1px solid #344658;padding-top:10px;margin-top:4px}
 
 
-/* AM3N short-duration, low-speed directional holds */
+/* AM3N press-and-hold directional controls */
 .mount-jog-panel{display:flex;flex-direction:column;gap:9px;margin:12px 0 8px;
   padding:12px;border-radius:8px;border:1px solid #486373;background:#0b1620}
 .mount-stop{min-height:49px;background:#782f34!important;color:#fff!important;
@@ -116,7 +116,6 @@ button:hover:not(:disabled){background:#2a5669}button:disabled{opacity:.38;curso
 #mount-east{grid-column:3;grid-row:2}
 #mount-south{grid-column:2;grid-row:3}
 #mount-motion{font-weight:600;color:#b1d7cf;font-size:13px}
-#mount-arm{min-height:37px}
 .mount-jog-panel .mount-caution{border-top:0;margin:0;padding:0}
 
 
