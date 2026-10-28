@@ -249,8 +249,8 @@ class CameraWorker:
                     self._captures.accept_frame(
                         raw, gain=gain, exposure_us=exposure_us, stretch=preview_stretch
                     )
-                # No artificial 250ms throttle, no full-frame backlog.
-                # Copy raw bytes only when the JPEG thread is ready to accept.
+                # Copy raw bytes only when the JPEG thread can accept them;
+                # never build an unbounded full-frame backlog.
                 if not self._stop.is_set() and self._raw_mailbox.empty():
                     try:
                         self._raw_mailbox.put_nowait(raw.raw)

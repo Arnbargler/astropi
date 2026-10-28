@@ -220,7 +220,7 @@
         <p id="mount-raw-status" class="mount-small">Raw :GU#: —</p>
         <p id="mount-update" class="mount-small">Last telemetry: —</p>
         <p id="mount-error" role="alert" class="mount-error"></p>
-        <p class="mount-caution">Coordinates are reported by the mount, not proof of alignment. No Home, GoTo, Park, sky tracking or time/site setters. Manual movement must be explicitly armed and is bounded by a server-side deadman; physical safety remains essential.</p>
+        <p class="mount-caution">Coordinates are reported by the mount, not proof of alignment. No Home, GoTo, Park, sky tracking or time/site setters. Hold a direction to move and release to Stop; the Pi also requests Stop after 600 ms without a valid movement heartbeat.</p>
       </article>
       <article class="card"><h3>Recording drive</h3><div class="metric" id="storage-state">Checking…</div>
         <p id="storage-free">Checking free space…</p><p>All captures require the correct mounted USB UUID. Never writes to microSD.</p></article>

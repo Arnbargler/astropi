@@ -27,10 +27,8 @@ QUERIES = frozenset((
     ":GVP#", ":GV#", ":GU#", ":GA#", ":GZ#", ":GR#", ":GD#",
     *ENVIRONMENT_QUERIES.values()
 ))
-# Rate mapping: :R5# and :Rv120.00# were physically verified in earlier
-# manual AM3N probes. ZWO AM3N supports 8x/20x/60x sidereal rates; 20x and
-# 60x command-specific behaviour still require controlled on-Pi tests.
-# NEVER accept a raw serial command or arbitrary speed from a web request.
+# Fixed AM3N rate whitelist. Never accept raw serial commands or arbitrary
+# browser-supplied speed strings.
 JOG_COMMANDS = {"north": ":Mn#", "south": ":Ms#", "east": ":Me#", "west": ":Mw#"}
 JOG_SPEEDS = {
     "slow": ":R5#",          # ~8x, verified on Pi
@@ -389,8 +387,8 @@ class MountWorker:
                 self._direction = direction
                 self._ever_moved = True  # ensure a finally-block Stop attempt
                 # Always establish the proven slow R5 baseline first. If an
-                # experimental :Rvxx.xx# rate is ignored, the mount should
-                # remain at the verified 8x rate, not inherit an unknown HC rate.
+                # a rate request is ignored, the mount should remain at the
+                # verified 8x rate, not inherit an unknown hand-controller rate.
                 self._write_motion(port, JOG_RATE)
                 if speed != "slow":
                     self._write_motion(port, JOG_SPEEDS[speed])
