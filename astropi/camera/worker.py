@@ -9,7 +9,7 @@ from queue import Empty, Full, Queue
 import threading
 import time
 
-from .sdk import SVBDriver, SDKError, RAW_BYTES, GAIN, EXPOSURE
+from .sdk import SVBDriver, SDKError, RAW_BYTES, GAIN, EXPOSURE, frame_bytes, frame_dimensions, SUPPORTED_BINNING
 from .preview import raw16_to_jpeg, raw16_statistics
 
 
@@ -51,6 +51,8 @@ class CameraWorker:
         self._preview_ms = 0.0
         self._preview_mode = "auto"
         self._debayer = True
+        self._binning = 1
+        self._reconfigure_binning = False
         self._raw_mean_adu = None
         self._raw_p99_adu = None
         self._raw_saturated_percent = None
@@ -66,6 +68,8 @@ class CameraWorker:
                 "preview_fps": self._preview_fps,
                 "preview_processing_ms": self._preview_ms,
                 "preview_mode": self._preview_mode, "debayer": self._debayer,
+                "binning": self._binning, "width": frame_dimensions(self._binning)[0],
+                "height": frame_dimensions(self._binning)[1],
                 "raw_mean_adu": self._raw_mean_adu,
                 "raw_p99_adu": self._raw_p99_adu,
                 "raw_saturated_percent": self._raw_saturated_percent,
@@ -102,6 +106,8 @@ class CameraWorker:
         with self._lock:
             if self._thread is not None and self._thread.is_alive():
                 return False
+            if self._reconfigure_binning:
+                return False
             self._stop = threading.Event()
             self._raw_mailbox = Queue(maxsize=1)
             self._pending_settings = None
@@ -122,9 +128,36 @@ class CameraWorker:
         with self._lock:
             if self._thread is None or not self._thread.is_alive():
                 return False
+            self._reconfigure_binning = False  # Stop cancels an automatic restart.
             self._phase = "stopping"
             self._stop.set()
             return True
+
+    def set_binning(self, binning):
+        """Switch between the *documented* 1x1 and 2x2 SDK modes.
+
+        The existing stream must be stopped; the same SDK worker reopens a
+        fresh camera session, rather than restarting capture on an old handle.
+        Never interrupt an exposure whose RAW data is being written.
+        """
+        frame_dimensions(binning)  # strict validation before mutating state
+        with self._lock:
+            if self._phase not in ("stopped", "error", "running"):
+                raise RuntimeError("Wait for camera connection/reconfiguration to finish")
+            if self._captures is not None and self._captures.status()["phase"] in (
+                "waiting", "saving",
+            ):
+                raise RuntimeError("Cannot change binning during a capture or sequence")
+            if self._settings_applied_id < self._settings_request_id:
+                raise RuntimeError("Wait for pending exposure/gain settings")
+            if self._binning == binning:
+                return binning
+            self._binning = binning
+            if self._phase == "running":
+                self._reconfigure_binning = True
+                self._phase = "reconfiguring"
+                self._stop.set()
+            return binning
 
     def configure(self, gain, exposure_us):
         if type(gain) is not int or gain not in GAIN_PRESETS:
@@ -161,7 +194,7 @@ class CameraWorker:
         try:
             while not self._stop.is_set():
                 try:
-                    raw = self._raw_mailbox.get(timeout=0.15)
+                    raw, binning = self._raw_mailbox.get(timeout=0.15)
                 except Empty:
                     continue
                 if self._stop.is_set():
@@ -169,8 +202,13 @@ class CameraWorker:
                 with self._lock:
                     mode, debayer = self._preview_mode, self._debayer
                 t0 = time.monotonic()
-                stats = raw16_statistics(raw)
-                jpeg = raw16_to_jpeg(raw, stretch=mode, debayer=debayer)
+                if binning == 1:
+                    stats = raw16_statistics(raw)
+                    jpeg = raw16_to_jpeg(raw, stretch=mode, debayer=debayer)
+                else:
+                    stats = raw16_statistics(raw, binning=binning)
+                    jpeg = raw16_to_jpeg(raw, stretch=mode, debayer=debayer,
+                                         binning=binning)
                 finished = time.monotonic()
                 duration_ms = (finished - t0) * 1000.0
                 interval = finished - last_preview_complete if last_preview_complete is not None else None
@@ -192,6 +230,27 @@ class CameraWorker:
             self._stop.set()
 
     def _run(self):
+        """Only this thread owns the SDK, including re-open for binning."""
+        while True:
+            self._run_session()
+            with self._lock:
+                if not self._reconfigure_binning or self._phase == "error":
+                    self._reconfigure_binning = False
+                    return
+                self._reconfigure_binning = False
+                self._stop = threading.Event()
+                self._raw_mailbox = Queue(maxsize=1)
+                self._pending_settings = None
+                self._preview_thread = None
+                self._phase = "connecting"
+                self._error = self._preview_error = None
+                self._image = None
+                self._sequence = 0
+                self._settings_request_id = self._settings_applied_id = 0
+                self._capture_fps = self._preview_fps = self._preview_ms = 0.0
+                self._raw_mean_adu = self._raw_p99_adu = self._raw_saturated_percent = None
+
+    def _run_session(self):
         driver = None
         error = None
         try:
@@ -200,14 +259,16 @@ class CameraWorker:
             driver = self._driver_factory()
             driver.open()
             with self._lock:
-                gain, exposure_us = self._gain, self._exposure_us
+                gain, exposure_us, binning = self._gain, self._exposure_us, self._binning
+            if binning != 1:
+                driver.configure_binning(binning)
             # Exposure-before-gain is needed by the tested SVBONY SDK.
             exposure_us = driver.set_control(EXPOSURE, exposure_us)
             gain = driver.set_control(GAIN, gain)
             with self._lock:
                 self._gain, self._exposure_us = gain, exposure_us
             driver.start()  # only ONE stream start per camera open session
-            raw = C.create_string_buffer(RAW_BYTES)
+            raw = C.create_string_buffer(frame_bytes(binning))
             last_capture = None
             timeouts = 0
             with self._lock:
@@ -246,14 +307,20 @@ class CameraWorker:
                 if self._captures is not None and not self._stop.is_set():
                     with self._lock:
                         preview_stretch = self._preview_mode
-                    self._captures.accept_frame(
-                        raw, gain=gain, exposure_us=exposure_us, stretch=preview_stretch
-                    )
+                    if binning == 1:
+                        self._captures.accept_frame(
+                            raw, gain=gain, exposure_us=exposure_us, stretch=preview_stretch
+                        )
+                    else:
+                        self._captures.accept_frame(
+                            raw, gain=gain, exposure_us=exposure_us,
+                            stretch=preview_stretch, binning=binning
+                        )
                 # Copy raw bytes only when the JPEG thread can accept them;
                 # never build an unbounded full-frame backlog.
                 if not self._stop.is_set() and self._raw_mailbox.empty():
                     try:
-                        self._raw_mailbox.put_nowait(raw.raw)
+                        self._raw_mailbox.put_nowait((raw.raw, binning))
                     except Full:
                         pass
         except Exception as exc:
@@ -272,6 +339,7 @@ class CameraWorker:
                     if error is None:
                         error = f"SDK cleanup failed: {exc}"
             with self._lock:
-                self._phase = "error" if error or self._preview_error else "stopped"
+                self._phase = ("error" if error or self._preview_error else
+                               "reconfiguring" if self._reconfigure_binning else "stopped")
                 self._error = error or self._preview_error
                 self._image = None

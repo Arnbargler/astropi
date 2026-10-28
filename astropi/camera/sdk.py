@@ -8,6 +8,19 @@ import os
 WIDTH, HEIGHT = 3856, 2180
 RAW_BYTES = WIDTH * HEIGHT * 2
 GAIN, EXPOSURE, RAW16 = 0, 1, 4
+SUPPORTED_BINNING = (1, 2)  # SV705C product manual; 3/4 are not approved for this camera
+
+
+def frame_dimensions(binning=1):
+    if type(binning) is not int or binning not in SUPPORTED_BINNING:
+        raise ValueError("SV705C supports binning 1x1 and 2x2 only")
+    return WIDTH // binning, HEIGHT // binning
+
+
+def frame_bytes(binning=1):
+    width, height = frame_dimensions(binning)
+    return width * height * 2
+
 
 
 class CameraInfo(C.Structure):
@@ -89,6 +102,13 @@ class SVBDriver:
         except Exception:
             self.close()
             raise
+
+    def configure_binning(self, binning):
+        """ROI width/height are post-binning; only call before streaming."""
+        width, height = frame_dimensions(binning)
+        if self.streaming:
+            raise RuntimeError("Stop camera acquisition before configuring binning")
+        self._ok("SVBSetROIFormat", self.camera_id, 0, 0, width, height, binning)
 
     def start(self):
         self._ok("SVBStartVideoCapture", self.camera_id)

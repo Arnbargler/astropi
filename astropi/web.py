@@ -153,6 +153,18 @@ def create_app(settings: Settings | None = None, camera=None, lease=None, mount=
             return jsonify(error="Camera command queue is full"), 429
         return jsonify(ok=True, request_id=request_id), 202
 
+    @app.post("/api/camera/binning")
+    def camera_binning():
+        require_operator()
+        payload = request.get_json(silent=True) or {}
+        try:
+            binning = worker.set_binning(payload.get("binning"))
+        except ValueError as exc:
+            return jsonify(error=str(exc)), 400
+        except RuntimeError as exc:
+            return jsonify(error=str(exc)), 409
+        return jsonify(ok=True, binning=binning), 202
+
     @app.post("/api/camera/preview-mode")
     def camera_preview_mode():
         require_operator()

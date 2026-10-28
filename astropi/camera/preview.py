@@ -9,7 +9,7 @@ from io import BytesIO
 import numpy as np
 from PIL import Image
 
-from .sdk import WIDTH, HEIGHT, RAW_BYTES
+from .sdk import WIDTH, HEIGHT, frame_dimensions, frame_bytes
 
 _LEVELS = np.arange(4096, dtype=np.float32)
 # Precompute fixed gamma so preview processing requires no per-pixel power().
@@ -27,16 +27,26 @@ def _stretch_lut(plane, stretch):
     return (np.power(scaled, 0.8) * 255).astype(np.uint8)
 
 
-def raw16_to_jpeg(raw, stretch="auto", debayer=True) -> bytes:
+def raw16_to_jpeg(raw, stretch="auto", debayer=True, *, binning=1) -> bytes:
     """Render a colour or fast greyscale JPEG without modifying RAW16 pixels."""
     if stretch not in ("auto", "fixed"):
         raise ValueError("Unsupported preview stretch mode")
     if type(debayer) is not bool:
         raise ValueError("debayer must be a boolean")
-    if memoryview(raw).nbytes != RAW_BYTES:
+    width, height = frame_dimensions(binning)
+    if memoryview(raw).nbytes != frame_bytes(binning):
         raise ValueError("Unexpected SV705C RAW16 buffer length")
 
-    pixels = np.frombuffer(raw, dtype="<u2", count=WIDTH * HEIGHT).reshape(HEIGHT, WIDTH)
+    pixels = np.frombuffer(raw, dtype="<u2", count=width * height).reshape(height, width)
+    if binning == 2:
+        # SV705C 2x2 Bayer semantics have not yet been verified on Pi.
+        # Show a truthful mono preview rather than assume GRBG survived binning.
+        mono = pixels[::2, ::2] >> 4
+        out = BytesIO()
+        Image.fromarray(_stretch_lut(mono, stretch)[mono], "L").save(
+            out, format="JPEG", quality=80
+        )
+        return out.getvalue()
     if not debayer:
         # Bayer GRBG begins with green. One green pixel per 4x4 mosaic block.
         # This is sensor-sampled monochrome, not a separate greyscale exposure.
@@ -65,11 +75,12 @@ def raw16_to_jpeg(raw, stretch="auto", debayer=True) -> bytes:
     return out.getvalue()
 
 
-def raw16_statistics(raw) -> dict:
+def raw16_statistics(raw, *, binning=1) -> dict:
     """Sparse, un-stretched 12-bit sensor statistics for gain/exposure diagnosis."""
-    if memoryview(raw).nbytes != RAW_BYTES:
+    width, height = frame_dimensions(binning)
+    if memoryview(raw).nbytes != frame_bytes(binning):
         raise ValueError("Unexpected SV705C RAW16 buffer length")
-    pixels = np.frombuffer(raw, dtype="<u2", count=WIDTH * HEIGHT).reshape(HEIGHT, WIDTH)
+    pixels = np.frombuffer(raw, dtype="<u2", count=width * height).reshape(height, width)
     sample = pixels[::16, ::16] >> 4
     return {
         "raw_mean_adu": round(float(sample.mean()), 1),
