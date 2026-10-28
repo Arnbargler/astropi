@@ -12,6 +12,8 @@ let staged = false;
 let pendingSettingsId = null;
 let stretchChangePending = false;
 let debayerChangePending = false;
+let binningChangePending = false;
+let selectedBinning = 1;
 let previousFrame = -1;
 let progressBusy = false;
 let storageReady = false;
@@ -46,6 +48,7 @@ function freeSpace(bytes) {
 function renderSelections() {
   for (const v of exposurePresets) $("exposure-" + v).checked = v === desiredExposureUs;
   for (const v of gainPresets) $("gain-" + v).checked = v === desiredGain;
+  for (const bin of [1, 2]) $("binning-" + bin).checked = bin === selectedBinning;
 }
 function toggleView(prefix, first, second, activeFirst) {
   const a = $(prefix + "-" + first), b = $(prefix + "-" + second);
@@ -92,6 +95,11 @@ function updateButtons() {
     count < 2 || count > 100;
   $("sequence-count").disabled = !owner || captureBusy || captureRequestPending;
   $("cancel-sequence").disabled = !owner || !sequenceActive;
+  for (const bin of [1, 2])
+    $("binning-" + bin).disabled = !owner || binningChangePending ||
+      !["stopped", "error", "running"].includes(currentPhase) ||
+      captureBusy || captureRequestPending || sendBusy || staged ||
+      pendingSettingsId !== null;
 
   const active = owner && currentPhase === "running";
   for (const v of exposurePresets) $("exposure-" + v).disabled = !active || sequenceActive;
@@ -185,6 +193,30 @@ for (const value of gainPresets) {
     renderSelections();
     return applySelected();
   });
+}
+async function changeBinning(binning) {
+  if (!token || binningChangePending || captureBusy || captureRequestPending) return;
+  binningChangePending = true;
+  updateButtons();
+  write("binning-message", "Reconfiguring camera for " + binning + "×" + binning + "…");
+  try {
+    await post("/api/camera/binning", {binning});
+    selectedBinning = binning;
+    write("binning-message", "Binning " + binning + "×" + binning +
+      " selected · camera reopens if it was running");
+    write("camera-error", "");
+  } catch (error) {
+    write("camera-error", error.message);
+    write("binning-message", "Binning unchanged");
+  } finally {
+    binningChangePending = false;
+    renderSelections();
+    updateButtons();
+    await refresh();
+  }
+}
+for (const bin of [1, 2]) {
+  $("binning-" + bin).addEventListener("change", () => changeBinning(bin));
 }
 $("take-control").addEventListener("click", async () => {
   try {
@@ -540,6 +572,17 @@ function showCapture(job) {
 }
 function showProgress(data) {
   currentPhase = data.phase;
+  if (!binningChangePending && [1, 2].includes(data.binning)) {
+    selectedBinning = data.binning;
+    renderSelections();
+  }
+  if ([1, 2].includes(data.binning)) {
+    write("binning-readback", "Binning: " + data.binning + "×" +
+      data.binning + " · " + (data.width || 3856) + "×" +
+      (data.height || 2180));
+  }
+  if (data.phase === "reconfiguring")
+    write("binning-message", "Reopening camera with selected binning…");
   if (data.capture) showCapture(data.capture);
   write("camera-phase", "Camera: " + data.phase);
   const fps = typeof data.preview_fps === "number" ? data.preview_fps.toFixed(1) + " fps" : "— fps";
@@ -599,7 +642,7 @@ async function refresh() {
   }
 }
 async function pollPreview() {
-  if (progressBusy || !["connecting", "running", "stopping"].includes(currentPhase)) return;
+  if (progressBusy || !["connecting", "running", "stopping", "reconfiguring"].includes(currentPhase)) return;
   progressBusy = true;
   try {
     const response = await fetch("/api/camera/progress", {cache:"no-store"});

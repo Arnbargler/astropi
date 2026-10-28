@@ -99,6 +99,16 @@
           <label for="gain-100" class="preset-choice">100</label>
         </div>
         <p class="hint" id="gain-readback">Gain readback: —</p>
+        <span class="control-label">Binning</span>
+        <div class="preset-grid gain-grid" id="binning-buttons"
+             role="group" aria-label="Camera hardware binning">
+          <input type="radio" class="preset-input" id="binning-1" name="binning" value="1" checked disabled>
+          <label for="binning-1" class="preset-choice">1×1</label>
+          <input type="radio" class="preset-input" id="binning-2" name="binning" value="2" disabled>
+          <label for="binning-2" class="preset-choice">2×2</label>
+        </div>
+        <p id="binning-readback" class="hint">Binning: 1×1 · 3856×2180</p>
+        <p id="binning-message" class="hint" role="status">Binning change restarts the camera session; unavailable while saving.</p>
         <div class="stretch-row">
           <span id="stretch-label">Stretch</span>
           <div class="stretch-switch" role="group" aria-labelledby="stretch-label">
@@ -115,7 +125,7 @@
             <button type="button" id="debayer-off" class="stretch-choice" aria-pressed="false" disabled>Off</button>
           </div>
         </div>
-        <p class="hint">Stretch A/F: adaptive or fixed brightness. Debayer On: colour; Off: faster monochrome sampled from the Bayer sensor.</p>
+        <p class="hint">Stretch A/F: adaptive or fixed brightness. At 1×1, Debayer On: colour; Off: monochrome. At 2×2 the preview and quicklooks are monochrome until Bayer layout is verified; RAW16 and FITS still preserve the binned samples.</p>
         <p id="raw-metrics">Raw sensor signal: waiting for frames…</p>
         <p id="settings-message" role="status" class="settings-message"></p>
         <p id="camera-error" role="alert"></p>
