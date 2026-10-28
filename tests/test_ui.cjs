@@ -585,9 +585,9 @@ test("1080p dashboard is full-width, keeps all functional controls and stays res
   assert.match(html,/class="dashboard-grid"/);
   assert.match(html,/class="imaging-column"/);
   assert.match(html,/class="health-strip"/);
-  assert.ok(html.indexOf('class="preview-card"') < html.indexOf('class="save-panel"'));
-  assert.ok(html.indexOf('class="save-panel"') < html.indexOf('class="controls"'));
-  assert.ok(html.indexOf('class="controls"') < html.indexOf('class="mount-card"'));
+  assert.ok(html.indexOf('class="card preview-card"') < html.indexOf('class="card save-panel"'));
+  assert.ok(html.indexOf('class="card save-panel"') < html.indexOf('class="card controls"'));
+  assert.ok(html.indexOf('class="card controls"') < html.indexOf('class="card mount-card"'));
   assert.ok(html.indexOf('class="mount-jog-panel"') < html.indexOf('class="mount-environment"'),
     "Mount Stop and jog controls are more prominent than secondary clock readbacks");
   for (const id of [
