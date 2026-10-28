@@ -117,6 +117,9 @@ function harness() {
     }
     throw Error("Unexpected request: "+url);
   };
+  // The real template initially checks FITS and JPG; emulate those DOM defaults.
+  el("capture-fits").checked = true;
+  el("capture-jpg").checked = true;
   const code = fs.readFileSync(path.join(__dirname,"../astropi/static/app.js"),"utf8");
   vm.runInNewContext(code, {
     document:{getElementById:el,
