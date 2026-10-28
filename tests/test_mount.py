@@ -446,7 +446,9 @@ def test_fast_speed_caps_at_one_second_even_with_keepalive(tmp_path):
         except RuntimeError:
             break
         time.sleep(0.12)
-    assert ":Q#" in factory.ports[0].commands
+    # HTTP heartbeat can discover expiry before the serial-owner thread
+    # finishes its queued Stop write. Wait for the actual :Q# transmission.
+    wait_until(lambda:":Q#" in factory.ports[0].commands,timeout=3)
     assert worker.status()["last_stop_reason"]=="Maximum jog duration reached"
     worker.disconnect()
     worker._thread.join(timeout=3)
