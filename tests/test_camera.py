@@ -308,7 +308,7 @@ def test_binning_geometry_is_sensor_documented_1x_2x_only():
     assert frame_dimensions(1) == (3856, 2180)
     assert frame_dimensions(2) == (1928, 1090)
     assert frame_bytes(1) == RAW_BYTES
-    assert frame_bytes(2) == 4_203_520
+    assert frame_bytes(2) == 4_203_040
     for bad in (0, 3, 4, None, "2", 2.0, True):
         with __import__("pytest").raises(ValueError):
             frame_dimensions(bad)
