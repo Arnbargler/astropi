@@ -17,6 +17,7 @@ function harness() {
   let capture = {phase:"idle",files:[],directory:null,total_frames:0,completed_frames:0,directories:[]};
   let mount = {phase:"disconnected",connected:false,model:null,firmware:null,
     motion_phase:"idle",motion_armed:false,stop_stable:false,motion_warning:null,
+    jog_speed:"slow",
     altitude_text:null,azimuth_text:null,ra_text:null,dec_text:null,
     raw_status:null,updated_utc:null,last_error:null};
   let camera = {
@@ -354,6 +355,7 @@ test("motion buttons cannot command mount without operator and explicit arm",asy
   let requests=h.calls.filter(c=>c.url==="/api/mount/jog");
   assert.equal(requests.length,1);
   assert.equal(requests[0].payload.direction,"east");
+  assert.equal(requests[0].payload.speed,"slow");
   await h.intervals.get(150)();
   assert.equal(h.calls.filter(c=>c.url==="/api/mount/jog-heartbeat").length,1);
   h.documentEvent("pointerup");
@@ -393,4 +395,40 @@ test("emergency stop is available in the UI without owning operator lease",async
   assert.equal(h.el("mount-stop").disabled,false);
   await h.el("mount-stop").dispatch("click");
   assert.equal(h.calls.filter(c=>c.url==="/api/mount/stop").length,1);
+});
+
+
+test("mount speed presets bind to jog requests and lock while armed",async()=>{
+  const h=harness();
+  await h.flush();
+  await h.el("take-control").dispatch("click");
+  await h.el("mount-connect").dispatch("click");
+  assert.equal(h.el("mount-speed-slow").checked,true);
+  assert.equal(h.el("mount-speed-medium").disabled,false);
+  h.el("mount-speed-medium").dispatch("change");
+  assert.equal(h.el("mount-speed-medium").checked,true);
+  await h.el("mount-arm").dispatch("click");
+  assert.equal(h.el("mount-speed-fast").disabled,true);
+  await h.el("mount-east").dispatch("pointerdown");
+  const requests=h.calls.filter(x=>x.url==="/api/mount/jog");
+  assert.equal(requests.length,1);
+  assert.deepEqual(requests[0].payload,{direction:"east",speed:"medium"});
+  h.documentEvent("pointerup");
+  await h.flush();
+  assert.equal(h.el("mount-speed-fast").disabled,true);
+  h.updateMount({motion_phase:"idle",motion_armed:false,stop_stable:true});
+  await h.intervals.get(1000)();
+  assert.equal(h.el("mount-speed-fast").disabled,false);
+});
+
+test("reconnect always restores slow mount speed",async()=>{
+  const h=harness();
+  await h.flush();
+  await h.el("take-control").dispatch("click");
+  await h.el("mount-connect").dispatch("click");
+  h.el("mount-speed-fast").dispatch("change");
+  assert.equal(h.el("mount-speed-fast").checked,true);
+  await h.el("mount-disconnect").dispatch("click");
+  await h.el("mount-connect").dispatch("click");
+  assert.equal(h.el("mount-speed-slow").checked,true);
 });
