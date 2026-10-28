@@ -167,19 +167,6 @@
         <p id="mount-model">Model / firmware: —</p>
         <p id="mount-time-sync" role="status">Pi NTP → mount clock: waiting to connect</p>
         <p id="mount-time-sync-error" role="alert" class="mount-error"></p>
-        <div class="mount-environment">
-          <button type="button" id="mount-read-environment" disabled>Refresh Clock / Site</button>
-          <p id="mount-environment-state" role="status">Clock/site not read</p>
-          <div class="mount-coordinates" aria-label="Mount stored clock and observing site">
-            <div><span>Mount date</span><strong id="mount-env-date">—</strong></div>
-            <div><span>Mount time (UTC)</span><strong id="mount-env-time">—</strong></div>
-            <div><span>UTC offset</span><strong id="mount-env-offset">—</strong></div>
-            <div><span>Sidereal time</span><strong id="mount-env-sidereal">—</strong></div>
-            <div><span>Stored latitude</span><strong id="mount-env-latitude">—</strong></div>
-            <div><span>Stored longitude (W+)</span><strong id="mount-env-longitude">—</strong></div>
-          </div>
-          <p id="mount-environment-error" role="alert" class="mount-error"></p>
-        </div>
         <div class="mount-coordinates" aria-label="Mount reported coordinates">
           <div><span>Altitude</span><strong id="mount-altitude">—</strong></div>
           <div><span>Azimuth</span><strong id="mount-azimuth">—</strong></div>
@@ -218,8 +205,21 @@
             <button type="button" id="mount-east" disabled aria-label="Hold to move azimuth east">E →</button>
             <button type="button" id="mount-south" disabled aria-label="Hold to move altitude south">S ↓</button>
           </div>
-          <p id="mount-motion" role="status" aria-live="polite">Hold a direction to move</p>
+          <p id="mount-motion" role="status" aria-live="polite">Idle</p>
           <p id="mount-motion-warning" role="alert" class="mount-error"></p>
+        </div>
+        <div class="mount-environment">
+          <button type="button" id="mount-read-environment" disabled>Refresh Clock / Site</button>
+          <p id="mount-environment-state" role="status">Clock/site not read</p>
+          <div class="mount-coordinates" aria-label="Mount stored clock and observing site">
+            <div><span>Mount date</span><strong id="mount-env-date">—</strong></div>
+            <div><span>Mount time (UTC)</span><strong id="mount-env-time">—</strong></div>
+            <div><span>UTC offset</span><strong id="mount-env-offset">—</strong></div>
+            <div><span>Sidereal time</span><strong id="mount-env-sidereal">—</strong></div>
+            <div><span>Stored latitude</span><strong id="mount-env-latitude">—</strong></div>
+            <div><span>Stored longitude (W+)</span><strong id="mount-env-longitude">—</strong></div>
+          </div>
+          <p id="mount-environment-error" role="alert" class="mount-error"></p>
         </div>
         <p id="mount-flags">Status flags: —</p>
         <p id="mount-raw-status" class="mount-small">Raw :GU#: —</p>

@@ -399,10 +399,9 @@ function showMount(data) {
   write("mount-environment-error", data.environment_error || "");
   write("mount-phase", "Connection: " + mountPhase);
   const motionDescription = {
-    idle: data.stop_stable ? "Reported axes stable after Stop · hold to move" :
-      "Hold a direction to move",
-    starting: "Starting manual jog · hold button",
-    moving: "Jog " + (data.jog_speed || "slow") + " in progress · release for Stop",
+    idle: data.stop_stable ? "Axes stable" : "Idle",
+    starting: "Starting jog",
+    moving: "Jog " + (data.jog_speed || "slow") + " active",
     stopping: "Stop requested · checking position stability…",
     uncertain: "STOP NOT CONFIRMED — use physical Cancel/power!",
     disconnecting: "Disconnecting (Stop attempted if necessary)"
