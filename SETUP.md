@@ -14,8 +14,9 @@ checker passed against a real previously saved four-format camera capture:
 all four file size/hash checks passed, FITS structure and 12-bit range passed,
 and every FITS Bayer pixel matched the corresponding RAW16 sensor value.
 
-No mount movement, tracking, plate solving or fixed-interval sequence
-scheduling has been added. The camera SDK stream remains continuous.
+Low-speed manual mount jog and Stop have been added and E/N/S directions
+are user-verified. No Home/GoTo, sky tracking, plate solving or fixed-interval
+sequence scheduling has been added. The camera SDK stream remains continuous.
 
 ## Install
 
@@ -169,8 +170,9 @@ First Pi motion screenshot pair (2026-10-27): azimuth was reported as
 That first screenshot pair showed real manual movement and reported settling.
 After reboot, the user completed a controlled E-jog/release trial and confirmed
 that movement and stopping behaved as expected. No exact measured travel or
-hold time was supplied for the isolated test; North/South and the actual
-server-side heartbeat timeout remain unverified on real hardware. The observed 5′57″ is approximately 3s at the
+hold time was supplied for the isolated test; North and South jog/release were subsequently reported working on the real
+mount at the deliberately slow R5 speed. West and actual watchdog expiry
+remain unverified on real hardware. The observed 5′57″ is approximately 3s at the
 previously tested ~2′/s R5 rate; confirm the hold time before further tests.
 
 This is a **controlled movement trial**. Keep cables, cameras and people
