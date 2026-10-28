@@ -1,5 +1,19 @@
 # AstroPi — counted exposure sequences (2026-10-27)
 
+## Current AM3N manual controls
+
+Press and hold any direction button immediately once **Take Control** and
+**Connect Mount** have succeeded; there is **no separate Arm step**.
+Release to stop. Slow 8×, Medium 20×, Fast 60×, Slew 720× and Max 1440×
+are available; the last two need verification on the real AM3N. Fixed
+duration caps are removed. Emergency Stop and the independent 600ms
+lost-heartbeat timeout are unchanged. The serial owner waits for mount
+position to settle before accepting another jog. Speed defaults to Slow
+on reconnect.
+
+Historic manual jog tests and their old Arm/3s instructions later in
+this file are retained for reference; **use these current instructions**.
+
 ## Verification status
 
 SV705C live preview, gain/exposure response and RAW/FITS/JPG/PNG single
