@@ -14,6 +14,14 @@ from astropi.mount.worker import (
 from astropi.web import create_app
 
 
+@pytest.fixture(autouse=True)
+def default_no_host_ntp_in_serial_tests(monkeypatch):
+    # Existing fake serial tests never depend on CI runner's system clock.
+    # New sync tests explicitly inject a synchronized Pi and deterministic UTC.
+    monkeypatch.setattr("astropi.mount.worker.system_ntp_synchronized",
+                        lambda: False)
+
+
 RESPONSES = {
     ":GVP#": "AM3N", ":GV#": "1.8.8", ":GU#": "nNHZM040400990",
     ":GA#": "+01*30:50", ":GZ#": "013*43:10",
@@ -587,3 +595,164 @@ def test_stop_pending_blocks_direct_jog_before_axes_stabilize(tmp_path):
     wait_until(lambda: worker.status()["stop_stable"], timeout=5)
     worker.disconnect()
     worker._thread.join(timeout=3)
+
+
+
+class ClockSyncFakePort(FakePort):
+    """Simulate AM3N's single-byte setter ACK plus #-terminated getters."""
+    def __init__(self, *, failed_ack=None, old_readback=False):
+        super().__init__({
+            **RESPONSES,
+            ":GG#": "+00:00", ":GC#": "01/01/00", ":GL#": "01:12:54",
+            ":Gt#": "+45*17:36", ":Gg#": "+075*51:26", ":GS#": "01:13:07",
+        })
+        self.failed_ack = failed_ack
+        self.old_readback = old_readback
+
+    def write(self, data):
+        cmd = data.decode("ascii")
+        if cmd.startswith((":SG", ":SC", ":SL")):
+            self.commands.append(cmd)
+            self.last = cmd
+            if not self.old_readback:
+                if cmd.startswith(":SG"):
+                    self.responses[":GG#"] = cmd[3:-1]
+                elif cmd.startswith(":SC"):
+                    self.responses[":GC#"] = cmd[3:-1]
+                else:
+                    self.responses[":GL#"] = cmd[3:-1]
+            return
+        super().write(data)
+
+    def read(self, length):
+        assert length == 1
+        return b"0" if self.last.startswith(self.failed_ack or "NEVER") else b"1"
+
+
+class ClockSyncFactory(FakeFactory):
+    def __init__(self, **kw):
+        super().__init__()
+        self.kw = kw
+
+    def __call__(self, **kwargs):
+        assert kwargs["baudrate"] == 9600
+        port = ClockSyncFakePort(**self.kw)
+        self.ports.append(port)
+        return port
+
+
+def test_utc_mount_setter_format_and_readback_parser():
+    from astropi.mount.worker import utc_sync_commands, parse_mount_utc, ClockSyncError
+    from datetime import datetime, timedelta, timezone
+
+    toronto = timezone(timedelta(hours=-4))
+    instant = datetime(2026, 10, 28, 4, 33, 7, tzinfo=toronto)
+    assert utc_sync_commands(instant) == (
+        ":SG+00:00#", ":SC10/28/26#", ":SL08:33:07#"
+    )
+    assert parse_mount_utc("10/28/26", "08:33:07") == instant.astimezone(timezone.utc)
+    assert utc_sync_commands(datetime(2026, 12, 31, 23, 59, 59, tzinfo=timezone.utc))[1:] == (
+        ":SC12/31/26#", ":SL23:59:59#"
+    )
+    for date, clock in (("02/30/26", "08:00:00"), ("02/28/26", "25:12:00"),
+                        ("10/28/26#", "09:00:00"), ("01/01/00", "bad")):
+        with pytest.raises(ClockSyncError):
+            parse_mount_utc(date, clock)
+    with pytest.raises(ClockSyncError):
+        utc_sync_commands(datetime(2000,1,1,tzinfo=timezone.utc))
+    with pytest.raises(ClockSyncError):
+        utc_sync_commands(datetime(2026,10,28,8,33,7))
+
+
+def test_clock_sync_automatically_on_connect_and_populates_site_snapshot(tmp_path):
+    from datetime import datetime, timezone
+    port_alias = tmp_path / "by-id-am3"
+    port_alias.touch()
+    moment = datetime(2026, 10, 28, 8, 33, 7, tzinfo=timezone.utc)
+    factory = ClockSyncFactory()
+    mount = MountWorker(port_alias, serial_factory=factory, poll_interval=0.05,
+                        ntp_checker=lambda: True, utc_clock=lambda: moment)
+    assert not factory.ports
+    mount.connect()
+    wait_until(lambda: mount.status()["time_sync_phase"] == "verified")
+    wait_until(lambda: mount.status()["environment_phase"] == "ready")
+    assert mount.status()["connected"]
+    assert mount.status()["time_sync_verified_utc"] == moment.isoformat()
+    port = factory.ports[0]
+    cmds = port.commands
+    setters = [c for c in cmds if c.startswith((":SG", ":SC", ":SL"))]
+    assert setters == [":SG+00:00#", ":SC10/28/26#", ":SL08:33:07#"]
+    assert cmds.index(":GL#") > cmds.index(":SL08:33:07#")
+    assert mount.status()["environment"]["date"] == "10/28/26"
+    assert mount.status()["environment"]["local_time"] == "08:33:07"
+    assert mount.status()["environment"]["latitude"] == "+45*17:36"
+    assert mount.status()["environment"]["longitude_west"] == "+075*51:26"
+    assert not any(c.startswith((":St", ":Sg", ":hC", ":MS")) for c in cmds)
+    mount.disconnect()
+    mount._thread.join(timeout=3)
+    assert port.closed
+    assert mount.status()["time_sync_phase"] == "idle"
+    # A NEW connection sets and verifies live clock again.
+    mount.connect()
+    wait_until(lambda: mount.status()["time_sync_phase"] == "verified")
+    assert len(factory.ports) == 2
+    mount.disconnect()
+    mount._thread.join(timeout=3)
+
+
+def test_clock_sync_fails_closed_when_pi_ntp_not_synchronized(tmp_path):
+    alias = tmp_path / "am3"
+    alias.touch()
+    factory = ClockSyncFactory()
+    mount = MountWorker(alias, serial_factory=factory, poll_interval=0.05,
+                        ntp_checker=lambda: False)
+    mount.connect()
+    wait_until(lambda: mount.status()["connected"])
+    state = mount.status()
+    assert state["time_sync_phase"] == "error"
+    assert state["time_sync_verified_utc"] is None
+    assert "not confirmed NTP" in state["time_sync_error"]
+    assert not any(c.startswith((":SG", ":SC", ":SL")) for c in factory.ports[0].commands)
+    mount.disconnect()
+    mount._thread.join(timeout=3)
+
+
+@pytest.mark.parametrize("port_args, message", [
+    ({"failed_ack":":SC"}, "rejected"),
+    ({"old_readback":True}, "verification failed"),
+])
+def test_clock_sync_does_not_claim_success_on_rejected_or_stale_readback(
+    tmp_path, port_args, message
+):
+    from datetime import datetime, timezone
+    alias = tmp_path / "am3"
+    alias.touch()
+    fixed = datetime(2026, 10, 28, 8, 33, 7, tzinfo=timezone.utc)
+    factory = ClockSyncFactory(**port_args)
+    mount = MountWorker(alias, serial_factory=factory, poll_interval=0.05,
+                        ntp_checker=lambda: True, utc_clock=lambda: fixed)
+    mount.connect()
+    wait_until(lambda: mount.status()["connected"])
+    assert mount.status()["time_sync_phase"] == "error"
+    assert message in mount.status()["time_sync_error"]
+    assert mount.status()["time_sync_verified_utc"] is None
+    # Manually jogging is independent, but no clock VERIFIED status is invented.
+    mount.disconnect()
+    mount._thread.join(timeout=3)
+
+
+def test_ntp_status_checks_systemd_report_not_merely_service_enabled(monkeypatch):
+    from astropi.mount.worker import system_ntp_synchronized
+    from subprocess import CompletedProcess, TimeoutExpired
+    import astropi.mount.worker as module
+
+    monkeypatch.setattr(module.subprocess, "run", lambda *a, **k:
+                        CompletedProcess(args=[], returncode=0, stdout="yes\n"))
+    assert system_ntp_synchronized()
+    monkeypatch.setattr(module.subprocess, "run", lambda *a, **k:
+                        CompletedProcess(args=[], returncode=0, stdout="no\n"))
+    assert not system_ntp_synchronized()
+    def timeout(*args, **kwargs):
+        raise TimeoutExpired(cmd="timedatectl", timeout=2)
+    monkeypatch.setattr(module.subprocess, "run", timeout)
+    assert not system_ntp_synchronized()
