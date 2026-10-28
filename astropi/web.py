@@ -93,7 +93,9 @@ def create_app(settings: Settings | None = None, camera=None, lease=None, mount=
         require_operator()
         payload = request.get_json(silent=True) or {}
         try:
-            direction = mount_worker.jog(payload.get("direction"))
+            direction = mount_worker.jog(
+                payload.get("direction"), speed=payload.get("speed", "slow")
+            )
         except ValueError as exc:
             return jsonify(error=str(exc)), 400
         except RuntimeError as exc:
