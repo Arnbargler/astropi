@@ -44,14 +44,21 @@ SDK session, then opens a fresh session with the new binning. Changing binning
 is blocked while a capture or sequence is waiting/saving; any in-progress
 exposure may delay a change until the SDK read completes. The camera may
 briefly show Reconfiguring. Preview can use colour or mono, fixed or auto
-display stretch. **2×2 is not yet tested on real camera hardware**;
-its preview/JPEG/PNG quicklooks are monochrome until the binned Bayer layout
-is verified. Scientific RAW16 and FITS keep the binned numeric samples,
-and saved metadata and FITS dimensions include the binning factor.
+display stretch. 2×2 acquisition and FITS display have passed a first
+real-Pi test. **Both binning modes support Debayer On (colour) and Off
+(monochrome)** for preview and JPG/PNG quicklooks. The 2×2 colour path
+currently assumes the same GRBG phase as 1×1; this is supported by the
+IMX585's colour-binning architecture but still needs a red/blue scene
+comparison on the actual SV705C. A wrong phase may swap colours.
+Scientific RAW16 and FITS keep the original binned numeric samples,
+regardless of Debayer position. The 2×2 FITS still omits `BAYERPAT`
+until SDK colour phase is physically verified. Metadata records binning,
+quicklook dimensions and whether debayering was enabled at capture start.
 Check desired RAW16/FITS/JPG/PNG formats (FITS/JPG default), then **Capture
 & Save** for one frame, or set **Frames in sequence** to 2–100 and press
 **Start Sequence**. **Cancel Sequence** completes any in-progress write before
-stopping. Exposure/gain and saved quicklook stretch are frozen in sequences.
+stopping. Exposure/gain, saved quicklook stretch and saved Debayer mode
+are frozen for each sequence (independent of later preview toggles).
 
 Saved captures: `/media/astropi-data/captures/<timestamp-id>/`. Each
 contains the selected formats and `metadata.json` with file hashes,

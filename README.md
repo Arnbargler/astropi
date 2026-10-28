@@ -11,8 +11,12 @@ The Linux desktop is a browser/development client, not a required server.
   monochrome preview, manual exposure/gain, fixed/auto preview stretch.
   **New: manufacturer-supported 1×1 and 2×2 hardware binning buttons below Gain,**
   with a fresh SDK session after change and bin-aware recording. 2×2 is
-  code-tested but **awaits Pi camera verification**. Binned quicklooks and
-  preview are monochrome until the colour Bayer arrangement is confirmed.
+  Pi-verified for 2×2 RAW/FITS capture: the user saved ~4 MiB files and
+  opened the FITS in Siril. **New: provisional Bayer colour preview and
+  JPG/PNG quicklooks at 2×2 when Debayer On; Debayer Off produces
+  monochrome**. Sony's IMX585 documentation describes Bayer-preserving
+  2×2 binning, but the SDK output's exact GRBG phase awaits a red/blue
+  colour-target test on the Pi. RAW16 and FITS remain unchanged.
   Measured 50 ms preview: ~14.8 colour / ~16.6 mono FPS at 1× on Pi.
 - **Recording:** Individually selected RAW16, FITS, JPEG and PNG; one-shot
   or consecutive sequences of 2–100 frames. USB-only storage guarded by

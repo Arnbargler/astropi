@@ -47,8 +47,10 @@ camera preview uses polling, not WebSockets. The controls are for a
   camera preview can drop frames rather than accumulate unlimited work.
 - Every output format of a saved frame derives from one immutable RAW16
   source. FITS retains 12-bit samples, with correct BZERO and byte order.
-  1×1 is GRBG; 2×2 Bayer interpretation is still unverified, so do not
-  falsely label binned FITS as GRBG or apply colour quicklook demosaic.
+  1×1 is GRBG; Sony documents Bayer-preserving 2×2 binning, so colour
+  quicklooks provisionally use the same GRBG phase when Debayer is On.
+  Debayer Off generates monochrome preview and quicklooks. Binned
+  FITS omits BAYERPAT until the camera SDK's phase is physically verified.
   Recorded frames have SHA-256 manifest; incomplete writes remain unpublished.
 - Never write recording data unless the **specific mounted USB UUID** is
   verified. Missing/incorrect USB must not fill the boot microSD.
@@ -78,10 +80,13 @@ Suggested next steps **after the operator tests this cleanup**:
    Stellarium/INDI or AM3N Wi-Fi instead of duplicating a planetarium.
    Do not enable competing USB and Wi-Fi movement controllers blindly.
 2. Systemd startup/recovery and longer camera/storage error/endurance tests.
-3. Verify 2×2 binning on the actual Pi and camera (ROI acceptance, sample
-   range, mono quicklooks, FITS/RAW16 exact-match); future arbitrary ROI and
-   colour Bayer handling only after physical proof. Then the deferred offline
-   sky atlas, manual alignment, focus tools and optional field time entry.
+3. **Verify binned GRBG phase on the actual SV705C** using a recognizable
+   red and blue subject at 1×1 then 2×2 with Debayer On. If red/blue are
+   reversed, correct binned phase before adding the FITS BAYERPAT keyword.
+   Check Debayer Off returns monochrome at 2×2, then verify saved
+   JPG/PNG, RAW16/FITS parity and sequence Debayer freezing.
+   Future arbitrary ROI, the offline sky atlas, manual alignment,
+   focus tools and field time entry remain deferred.
 
 Keep handoff documents concise; replace obsolete facts in place instead
 of appending a new milestone diary. Do not remove safety regression tests
