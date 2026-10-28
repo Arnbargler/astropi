@@ -2,6 +2,13 @@
 
 **Current truth as of 2026-10-27.** This is the **concise operational reference**, not a chronological test diary. “Verified” means directly observed from `arn@astropi` terminal output or inspected images. “Planned” means **not implemented or not tested**. The full 69 KB original probe log remains in [Git history at `f01ae019`](https://github.com/Arnbargler/astropi/blob/f01ae019f9ba840f90b5bb5e566d0fc17dab41b7/HARDWARE.md) for troubleshooting; some statements in that historical snapshot were superseded by later tests.
 
+## Current AM3N controls (2026-10-28)
+
+- **Normal manual operation:** Operator lease + connected mount permits immediate N/S/E/W press-and-hold; the separate "Enable one manual jog" button and HTTP `/api/mount/arm` endpoint have been removed. A jog may continue for as long as the pointer is held and valid heartbeats arrive; there is **no fixed time cap**. Release, loss of browser focus, 600ms missed heartbeat, intentional Disconnect or the viewer-accessible red Stop requests `:Q#`. Reported coordinates must stabilize before the next jog; start and Stop commands are serialized. This is software-tested; direct-no-arm UI needs actual Pi retest.
+- **Five whitelisted manual rates:** Slow 8× `:R5#`, Medium 20× `:Rv20.00#`, Fast 60× `:Rv60.00#`, Slew 720× `:R8#`, Max 1440× `:R9#`. The 720×/1440× presets match INDI's AM3/AM5 driver `SetSlewRate(index)` and supported rate table. Existing three lower choices have been user-reported working; **the higher two have not yet been physically tested via AstroPi**. The driver initially sets `:R5#` on every jog, then the selected higher-rate command if needed.
+- **Time/site:** Read-only user-triggered query panel exists but screenshot showed not yet activated (`Clock/site: idle`, dash values). No automatic setters or NTP/RTC trust path. Keep GoTo/sky alignment disabled.
+- The paragraphs below preserve historic probes and earlier safety-test milestones; where they describe a 3s hard cap or an Arm button, those **no longer describe the current build**.
+
 ## Equipment and connections
 
 | Item | Current configuration / evidence |
