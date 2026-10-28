@@ -53,25 +53,42 @@ in-app recording endurance and deliberately induced USB/storage faults have
 not been verified. We may later evaluate Stellarium control over AM3N Wi-Fi
 or an INDI server, avoiding simultaneous conflicting USB/Wi-Fi commands.
 
-## Desktop dashboard layout
+## Interface: current dashboard and agreed next design
 
-Optimized for a typical **1920×1080** browser window. The workbench uses
-almost the full width: **camera preview, capture and storage/host status on
-the left; exposure/gain/binning and display controls in the middle; mount
-controls and telemetry on the right**. Mount manual Stop/jog is deliberately
-above the optional mount clock/site details. Capture results remain scrollable
-within their panel. Layout switches to two columns below 1550 CSS pixels and
-a single column below 920 pixels (vertical scrolling is expected).
+**Currently implemented:** a single responsive desktop dashboard, optimized
+for 1920×1080, with preview/capture/host at left, camera settings in the
+middle, and mount controls at right. Its format toggles, capture counts
+**1/5/50/100/150/200/Cancel**, progress, operator lease and safety messages
+remain functional. The atlas and three-tab navigation do **not** exist yet.
 
-The compact capture panel has format toggle switches (FITS/RAW16/JPG/PNG)
-and fixed capture buttons **1, 5, 50, 100, 150, 200, Cancel**. The 1 button
-saves one full configured RAW frame; multi-frame sequences run on the Pi and
-the Cancel button stops at a write boundary. Capture results remain scrollable
-within a short panel so they cannot cover the preview.
-The page no longer repeats operating instructions; controls and live
-status/error messages remain. A short physical Stop warning stays visible.
-On 2026-10-28 the operator confirmed correct colours in the SV705C 2×2
-preview on real hardware. This supersedes the earlier pending colour check.
+**Agreed next architecture:** one persistent browser application with three
+tabs, **Focus / Find / Fotograph** (intentional spelling), not three pages
+that reload or create independent hardware sessions:
+
+- **Focus:** shared live SV705C preview; later click-to-centre digital zoom
+  and star-sharpness aids. Focusing aids are deferred while Find is built.
+- **Find:** offline VirtualSky chart and eventual target search, plus existing
+  manual AM3N controls/status; future alignment and atlas-selected GoTo.
+- **Fotograph:** existing camera exposure/gain/binning/stretch/debayer,
+  full-frame preview, format selection, image sequences and recording status.
+
+Global header/navigation keeps the operator lease, camera/mount/capture
+state and **STOP MOUNT** available from every tab, including to viewers.
+Tab changes must not restart the camera, release control, stop Pi-owned
+sequences, or start motion. Leaving Find must stop any active manual jog;
+all mount commands remain owned by its sole backend worker.
+
+**Immediate next milestone:** Find tab with **fully local VirtualSky**,
+no photographic imagery or network/CDN dependency, real-time local-sky
+view using the permanent observing site +45.2933° N, −75.8571°
+east-positive, Pi UTC/NTP status, stars/constellations/planets, horizon,
+pan/zoom, grid controls, and **110 Messier targets** with local selection,
+RA/Dec details and M-number search. Defer full OpenNGC, mount marker,
+alignment, GoTo and tracking. See [DEVELOPMENT.md](DEVELOPMENT.md) for
+the staged implementation plan.
+
+On 2026-10-28 the operator confirmed correct SV705C 2×2 colours on real
+hardware; the pending binned preview colour check is closed.
 
 ## Start / update
 

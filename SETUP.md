@@ -34,6 +34,14 @@ Flask currently runs in the foreground; **no automatic startup service is
 installed**. No camera or mount serial session starts merely by loading
 the page. Internet exposure/authentication is not supported.
 
+**Planned, not yet installed:** a persistent three-tab browser UI,
+**Focus / Find / Fotograph**. Find will host a wholly offline VirtualSky
+pointing chart; the first version is observational only (no GoTo).
+The existing single dashboard remains the actual operator interface
+until this redesign is implemented. Switching tabs must preserve the
+operator session and Pi-owned exposures, while stopping active jogs;
+emergency mount Stop stays accessible on every tab.
+
 ## Camera, recording and verification
 
 Click **Take Control**, **Start preview**, choose exposure/gain and wait for
@@ -100,7 +108,11 @@ software Stop. Use the physical hand-controller Cancel/power if necessary.
 
 The on-demand **Read Mount Clock & Site** button shows date, time, UTC
 offset, sidereal time, and persistent site latitude/longitude (west-positive
-in the mount protocol). AstroPi still treats reported RA/Dec as unaligned.
+in the mount protocol). The operator confirms the stored site is the
+**permanent observing location: +45.2933° N, −75.8571° east-positive**.
+The future offline atlas will use this site and Pi UTC with NTP status;
+it must not modify the mount's site. AstroPi still treats reported
+RA/Dec as unaligned.
 
 ## Diagnostics
 

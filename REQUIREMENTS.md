@@ -37,20 +37,35 @@ original 70-item feature menu. For **current implementation status**, read
 
 **Time and site:** On each explicit serial Connect, use the Pi's NTP-confirmed
 UTC to set AM3N UTC offset zero, date and time; require replies and readback
-verification. This is implemented and Pi-verified. Stored observing latitude
-**+45.2933°** and east-positive longitude **−75.8571°** are presently read,
-not changed automatically. AM3N protocol longitude is **west-positive**.
-Validate stored site and alignment before sky GoTo. Future field operation
-without NTP may need manual entry, RTC or GPS; the Pi has no RTC.
+verification. This is implemented and Pi-verified. The operator confirms
+the site's stored latitude **+45.2933° N** and longitude **−75.8571°
+east-positive** are the **permanent actual observing location**, not a
+temporary test position. AM3N serial longitude is **west-positive**
+(+75.8571° for this site). Read/compare mount site; **do not overwrite it**.
+The offline atlas should use these coordinates even when the mount is
+disconnected, and label any site mismatch or unavailable time sync.
+Validate site and alignment before future sky GoTo. The Pi has no RTC.
 
-## Offline atlas (future)
+## Find tab / offline sky atlas (agreed, not implemented)
 
-- **#28** Local OpenNGC (NGC/IC) plus Messier catalogue.
-- **#29** Local VirtualSky with schematic DSO symbols (not photographs);
-  zoom/pan/selection, behind a replaceable application adapter.
-- **#30** Search full local catalogue independently of plotted-object filters.
-- **#32** Reported/estimated mount marker on chart.
-- Browser catalogue/navigation must work without Internet.
+- **#28** Local OpenNGC (NGC/IC) plus Messier catalogue; full NGC/IC
+  integration is a **later** milestone, not a dependency for v0.1.
+- **#29** Embed **VirtualSky**, with local JS/JSON assets, schematic DSO
+  symbols (no astronomical photos), pan/zoom/selection and a replaceable
+  adapter; no CDN, online lookup, or Internet dependency.
+- **#30** Full local catalogue search independent of plotted-object filters
+  once OpenNGC is added. **v0.1** starts with all 110 Messier objects,
+  simple M-number search, centred selection, and name/RA/Dec details.
+- **#32** Reported/estimated mount marker is deferred until its alignment
+  limitations are clearly represented; it is **not** a v0.1 feature.
+
+**VirtualSky v0.1** uses the permanent mount site and Pi UTC time, with
+explicit NTP/synchronization status and an honest warning when time or site
+cannot be trusted. Chart controls: mouse pan/zoom, constellation lines and
+labels, horizon and cardinal directions, optional coordinate grids, and
+stars/planets/Messier markers. It is a **pointing aid**, not a gallery;
+never download photographic survey tiles or silently use a remote resolver.
+Clicking/searching a target is informational only: **no movement/GoTo** in v0.1.
 
 ## Capture
 
@@ -74,6 +89,27 @@ the original mosaic sample values for later desktop processing.
   for settings and motion. Emergency Stop may be requested by a viewer.
   No passwords/accounts for the trusted LAN; don't expose the Flask development
   server to the Internet.
+
+**Agreed UI redesign (not yet coded):** a single persistent AstroPi browser
+application with three tabs, **Focus / Find / Fotograph**. Avoid a separate
+`/atlas` page or reload-based navigation. The Raspberry Pi continues to
+own the *one* camera SDK worker, mount serial worker, capture manager and
+operator lease shared across all tabs.
+
+- **Focus:** live preview and camera settings needed to focus; later click-
+  centred zoom/peaking/HFR. These aids are deferred until after the atlas.
+- **Find:** dominant offline VirtualSky chart, object selection and AM3N
+  manual mount controls/status; future alignment, mount marker and GoTo.
+- **Fotograph:** existing full preview, exposure/gain, binning, display
+  settings, FITS/RAW16/JPG/PNG and counted captures/USB/host status.
+- Shared visible navigation/status and **emergency STOP MOUNT on every tab**,
+  including for viewers. Maintain the operator heartbeat across tab changes.
+  Switching tabs must not stop the camera, cancel Pi-owned recording or
+  release operator ownership; an active jog must Stop when leaving Find.
+  No new movement commands from merely viewing/selecting a chart.
+
+First deliver the tab shell preserving existing controls; then integrate the
+offline chart in Find. Keep mount control and capture safety regressions.
 
 ## Exclusions and deferred decisions
 

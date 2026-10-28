@@ -72,23 +72,66 @@ camera preview uses polling, not WebSockets. The controls are for a
   is not proof motors physically stopped. **No fixed jog time limit.**
 - Never treat reported RA/Dec or Home as a sky-alignment solution.
 
-## Browser layout
+## Browser layout: current vs next implementation
 
-The capture strip uses four accessible native checkbox toggles and fixed
-count buttons **1/5/50/100/150/200**, plus Cancel. Browser sequences POST
-`/api/capture/sequence`, one shot POSTs `/api/capture`. Both retain the
-existing capture job, USB space preflight, operator lease and cancel-at-write-
-boundary semantics. A sequence is capped at 200 frames. Don't change the
-camera SDK ROI or reduce the capture resolution in order to save UI space.
+**Current:** `astropi/templates/index.html` and
+`astropi/static/{app.js,style.css}` provide one full-width, responsive
+dashboard with a live camera view, capture controls, camera settings and
+manual mount controls. The compact capture controls use four format
+checkboxes and **1/5/50/100/150/200/Cancel**, with Pi-owned sequences.
+Preserve IDs, polling, controls, error/status feedback and the existing
+camera/mount safety tests during migration.
 
-The dashboard uses `astropi/templates/index.html` and
-`astropi/static/style.css`. The `.dashboard-grid` is three fluid columns
-near **1920×1080**: an imaging column (preview, capture, Pi/storage status),
-camera settings, then mount. Breakpoints: at 1550px use two columns,
-at 920px stack panels, retaining camera settings before recording.
-Avoid reinstating the old 1140px shell width or instructional prose; keep
-state and safety messages and existing DOM IDs. No JavaScript layout changes
-or hardware-control timing changes are intended in this iteration.
+**Next (approved; not yet in code):** one persistent HTML/JS browser app
+with **Focus / Find / Fotograph** tabs; do **not** add the previously
+suggested distinct `/atlas` Flask page. Keep a single shared connection,
+operator token/heartbeat, camera and mount sessions, recording manager,
+global status and accessible **STOP MOUNT**. Only the active view's
+expensive rendering/polling needs to run; use care not to stop the backend
+camera/recording while hiding a view. Explicitly Stop an active manual jog
+on departure from Find; existing focus-loss and 600ms deadman are retained.
+
+- **Focus:** shared preview now; click-to-centre zoom, peaking and HFR
+  remain future features.
+- **Find:** primarily VirtualSky with local chart controls and basic
+  Messier target information; move existing mount controls here.
+- **Fotograph:** existing preview, camera settings, capture and host/USB
+  status. Do not change acquisition or recording semantics.
+
+### Immediate work plan: offline VirtualSky v0.1 (not yet started)
+
+1. **Tab shell:** refactor existing `/` into the persistent three-tab
+   application, preserving operator ownership, camera/mount status,
+   emergency Stop and recording progress. No independent page reloads.
+2. **Vendor local VirtualSky:** add pinned upstream JS/data and required
+   supporting assets under `astropi/static/`, retain license/attribution,
+   and wrap its API behind a replaceable local JS adapter. No CDNs or
+   external object lookup: the upstream `objects` option can perform an
+   online lookUP when passed object names, so avoid that path.
+3. **Site/time:** initialise the chart at the operator-confirmed **fixed
+   permanent site +45.2933° N, −75.8571° east-positive**. Read/compare
+   the AM3N's stored site when available; do not change mount site.
+   Supply current **Pi UTC**, not an unverified client-clock assumption,
+   and expose Pi NTP status. Show warnings if sync is absent or mount
+   site conflicts; do not claim verified time/pointing without evidence.
+4. **Chart controls:** offline stars/planets, constellations/labels,
+   horizon/cardinals, draggable pan/zoom, and grid visibility. Ensure
+   the chart resizes cleanly on tab activation and small screens.
+5. **Messier aid:** load all **110** objects from local data with schematic
+   markers. Implement simple `M1`–`M110` search and click/select
+   information (name, RA, Dec) plus centre-on-target. Confirm the
+   VirtualSky click callback/object lookup behaviour before connecting
+   selection to a target: do not send any mount motion in v0.1.
+6. **Test + handoff:** run Python and Node regressions; add tests for
+   tab persistence, active-jog Stop on tab switch, global emergency
+   Stop, offline asset loading/no remote URL, NTP/site warnings,
+   Messier select/search and responsive layout. Update documentation
+   only after the features are actually working.
+
+**Deferred:** OpenNGC/NGC/IC full catalogue and filtered-object searching,
+mount marker, sky alignment, atlas GoTo/tracking, custom focus aids,
+image surveys/photos, and manual site/time override. No camera SDK
+thread or mount serial protocol changes in the v0.1 atlas stage.
 
 ## Tests and outstanding verification
 
@@ -99,20 +142,14 @@ Mocks test SDK ownership, data conversion, USB fail-closed, sequences,
 serial command gating, heartbeat Stop, NTP ACK/readback and UI behaviour.
 Hardware-confirmed work is summarized in HARDWARE.md.
 
-Suggested next steps **after the operator tests this cleanup**:
+**Next priority:** implement the six-step **persistent tabs + offline
+VirtualSky v0.1** plan above, then conduct real-Pi/browser field checks.
+Keep mount GoTo/alignment and focus aids explicitly deferred.
 
-1. Discuss mount GoTo/sky-alignment architecture, including external
-   Stellarium/INDI or AM3N Wi-Fi instead of duplicating a planetarium.
-   Do not enable competing USB and Wi-Fi movement controllers blindly.
-2. Systemd startup/recovery and longer camera/storage error/endurance tests.
-3. **2×2 colour is verified in preview**: the operator confirmed correct
-   colour rendition on the real SV705C on 2026-10-28. The earlier pending
-   red/blue preview check is closed. The FITS writer still omits BAYERPAT
-   at 2×2; adding it would be a separate code/test change. Optional
-   field regressions include saved JPG/PNG colours, 2×2 Debayer Off,
-   RAW16/FITS parity and sequence Debayer freezing. Future arbitrary ROI,
-   offline sky atlas, manual alignment, focus tools and field time entry
-   remain deferred.
+**Other later work:** systemd startup/recovery; storage/USB failure and
+long-running capture tests; 2×2 FITS `BAYERPAT` metadata (currently
+absent) and optional saved quicklook/binned RAW-FITS parity regressions.
+Do not enable competing USB/Wi-Fi mount controllers blindly.
 
 Keep handoff documents concise; replace obsolete facts in place instead
 of appending a new milestone diary. Do not remove safety regression tests
