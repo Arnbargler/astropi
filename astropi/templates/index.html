@@ -5,6 +5,9 @@
   <meta name="theme-color" content="#101720">
   <title>AstroPi | Observatory</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <script defer src="{{ url_for('static', filename='vendor/virtualsky/stuquery.min.js') }}"></script>
+  <script defer src="{{ url_for('static', filename='vendor/virtualsky/virtualsky.min.js') }}"></script>
+  <script defer src="{{ url_for('static', filename='atlas.js') }}"></script>
   <script defer src="{{ url_for('static', filename='app.js') }}"></script>
 </head>
 <body>
@@ -43,10 +46,34 @@
     </section>
     <section id="panel-find" class="workspace-panel" role="tabpanel" aria-labelledby="tab-find" hidden>
       <div class="find-layout">
-        <article class="card atlas-placeholder">
-          <h3>Sky Atlas</h3>
-          <p>Offline VirtualSky comes next. The sky chart, Messier object search and target selection are not installed yet.</p>
-          <p>Manual mount controls remain available here. Selecting a sky target will not move the mount in the first atlas release.</p>
+        <article class="card atlas-card" aria-label="Offline sky atlas">
+          <div class="atlas-title">
+            <h3>Sky Atlas · VirtualSky</h3>
+            <span>Offline · 45.2933° N, 75.8571° W</span>
+          </div>
+          <div class="atlas-toolbar">
+            <form id="atlas-search-form" class="atlas-search">
+              <label for="atlas-search">Messier target</label>
+              <input id="atlas-search" type="search" list="atlas-messier-options"
+                     placeholder="M31, M42, M110…" autocomplete="off" aria-describedby="atlas-status">
+              <datalist id="atlas-messier-options"></datalist>
+              <button type="submit">Find object</button>
+            </form>
+            <div class="atlas-view-controls" aria-label="Sky view">
+              <button type="button" id="atlas-allsky">Horizon view</button>
+              <button type="button" id="atlas-zoom-in" aria-label="Zoom in">Zoom +</button>
+              <button type="button" id="atlas-zoom-out" aria-label="Zoom out">Zoom −</button>
+            </div>
+            <div class="atlas-layers">
+              <label><input type="checkbox" id="atlas-constellations" checked> Constellations</label>
+              <label><input type="checkbox" id="atlas-grid"> RA/Dec grid</label>
+            </div>
+          </div>
+          <div id="atlas-sky" aria-label="Interactive local sky chart"></div>
+          <p id="atlas-status" role="status">Open Find to load the offline sky.</p>
+          <p id="atlas-time">Pi UTC: waiting for the Pi</p>
+          <p id="atlas-selection" aria-live="polite">Select a Messier object for name, RA and Dec.</p>
+          <p class="atlas-disclaimer">Chart selection never moves the mount. The sky view is informational; telescope alignment and GoTo are not installed.</p>
         </article>
       <article class="card mount-card">
         <h3>ZWO AM3N · Mount control</h3>

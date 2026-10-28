@@ -65,10 +65,10 @@ AM3N read queries: `:GVP#` model (AM3N), `:GV#` firmware (1.8.8), `:GU#` state, 
 
 These rates follow known AM-series driver commands; exact angular speeds have not been measured. Direction commands `:Mn#`, `:Ms#`, `:Me#`, `:Mw#`; all-stop `:Q#`. Operator verified manual jogging, release-to-Stop and camera/mount coexistence; slow-speed 3s automatic stop was previously tested, then **deliberately removed**. Current app supports direct hold-to-move with **no fixed duration limit**, 600ms missing-heartbeat Stop, one serial-owner thread and post-Stop position settling before next jog. Serial loss/crash cannot guarantee a physical stop; manual Cancel/power remains fallback.
 
-**Stored observing site:** latitude **+45.2933° N**, `+45*17:36`; longitude **−75.8571° east-positive** (AM3N convention west-positive `+075*51:26`). **The operator confirms these mount-stored coordinates are the permanent actual observing site** (not temporary test values). Currently read-only in app; the planned offline sky atlas will use this fixed site even without a mount connection, and compare against the mount's site on Connect. Never silently overwrite it. Standalone site setters `:St+45*17:36#` and `:Sg+075*51:26#` previously returned success; **current app does not set site**.
+**Stored observing site:** latitude **+45.2933° N**, `+45*17:36`; longitude **−75.8571° east-positive** (AM3N convention west-positive `+075*51:26`). **The operator confirms these mount-stored coordinates are the permanent actual observing site** (not temporary test values). Currently read-only in app; the offline sky atlas uses this fixed site even without a mount connection, and compare against the mount's site on Connect. Never silently overwrite it. Standalone site setters `:St+45*17:36#` and `:Sg+075*51:26#` previously returned success; **current app does not set site**.
 
 **Automatic clock sync on each explicit Connect (AM3N only):** check `timedatectl show -p NTPSynchronized --value` equals yes; send `:SG+00:00#`, `:SCMM/DD/YY#`, `:SLHH:MM:SS#`, require single-byte `1` acknowledgment from each; read back with `:GG#`, `:GC#`, `:GL#` and compare within six seconds of Pi UTC. **Confirmed on live firmware 1.8.8**: 2026-10-28, mount UTC time 08:47:34, offset +00:00, existing site unchanged. UI says **Mount time (UTC)**; it is intentionally not Ontario local time. If NTP not yet synchronized, report error and retry on a later Connect.
-**This is mount-specific; the planned VirtualSky atlas simply uses Pi UTC
+**This is mount-specific; the VirtualSky atlas uses Pi UTC
 from `/api/status` and does not require an NTP check or warning.**
 No manual-time field mode yet.
 
@@ -80,7 +80,8 @@ On 2026-10-28 the operator confirmed the **Focus / Find / Fotograph**
 three-tab layout works as expected on the actual Pi, including the
 revised gain controls. This does not independently test emergency Stop
 under injected faults, telescope pointing, or extended recording after
-the UI refactor. VirtualSky remains a **placeholder**, not installed.
+the UI refactor. VirtualSky is **implemented in Git** after that field check, but
+its rendering and interactivity are **not yet verified on the actual Pi**.
 
 ## Not verified / future
 

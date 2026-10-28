@@ -3,7 +3,7 @@
 **Read README → REQUIREMENTS → HARDWARE → DEVELOPMENT → SETUP.**
 Code/tests establish implementation truth; requirements also include future work.
 The user confirmed the three-tab UI works on the Pi on 2026-10-28.
-**Next task: local VirtualSky in Find, not focus aids or GoTo.**
+**Current task: offline VirtualSky in Find is implemented; field-check it on the Pi before advancing to focus aids or GoTo.**
 
 ## Code map
 
@@ -16,6 +16,7 @@ The user confirmed the three-tab UI works on the Pi on 2026-10-28.
 | `astropi/capture/{manager,formats,storage,verify}.py` | Pi-owned jobs, science/quicklook formats, UUID-safe writes, read-only integrity verification |
 | `astropi/mount/worker.py` | Sole AM3N serial worker: telemetry, verified UTC sync, manual jog/Stop/deadman |
 | `astropi/templates/index.html`, `astropi/static/{app.js,style.css}` | Persistent Focus/Find/Fotograph UI |
+| `astropi/static/atlas.js`, `astropi/static/vendor/virtualsky/` | Offline VirtualSky adapter and pinned catalogue/scripts |
 | `tests/`, `.github/workflows/tests.yml` | Fake-hardware Python tests and Node 22 browser regressions |
 
 **GET routes:** `/`, `/api/status`, `/api/camera/progress`,
@@ -26,7 +27,7 @@ The user confirmed the three-tab UI works on the Pi on 2026-10-28.
 `/api/capture`, `/api/capture/{sequence,cancel}`,
 `/api/mount/{connect,disconnect,jog,jog-heartbeat,stop,environment/read}`.
 
-**Absent:** `/atlas`, catalogue/search, GoTo, Home, Park, tracking
+**Absent:** `/atlas`, full OpenNGC search, GoTo, Home, Park, tracking
 and arbitrary serial-command endpoints. **No separate atlas time/NTP
 endpoint is needed**; `/api/status` already includes Pi UTC.
 
@@ -40,7 +41,7 @@ the JPEG preview stream, or navigate/reload on tab selection.
 
 - **Focus:** camera preview/settings; zoom and star focus measurements
   are not built.
-- **Find:** manual AM3N controls/status; VirtualSky placeholder only.
+- **Find:** manual AM3N controls/status; offline VirtualSky chart, 110 Messier markers/search and read-only target selection.
 - **Fotograph (initial):** camera settings/preview, capture panel, USB and
   host status.
 - Sticky global camera/mount/capture states and viewer-accessible
@@ -95,45 +96,49 @@ only when frame number changes. **No WebSockets.**
    and mount Home do not establish optical sky alignment.
    Never auto-Home, GoTo, slew or track when opening AstroPi.
 
-## Next task: VirtualSky v0.1 inside Find (not yet installed)
+## Offline VirtualSky v0.1 in Find — now implemented
 
-The atlas is an **offline schematic pointing aid, not an image gallery**.
-Keep it behind a replaceable adapter, embedded in the existing Find
-tab; **do not add a separate Flask `/atlas` page** or introduce another
-mount controller.
+The first atlas is **locally packaged**; it does not add Flask `/atlas`
+or any mount command API. All sky rendering is confined to
+`astropi/static/atlas.js`, a replaceable adapter loaded alongside
+`app.js`. The Find panel's placeholder was replaced by an offline sky
+chart, Messier search, horizon/detail controls and toggles. Vendor files
+are pinned to upstream tree `271c801d6504d1c478bc0c64dce4938399749c69`
+(virtualsky 0.7.7), with provenance/permission notes beside the files.
+The local library loads `stars.json`, `lines_latin.json`, `lang/en.json`
+and the local planet ephemeris plugin. All 110 Messier targets are
+supplied by local `messier.json`; each pointer uses custom **text-only
+HTML**, preventing VirtualSky's default remote Wikisky links/images.
+Do not enable its remote object name-resolution mode.
 
-1. **Local dependencies:** pin an upstream VirtualSky revision; vendor
-   `virtualsky`, stuQuery, planets/stars/constellations and
-   Messier data under `astropi/static/`. Record license/attribution.
-   No CDN, online lookups or photographic tiles. Avoid VirtualSky's
-   online name-resolution `objects` mode.
-2. **Time/site:** initialise chart at permanent +45.2933° /
-   −75.8571° even without a mount connection. Obtain current **Pi UTC**
-   from the existing `/api/status` response when Find opens, then
-   advance the atlas clock and use the regular status polls to correct
-   drift. **Do not add an atlas NTP check, status API, clock-accuracy
-   warning or follow-up work for unsynchronized Pi time**; the operator
-   explicitly chose to accept the Pi's clock indefinitely. If the
-   AM3N is connected, optionally compare its *read-only* stored site,
-   showing a location mismatch without modifying the mount.
-3. **Chart UI:** chart occupies most of Find beside existing mount
-   controls; pan/zoom, constellation lines/labels, horizon/cardinals,
-   stars/planets and optional coordinate grids. Resize on tab reveal.
-4. **Messier:** all **110** locally supplied objects; `M1`–`M110`
-   search, clickable marker, centre and name/RA/Dec details. Verify
-   click and object API on the pinned VirtualSky version. Absolutely
-   **no mount movement** from chart interaction.
-5. **Tests and field check:** Python and Node regressions, entirely
-   offline page loads, correct Pi UTC usage and site coordinates
-   (but no NTP warning), chart selection,
-   responsive layout, tab/lease/capture persistence, viewer Stop and
-   jog departure Stop. Check in a real Pi browser before marking as
-   hardware verified.
+**Time/site:** fixed **+45.2933° N / −75.8571° longitude
+east-positive**, including before mount Connect. Fetch existing
+`/api/status.utc` when Find is entered; the adapter advances Pi UTC
+locally and corrects the clock on periodic full-status polls. **Never
+introduce atlas NTP verification or warning**; Pi clock is accepted
+indefinitely by operator decision. Existing separate AM3N Connect-time
+NTP check remains unchanged. The atlas does not modify mount site.
 
-**Deferred after atlas v0.1:** full OpenNGC NGC/IC database and
-filter-independent search, reported mount marker, north/level and
-two-star alignment, atlas-selected GoTo/tracking, focus zoom/HFR,
-plate solving or stacking, manual time/site override.
+**Interactions:** polar horizon/cardinal view with pan, and zoomable
+gnomic detail view. Search M1–M110 or click a local marker to centre
+and show name, RA and Dec; constellation line/label and equatorial grid
+toggles. Target selection is informational; **no GoTo, tracking,
+alignment, Home/Park or motion API calls**. On Find reveal call
+`resize()`, keeping the chart inside the persistent DOM. Do not clone
+camera preview/settings nodes. Global Stop and jog-on-tab-departure
+Stop remain untouched.
+
+**Verification:** `tests/test_atlas.py` checks local assets, all 110
+catalogue entries and motion-free adapter. `tests/test_ui.cjs`
+covers retained tab safety and atlas DOM. CI success does not imply
+a real-Pi rendering test: verify offline loading and chart dragging,
+M1/M31/M42/M110, no remote requests, UTC, responsive layout, mount
+Stop, and unbroken capture/lease continuity on the actual Pi.
+
+**Deferred:** OpenNGC NGC/IC catalogue and filter-independent search,
+read-only mount marker, north/level and two-star alignment,
+atlas-selected GoTo/tracking, focus zoom/HFR, plate solving, stacking,
+manual time/site override.
 
 ## Testing / open verification
 
@@ -143,7 +148,7 @@ Tab migration tests passed, and the user reports the Pi interface
 functions as expected. This does **not** constitute fresh endurance,
 serial-fault or telescope pointing verification.
 
-Separate follow-ups: systemd service; long capture endurance; induced
+Separate follow-ups: real-Pi atlas browser verification; systemd service; long capture endurance; induced
 USB/serial failures; FITS 2×2 `BAYERPAT` and metadata; 2×2 saved
 quicklook colour. **Do not reopen atlas NTP/clock-accuracy work.**
 Older experiments are in Git history, not instructions to re-enable

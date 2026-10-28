@@ -8,14 +8,14 @@ I/O and captures; the desktop/browser is only a client.
 
 ## Working state — 2026-10-28
 
-**Implemented and operator-tested on the Pi:** the persistent
+**Previously implemented and operator-tested on the Pi:** the persistent
 **Focus / Find / Fotograph** three-tab interface. Tabs do not reload the
 page or restart hardware sessions.
 
 | Tab | Available now | Not yet available |
 | --- | --- | --- |
 | **Focus** | Shared live preview and SV705C settings | Digital zoom, star-centred ROI, peaking, HFR/focus graph |
-| **Find** | AM3N Connect/Disconnect, telemetry, manual jogging, clock/site display; atlas placeholder | VirtualSky, target selection, alignment, GoTo, tracking |
+| **Find** | AM3N manual controls/telemetry plus offline VirtualSky atlas, 110 Messier targets and local sky chart | Alignment, GoTo, tracking and full NGC/IC search |
 | **Fotograph** (default) | Full camera preview/settings, capture formats/counts, USB/host status | Stacking and other deferred imaging tools |
 
 Sticky global camera/mount/capture status and **STOP MOUNT** are visible
@@ -63,25 +63,29 @@ It is **read-only** in AstroPi. Reported RA/Dec are *not* verified
 optical pointing; there is **no alignment, GoTo, tracking control,
 Home or Park** in the browser.
 
-## Next agreed task: offline VirtualSky in Find
+## Offline VirtualSky atlas in Find — implemented in code
 
-The first UI migration step is complete. Next implement the **locally
-packaged VirtualSky** planetarium inside the existing Find tab (not a
-separate `/atlas` route). It is a **schematic pointing aid**, not a gallery:
-no photographic sky tiles, Internet lookup or CDN.
+VirtualSky **v0.7.7** is bundled locally in the persistent **Find** tab.
+The sky is a schematic map (no images or CDN) with horizon/cardinals,
+pan, detail zoom, constellation labels/lines, a toggleable RA/Dec grid,
+stars and planets. Search `M1`–`M110` or click a Messier marker to
+show the object's name, RA and Dec and centre a detail view. **Chart
+selection never sends a mount command.**
 
-Initial scope: permanent site and the Pi's current UTC time (already
-provided by `/api/status`), pan/zoom, stars/planets, constellation
-lines/labels, horizon/cardinals, optional sky grids and all **110 Messier
-objects**. Atlas clock accuracy/NTP checks and warnings are explicitly
-out of scope indefinitely; use the Pi's time as-is. Clicking and simple
-M-number search should centre/select a target and show its **name,
-RA and Dec**, but **must not move the mount**. Full NGC/IC/OpenNGC search,
-mount marker, alignment, GoTo and focusing aids come later.
+The atlas uses the fixed site **45.2933° N, −75.8571° east-positive**
+and Pi UTC from existing `/api/status`, fetched on entering Find and
+corrected on normal polling. **No atlas NTP validation or warning** (this
+is a deliberate operator choice); mount Connect retains its existing
+separate NTP verification. VirtualSky loads its star, planet, line,
+English-label and Messier assets under
+`astropi/static/vendor/virtualsky/`. The adapter is
+`astropi/static/atlas.js`; provenance/permission notes are in
+`astropi/static/vendor/virtualsky/PROVENANCE.md`.
 
-Implementation stages, test criteria and source ownership are in
-[DEVELOPMENT.md](DEVELOPMENT.md). Selected long-term scope is in
-[REQUIREMENTS.md](REQUIREMENTS.md).
+**Status:** implemented in Git; GitHub CI exercises offline asset/DOM
+regressions. Browser appearance/interaction on the **actual Pi** have
+not yet been reverified by the operator. Full OpenNGC, precise pointing
+marker, alignment, GoTo and focus tools remain deferred.
 
 ## Operate and continue development
 

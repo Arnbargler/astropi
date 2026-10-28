@@ -732,7 +732,10 @@ test("three workspaces retain responsive controls and safety warnings",()=>{
   assert.match(css,/\.imaging-column\{display:contents\}/);
   assert.match(css,/@media \(max-width:650px\)/);
   assert.match(html,/Software Stop is not fail-safe/);
-  assert.match(html,/Offline VirtualSky comes next/);
+  assert.match(html,/id="atlas-sky"/);
+  assert.match(html,/id="atlas-search"/);
+  assert.match(html,/vendor\/virtualsky\/virtualsky\.min\.js/);
+  assert.match(html,/id="atlas-grid"/);
   assert.doesNotMatch(html,/id="atlas-goto"/);
   assert.doesNotMatch(html,/id="mount-(?:home|goto|track|park)"/);
 });

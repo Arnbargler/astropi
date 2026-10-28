@@ -48,12 +48,13 @@ and is independent of the atlas.** Pi has **no RTC**. Neither mount RA/Dec nor n
 proves optical sky alignment; verify site and alignment before
 introducing GoTo.
 
-## Offline atlas — Find tab (next task)
+## Offline atlas — Find tab (implemented v0.1, Pi verification pending)
 
-**#28–30, #32** are selected long-term requirements. The tab shell
-exists, but **VirtualSky and catalogue/search are not yet installed**.
+**#28–30, #32** are selected long-term requirements. VirtualSky v0.1 and
+110-object Messier search are now in code; full OpenNGC/NGC/IC remains deferred.
+Real-Pi atlas verification is pending.
 
-**VirtualSky v0.1:**
+**VirtualSky v0.1 (implemented in Git):**
 - Embed locally packaged VirtualSky and its own JS/JSON assets in the
   **existing Find tab** of the persistent browser application;
   schematic symbols only, **no photographic imagery**, online lookup,
@@ -65,8 +66,8 @@ exists, but **VirtualSky and catalogue/search are not yet installed**.
   time-accuracy check, or unsynchronized-clock warning** is required,
   now or as a planned follow-up. A mount-site mismatch may still be shown
   when the AM3N is connected; never overwrite the stored site.
-- Pan/zoom; stars/planets, horizon/cardinal directions,
-  constellation lines/labels and coordinate grids.
+- Horizon view and pan; centred detail view/zoom; stars/planets,
+  horizon/cardinal directions, constellation lines/labels and RA/Dec grid.
 - Bundle all **110 Messier objects** for basic `M1`–`M110` search,
   click/centre and **name/RA/Dec** details. Selection is informational;
   **no GoTo/mount motion** in v0.1.

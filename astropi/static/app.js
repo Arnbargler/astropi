@@ -269,6 +269,8 @@ function activateTab(name, focusTab=false) {
     $(name + "-preview-slot").appendChild($("shared-preview-card"));
     $(name + "-controls-slot").appendChild($("shared-camera-controls"));
   }
+  if (name === "find") window.AstroPiAtlas?.show();
+  else window.AstroPiAtlas?.hide();
   if (focusTab) $("tab-" + name).focus();
   updateButtons();
 }
@@ -659,6 +661,7 @@ async function refresh() {
     const response = await fetch("/api/status", {cache:"no-store"});
     if (!response.ok) throw Error("HTTP " + response.status);
     const data = await response.json();
+    window.AstroPiAtlas?.syncUTC(data.utc);
     el.textContent = token ? "Connected · Controller" : "Connected · Viewer";
     el.className = "connection online";
     write("camera-usb", data.camera.usb_detected ? "Camera USB detected" : "Camera USB not detected");

@@ -37,8 +37,8 @@ the page. Internet exposure/authentication is not supported.
 **Implemented three-tab browser UI: Focus / Find / Fotograph**.
 Fotograph is selected initially and retains existing imaging/capture
 controls; Focus shares the same preview and camera settings; Find
-contains existing manual mount controls and a placeholder for the future
-offline VirtualSky pointing chart (no atlas/GoTo installed yet).
+contains manual mount controls and an offline VirtualSky chart with 110
+Messier objects and informational target selection (**no GoTo**).
 The operator token and Pi-owned exposures persist between tabs. Leaving
 Find while jogging requests Stop; **STOP MOUNT** is in the sticky status
 strip on every tab, including for viewers. The operator confirmed
@@ -113,12 +113,32 @@ The on-demand **Refresh Clock / Site** button shows date, time, UTC
 offset, sidereal time, and persistent site latitude/longitude (west-positive
 in the mount protocol). The operator confirms the stored site is the
 **permanent observing location: +45.2933° N, −75.8571° east-positive**.
-The future offline atlas will use this site and the Pi UTC time already
+The offline atlas uses this site and Pi UTC time already
 returned by `/api/status`, without an atlas NTP test or clock-accuracy
 warning. This is a deliberate permanent scope decision; it does not
 affect the AM3N's existing Connect-time NTP verification. The atlas
 must not modify the mount's site. AstroPi still treats reported
 RA/Dec as unaligned.
+
+## Offline Find atlas field check
+
+Update and restart AstroPi as above, then open **Find** and confirm the
+chart loads without an Internet connection. The initial view is a
+north/east/south/west horizon map from **45.2933° N, 75.8571° W**.
+Search `M1`, `M31`, `M42`, `M110` (or click a Messier marker) to
+centre the object in detail view, show name/RA/Dec and zoom using +/−
+or mouse wheel. **Horizon view** resets to the all-sky projection.
+Try Constellations and RA/Dec grid toggles. Verify Pi UTC advances
+without a mount connection, and no external network requests occur.
+Do not interpret a chart selection as a mount GoTo. Verify camera
+preview and global viewer Stop still work; leaving Find during
+manual jogging must request Stop.
+
+**Vendor note:** `astropi/static/vendor/virtualsky/PROVENANCE.md`
+records source, version and upstream educational/non-profit terms.
+VirtualSky is not under an explicit SPDX licence in the upstream
+repository. This software is packaged for a private observatory;
+review rights before redistribution or commercial use.
 
 ## Diagnostics
 

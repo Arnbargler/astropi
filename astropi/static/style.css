@@ -24,10 +24,22 @@ h1,h2,h3,p{margin:0}h1{font-size:24px}.brand p,.intro p,.card p,footer{color:#93
 .workspace-panel{min-width:0}
 .workspace-note{font-size:13px;color:#9cb9ca;margin-top:12px}
 .panel-slot{min-width:0}
-.atlas-placeholder{min-height:460px;display:flex;flex-direction:column;gap:12px;
-  align-items:flex-start;justify-content:center;border-style:dashed}
-.atlas-placeholder h3{font-size:16px}
-.atlas-placeholder p{max-width:540px}
+.atlas-card{display:flex;flex-direction:column;gap:10px}
+.atlas-title{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:6px}
+.atlas-title h3{font-size:16px}
+.atlas-title span{font-size:12px;color:#a5bac8}
+.atlas-toolbar{display:flex;flex-direction:column;gap:8px}
+.atlas-search{display:flex;align-items:center;flex-wrap:wrap;gap:8px}
+.atlas-search label{font-size:12px;font-weight:600;color:#b9d4e4}
+.atlas-search input{min-width:110px;flex:1;background:#0a1723;color:#e8f5fa;border:1px solid #466377;border-radius:6px;padding:9px}
+.atlas-view-controls{display:flex;gap:7px;flex-wrap:wrap}
+.atlas-view-controls button{flex:1;min-width:72px}
+.atlas-layers{display:flex;flex-wrap:wrap;gap:12px;font-size:12px;color:#b7ccd9}
+.atlas-layers label{display:flex;gap:5px;align-items:center}
+#atlas-sky{height:clamp(410px,57vh,780px);width:100%;min-width:0;overflow:hidden;border-radius:8px;background:#07111e;border:1px solid #304b5d}
+#atlas-status,#atlas-time,#atlas-selection,.atlas-disclaimer{margin:0!important;color:#a6c3d3}
+#atlas-selection{font-weight:600;color:#e5c781!important}
+.atlas-card .atlas-disclaimer{font-size:11px;color:#8fa6b5}
 .dashboard-grid,.focus-layout,.find-layout{display:grid;
   grid-template-columns:minmax(0,1.95fr) minmax(350px,.95fr);gap:14px;align-items:start}
 .find-layout{grid-template-columns:minmax(0,1.95fr) minmax(360px,1.06fr)}
@@ -173,7 +185,7 @@ button:hover:not(:disabled){background:#2a5669}button:disabled{opacity:.38;curso
   #fotograph-controls-slot{grid-area:camera}
   .save-panel{grid-area:capture}
   .health-strip{grid-area:health}
-  .atlas-placeholder{min-height:350px}
+  #atlas-sky{height:clamp(360px,52vh,650px)}
 }
 @media (max-width:650px){
   .shell{padding:12px}
