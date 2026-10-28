@@ -50,6 +50,7 @@ button:hover:not(:disabled){background:#2a5669}button:disabled{opacity:.38;curso
 .control-label{font-size:12px;color:#afc0ce;font-weight:600}
 .preset-grid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:5px}
 .preset-grid.gain-grid{grid-template-columns:repeat(4,minmax(0,1fr))}
+.preset-grid.binning-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
 .preset-input{position:absolute;opacity:0;width:1px!important;height:1px!important;pointer-events:none;padding:0!important;margin:0}
 .preset-choice{display:flex;align-items:center;justify-content:center;text-align:center;min-height:34px;
   background:#0d1923;border:1px solid #385167;border-radius:6px;padding:5px 2px;
