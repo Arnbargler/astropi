@@ -15,6 +15,8 @@ let debayerChangePending = false;
 let binningChangePending = false;
 let selectedBinning = 1;
 let previousFrame = -1;
+const workspaceTabs = ["focus", "find", "fotograph"];
+let activeTab = "fotograph";
 let progressBusy = false;
 let storageReady = false;
 let captureBusy = false;
@@ -84,7 +86,7 @@ function updateButtons() {
     $("mount-" + direction).disabled = !owner || mountPhase !== "connected" ||
       (mountMotionPhase !== "idle" && heldMountDirection !== direction) ||
       (Boolean(heldMountDirection) && heldMountDirection !== direction) ||
-      mountRequestPending ||
+      activeTab !== "find" || mountRequestPending ||
       ["queued", "reading"].includes(mountEnvironmentPhase);
   }
   const saveReady = owner && currentPhase === "running" &&
@@ -248,6 +250,41 @@ for (const speed of mountSpeeds) {
 }
 // Pointer holds have no click-to-latch behaviour. The *Pi* enforces the 600ms
 // deadline; browser events are an additional first line of defence.
+// Switching views must never leave a manual jog running.
+function activateTab(name, focusTab=false) {
+  if (!workspaceTabs.includes(name)) return;
+  if (activeTab === "find" && name !== "find" &&
+      (heldMountDirection || ["starting", "moving"].includes(mountMotionPhase)))
+    stopMount();
+  activeTab = name;
+  for (const tab of workspaceTabs) {
+    const selected = tab === name;
+    const button = $("tab-" + tab);
+    button.setAttribute("aria-selected", String(selected));
+    button.tabIndex = selected ? 0 : -1;
+    $("panel-" + tab).hidden = !selected;
+  }
+  if (name !== "find") {
+    // Relocate the same preview and settings DOM; no duplicate camera stream.
+    $(name + "-preview-slot").appendChild($("shared-preview-card"));
+    $(name + "-controls-slot").appendChild($("shared-camera-controls"));
+  }
+  if (focusTab) $("tab-" + name).focus();
+  updateButtons();
+}
+for (const tab of workspaceTabs) {
+  $("tab-" + tab).addEventListener("click", () => activateTab(tab));
+  $("tab-" + tab).addEventListener("keydown", event => {
+    const i = workspaceTabs.indexOf(tab);
+    const target = event.key === "ArrowRight" ? workspaceTabs[(i+1)%3] :
+      event.key === "ArrowLeft" ? workspaceTabs[(i+2)%3] :
+      event.key === "Home" ? workspaceTabs[0] :
+      event.key === "End" ? workspaceTabs[2] : null;
+    if (target) { event.preventDefault(); activateTab(target, true); }
+  });
+}
+activateTab("fotograph");
+
 async function stopMount() {
   heldMountDirection = null;
   if (mountStopPending || mountPhase !== "connected") return;
@@ -261,8 +298,10 @@ async function stopMount() {
     write("mount-motion", "Stop requested · checking axes for stability…");
     write("mount-error", "");
   } catch(error) {
-    write("mount-error", "Stop request failed: " + error.message +
-      " · USE PHYSICAL CANCEL/POWER!");
+    const warning = "Stop request failed: " + error.message +
+      " · USE PHYSICAL CANCEL/POWER!";
+    write("mount-error", warning);
+    write("global-mount-alert", warning);
   } finally {
     mountStopPending = false;
     updateButtons();
@@ -270,7 +309,7 @@ async function stopMount() {
 }
 $("mount-stop").addEventListener("click", stopMount);
 async function beginMountHold(direction) {
-  if (heldMountDirection || !token || mountPhase !== "connected" ||
+  if (activeTab !== "find" || heldMountDirection || !token || mountPhase !== "connected" ||
       mountMotionPhase !== "idle" ||
       ["queued", "reading"].includes(mountEnvironmentPhase)) return;
   heldMountDirection = direction;
@@ -367,6 +406,7 @@ function showMount(data) {
   if (mountPhase !== "connected" && nextPhase === "connected")
     showMountSpeed("slow");  // reconnect always starts conservatively
   mountPhase = nextPhase;
+  write("global-mount-state", "Mount: " + mountPhase);
   mountMotionPhase = data.motion_phase || "idle";
   mountEnvironmentPhase = data.environment_phase || "idle";
   const syncPhase = data.time_sync_phase || "idle";
@@ -427,8 +467,15 @@ function showMount(data) {
   write("mount-update", "Last telemetry: " +
     (active && data.updated_utc ? new Date(data.updated_utc).toLocaleTimeString() : "—"));
   write("mount-error", data.last_error || "");
-  if (mountMotionPhase === "uncertain")
-    write("mount-error", "Mount not confirmed stopped. USE PHYSICAL CANCEL/POWER.");
+  if (mountMotionPhase === "uncertain") {
+    const warning = "Mount not confirmed stopped. USE PHYSICAL CANCEL/POWER.";
+    write("mount-error", warning);
+    write("global-mount-alert", warning);
+  } else if (data.motion_warning || data.last_error) {
+    write("global-mount-alert", data.motion_warning || data.last_error);
+  } else if (mountMotionPhase === "idle" && data.stop_stable) {
+    write("global-mount-alert", "");
+  }
   updateButtons();
 }
 async function refreshMount() {
@@ -541,6 +588,8 @@ function showCapture(job) {
     cancelled: "Capture sequence cancelled", error: "Capture failed"};
   write("capture-state", (total > 1 ? "Sequence: " : "") +
     (stages[job.phase] || job.phase));
+  write("global-capture-state", total > 1 && captureBusy ?
+    "Capture: " + completed + "/" + total : "Capture: " + (job.phase || "idle"));
   write("sequence-progress", total > 1 ? completed + " / " + total +
     " frames saved" + (job.cancel_requested ? " · stopping after current write" : "") :
     "");
@@ -574,6 +623,7 @@ function showProgress(data) {
     write("binning-message", "Reopening camera with selected binning…");
   if (data.capture) showCapture(data.capture);
   write("camera-phase", "Camera: " + data.phase);
+  write("global-camera-state", "Camera: " + data.phase);
   const fps = typeof data.preview_fps === "number" ? data.preview_fps.toFixed(1) + " fps" : "— fps";
   const raw = typeof data.capture_fps === "number" ? data.capture_fps.toFixed(1) + " fps" : "— fps";
   const processing = typeof data.preview_processing_ms === "number" ? data.preview_processing_ms.toFixed(0) + " ms" : "— ms";

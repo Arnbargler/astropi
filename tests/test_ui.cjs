@@ -33,11 +33,14 @@ function harness() {
   };
   function el(id) {
     if (!elements.has(id)) elements.set(id, {
-      value: "", textContent: "", checked: false, hidden: false,
+      id, value: "", textContent: "", checked: false, hidden: false,
+      tabIndex: 0, parentNode: null, focused: false,
       disabled: false, className: "", src: "", attributes: {}, handlers: {},
       setAttribute(name, value) { this.attributes[name] = value; },
       addEventListener(name, cb) { this.handlers[name] = cb; },
-      dispatch(name) { return this.handlers[name](); }
+      appendChild(child) { child.parentNode = this; return child; },
+      focus() { this.focused = true; },
+      dispatch(name, event={}) { return this.handlers[name](event); }
     });
     return elements.get(id);
   }
@@ -120,6 +123,8 @@ function harness() {
   // The real template initially checks FITS and JPG; emulate those DOM defaults.
   el("capture-fits").checked = true;
   el("capture-jpg").checked = true;
+  el("shared-preview-card").parentNode = el("fotograph-preview-slot");
+  el("shared-camera-controls").parentNode = el("fotograph-controls-slot");
   const code = fs.readFileSync(path.join(__dirname,"../astropi/static/app.js"),"utf8");
   vm.runInNewContext(code, {
     document:{getElementById:el,
@@ -362,6 +367,7 @@ test("motion buttons start immediately for operator, no arm step",async()=>{
   await h.el("take-control").dispatch("click");
   await h.el("mount-connect").dispatch("click");
   assert.equal(h.el("mount-stop").disabled,false);
+  await h.el("tab-find").dispatch("click");
   assert.equal(h.el("mount-north").disabled,false);
   assert.equal(h.calls.filter(c=>c.url==="/api/mount/jog").length,0);
   assert.equal(h.el("mount-east").disabled,false);
@@ -388,6 +394,7 @@ test("window blur and visibility change request Stop",async()=>{
   await h.flush();
   await h.el("take-control").dispatch("click");
   await h.el("mount-connect").dispatch("click");
+  await h.el("tab-find").dispatch("click");
   await h.el("mount-north").dispatch("pointerdown");
   h.windowEvent("blur");
   await h.flush();
@@ -419,6 +426,7 @@ test("mount speed presets bind to immediate jogs and lock while moving",async()=
   await h.flush();
   await h.el("take-control").dispatch("click");
   await h.el("mount-connect").dispatch("click");
+  await h.el("tab-find").dispatch("click");
   assert.equal(h.el("mount-speed-slow").checked,true);
   assert.equal(h.el("mount-speed-medium").disabled,false);
   h.el("mount-speed-medium").dispatch("change");
@@ -443,6 +451,7 @@ test("reconnect always restores slow mount speed",async()=>{
   await h.flush();
   await h.el("take-control").dispatch("click");
   await h.el("mount-connect").dispatch("click");
+  await h.el("tab-find").dispatch("click");
   h.el("mount-speed-fast").dispatch("change");
   assert.equal(h.el("mount-speed-fast").checked,true);
   await h.el("mount-disconnect").dispatch("click");
@@ -490,6 +499,7 @@ test("720x and 1440x are selected without arm, with release Stop", async()=>{
   await h.flush();
   await h.el("take-control").dispatch("click");
   await h.el("mount-connect").dispatch("click");
+  await h.el("tab-find").dispatch("click");
   h.el("mount-speed-slew").dispatch("change");
   assert.equal(h.el("mount-speed-slew").checked,true);
   await h.el("mount-north").dispatch("pointerdown");
@@ -542,6 +552,7 @@ test("NTP unavailable shows honest error while mount remains connected",async()=
   await h.intervals.get(1000)();
   assert.match(h.el("mount-time-sync").textContent,/NOT synchronized/);
   assert.match(h.el("mount-time-sync-error").textContent,/not confirmed NTP/);
+  await h.el("tab-find").dispatch("click");
   assert.equal(h.el("mount-east").disabled,false,
     "manual Alt/Az is still available without a verified sky clock");
 });
@@ -584,17 +595,120 @@ test("binning buttons disabled while a capture or sequence is saving",async()=>{
 
 
 
-test("1080p dashboard is full-width, keeps all functional controls and stays responsive",()=>{
+test("persistent three tabs retain single camera preview and controls",async()=>{
+  const h=harness();
+  await h.flush();
+  assert.equal(h.el("panel-fotograph").hidden,false);
+  assert.equal(h.el("panel-focus").hidden,true);
+  assert.equal(h.el("panel-find").hidden,true);
+  assert.equal(h.el("tab-fotograph").attributes["aria-selected"],"true");
+  await h.el("take-control").dispatch("click");
+  await h.el("gain-260").dispatch("change");
+  await h.el("tab-focus").dispatch("click");
+  assert.equal(h.el("panel-focus").hidden,false);
+  assert.equal(h.el("panel-fotograph").hidden,true);
+  assert.equal(h.el("shared-preview-card").parentNode.id,"focus-preview-slot");
+  assert.equal(h.el("shared-camera-controls").parentNode.id,"focus-controls-slot");
+  assert.equal(h.el("gain-260").checked,true);
+  assert.equal(h.el("release-control").hidden,false,"operator lease remains active");
+  let prevented=false;
+  await h.el("tab-focus").dispatch("keydown",{
+    key:"ArrowRight",preventDefault(){prevented=true;}
+  });
+  assert.equal(prevented,true);
+  assert.equal(h.el("panel-find").hidden,false);
+  assert.equal(h.el("tab-find").focused,true);
+  await h.el("tab-fotograph").dispatch("click");
+  assert.equal(h.el("shared-preview-card").parentNode.id,"fotograph-preview-slot");
+  assert.equal(h.el("shared-camera-controls").parentNode.id,"fotograph-controls-slot");
+  assert.equal(h.el("gain-260").checked,true);
+  for(const path of ["/api/camera/start","/api/camera/stop",
+    "/api/control/release","/api/capture/cancel"])
+    assert.equal(h.calls.filter(c=>c.url===path).length,0,
+      "tab switching must not affect backend "+path);
+});
+
+test("leaving Find during a held jog requests Stop before hiding controls",async()=>{
+  const h=harness();
+  await h.flush();
+  await h.el("take-control").dispatch("click");
+  await h.el("mount-connect").dispatch("click");
+  await h.el("tab-find").dispatch("click");
+  await h.el("mount-north").dispatch("pointerdown");
+  assert.equal(h.calls.filter(c=>c.url==="/api/mount/jog").length,1);
+  await h.el("tab-focus").dispatch("click");
+  assert.equal(h.el("panel-find").hidden,true);
+  assert.equal(h.calls.filter(c=>c.url==="/api/mount/stop").length,1);
+  assert.equal(h.el("mount-north").disabled,true);
+  await h.intervals.get(150)();
+  assert.equal(h.calls.filter(c=>c.url==="/api/mount/jog-heartbeat").length,0,
+    "no jog heartbeat continues after tab switch");
+  await h.el("mount-west").dispatch("pointerdown");
+  assert.equal(h.calls.filter(c=>c.url==="/api/mount/jog").length,1,
+    "hidden Find may not initiate motion");
+});
+
+test("emergency Stop remains available to viewer on every tab",async()=>{
+  const h=harness();
+  await h.flush();
+  await h.el("take-control").dispatch("click");
+  await h.el("mount-connect").dispatch("click");
+  await h.el("release-control").dispatch("click");
+  for(const tab of ["focus","find","fotograph"]){
+    await h.el("tab-"+tab).dispatch("click");
+    assert.equal(h.el("mount-stop").disabled,false);
+    await h.el("mount-stop").dispatch("click");
+  }
+  assert.equal(h.calls.filter(c=>c.url==="/api/mount/stop").length,3);
+});
+
+test("capture sequence persists across workspace switches",async()=>{
+  const h=harness();
+  await h.flush();
+  await h.el("take-control").dispatch("click");
+  await h.el("capture-5").dispatch("click");
+  await h.intervals.get(50)();
+  assert.equal(h.el("cancel-sequence").disabled,false);
+  await h.el("tab-find").dispatch("click");
+  h.updateCapture({phase:"saving",total_frames:5,completed_frames:3});
+  await h.intervals.get(50)();
+  assert.match(h.el("global-capture-state").textContent,/3\/5/);
+  await h.el("tab-focus").dispatch("click");
+  await h.el("tab-fotograph").dispatch("click");
+  assert.equal(h.el("cancel-sequence").disabled,false);
+  assert.equal(h.calls.filter(c=>c.url==="/api/capture/cancel").length,0);
+  assert.equal(h.calls.filter(c=>c.url==="/api/control/release").length,0);
+});
+
+test("global mount warning exposes uncertain stop while other tab is visible",async()=>{
+  const h=harness();
+  await h.flush();
+  h.updateMount({phase:"connected",connected:true,
+    motion_phase:"uncertain",motion_warning:"Stop unverified"});
+  await h.intervals.get(1000)();
+  assert.match(h.el("global-mount-alert").textContent,/PHYSICAL CANCEL/);
+  assert.equal(h.el("panel-fotograph").hidden,false);
+});
+
+test("three workspaces retain responsive controls and safety warnings",()=>{
   const html=fs.readFileSync(path.join(__dirname,"../astropi/templates/index.html"),"utf8");
   const css=fs.readFileSync(path.join(__dirname,"../astropi/static/style.css"),"utf8");
-  assert.match(html,/class="dashboard-grid"/);
-  assert.match(html,/class="imaging-column"/);
-  assert.match(html,/class="health-strip"/);
+  assert.match(html,/role="tablist"/);
+  for(const name of ["focus","find","fotograph"]){
+    assert.match(html,new RegExp('id="tab-'+name+'" role="tab"'));
+    assert.match(html,new RegExp('id="panel-'+name+'"'));
+  }
+  assert.match(html,/id="shared-preview-card"/);
+  assert.match(html,/id="shared-camera-controls"/);
+  assert.match(html,/id="fotograph-preview-slot"/);
+  assert.match(html,/id="focus-controls-slot"/);
+  assert.ok(html.indexOf('id="mount-stop"') < html.indexOf('id="panel-focus"'),
+    "Emergency Stop must be outside hidden tab panels");
+  assert.ok(html.indexOf('class="card mount-card"') > html.indexOf('id="panel-find"'));
+  assert.ok(html.indexOf('class="card mount-card"') < html.indexOf('id="panel-fotograph"'));
   assert.ok(html.indexOf('class="card preview-card"') < html.indexOf('class="card save-panel"'));
   assert.ok(html.indexOf('class="card save-panel"') < html.indexOf('class="card controls"'));
-  assert.ok(html.indexOf('class="card controls"') < html.indexOf('class="card mount-card"'));
-  assert.ok(html.indexOf('class="mount-jog-panel"') < html.indexOf('class="mount-environment"'),
-    "Mount Stop and jog controls are more prominent than secondary clock readbacks");
+  assert.ok(html.indexOf('class="mount-jog-panel"') < html.indexOf('class="mount-environment"'));
   for (const id of [
     "preview-image","start-camera","stop-camera","exposure-buttons","gain-buttons",
     "binning-buttons","stretch-auto","stretch-fixed","debayer-on","debayer-off",
@@ -604,26 +718,21 @@ test("1080p dashboard is full-width, keeps all functional controls and stays res
     "mount-disconnect","mount-stop","mount-speed-slow","mount-speed-max",
     "mount-north","mount-south","mount-west","mount-east",
     "mount-env-time","mount-env-latitude","mount-raw-status",
-    "storage-state","storage-free","pi-temp","pi-uptime"
+    "storage-state","storage-free","pi-temp","pi-uptime",
+    "global-camera-state","global-mount-state","global-capture-state","global-mount-alert"
   ]) assert.match(html,new RegExp('id="'+id+'"'),"Missing control/status "+id);
   const ids=Array.from(html.matchAll(/\bid="([^"]+)"/g),m=>m[1]);
-  assert.equal(new Set(ids).size,ids.length,"No repeated DOM ids");
+  assert.equal(new Set(ids).size,ids.length,"No duplicate DOM IDs");
   assert.match(css,/\.shell\{width:100%;max-width:2160px/);
-  assert.doesNotMatch(css,/max-width:1140px/);
-  assert.match(css,/\.dashboard-grid\{display:grid;grid-template-columns:minmax\(0,1\.95fr\)/);
+  assert.match(css,/\.global-status\{position:sticky/);
+  assert.match(css,/\.dashboard-grid,\.focus-layout,\.find-layout\{display:grid/);
   assert.match(css,/\.preview-frame\{width:100%;height:auto;aspect-ratio:3856\/2180/);
   assert.match(css,/@media \(max-width:1550px\)/);
   assert.match(css,/@media \(max-width:920px\)/);
   assert.match(css,/\.imaging-column\{display:contents\}/);
   assert.match(css,/@media \(max-width:650px\)/);
-  for(const obsolete of [
-    "Choose output formats independently",
-    "FITS/RAW16: 3856",
-    "Five manual rates:",
-    "Exposure/gain presets apply automatically",
-    "Binning change restarts the camera session",
-    "DEVELOPMENT BUILD"
-  ]) assert.ok(!html.includes(obsolete),"Obsolete on-screen instruction: "+obsolete);
-  assert.match(html,/Software Stop is not fail-safe/,
-    "Physical fallback warning is safety-critical");
+  assert.match(html,/Software Stop is not fail-safe/);
+  assert.match(html,/Offline VirtualSky comes next/);
+  assert.doesNotMatch(html,/id="atlas-goto"/);
+  assert.doesNotMatch(html,/id="mount-(?:home|goto|track|park)"/);
 });

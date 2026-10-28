@@ -19,15 +19,120 @@
         <button id="release-control" hidden>Release Control</button>
       </div>
     </header>
-    <section class="dashboard-grid" aria-label="Observatory dashboard">
+    <div class="global-status" aria-label="Live observatory status">
+      <div class="global-state">
+        <span id="global-camera-state">Camera: stopped</span>
+        <span id="global-mount-state">Mount: disconnected</span>
+        <span id="global-capture-state">Capture: idle</span>
+      </div>
+      <p id="global-mount-alert" role="alert"></p>
+      <button type="button" id="mount-stop" class="mount-stop" disabled>STOP MOUNT</button>
+    </div>
+
+    <nav class="workspace-tabs" aria-label="AstroPi workspaces" role="tablist">
+      <button type="button" id="tab-focus" role="tab" aria-controls="panel-focus" aria-selected="false" tabindex="-1">Focus</button>
+      <button type="button" id="tab-find" role="tab" aria-controls="panel-find" aria-selected="false" tabindex="-1">Find</button>
+      <button type="button" id="tab-fotograph" role="tab" aria-controls="panel-fotograph" aria-selected="true" tabindex="0">Fotograph</button>
+    </nav>
+    <section id="panel-focus" class="workspace-panel" role="tabpanel" aria-labelledby="tab-focus" hidden>
+      <div class="focus-layout">
+        <div id="focus-preview-slot" class="panel-slot"></div>
+        <div id="focus-controls-slot" class="panel-slot"></div>
+      </div>
+      <p class="workspace-note">Live preview and camera settings are shared with Fotograph. Digital zoom and star-sharpness tools come after Find.</p>
+    </section>
+    <section id="panel-find" class="workspace-panel" role="tabpanel" aria-labelledby="tab-find" hidden>
+      <div class="find-layout">
+        <article class="card atlas-placeholder">
+          <h3>Sky Atlas</h3>
+          <p>Offline VirtualSky comes next. The sky chart, Messier object search and target selection are not installed yet.</p>
+          <p>Manual mount controls remain available here. Selecting a sky target will not move the mount in the first atlas release.</p>
+        </article>
+      <article class="card mount-card">
+        <h3>ZWO AM3N · Mount control</h3>
+        <div class="metric" id="mount-usb">Checking…</div>
+        <p id="mount-serial">Checking serial alias…</p>
+        <div class="button-row">
+          <button id="mount-connect" disabled>Connect Mount</button>
+          <button id="mount-disconnect" disabled>Disconnect</button>
+        </div>
+        <p id="mount-phase" role="status">Mount disconnected</p>
+        <p id="mount-model">Model / firmware: —</p>
+        <p id="mount-time-sync" role="status">Pi NTP → mount clock: waiting to connect</p>
+        <p id="mount-time-sync-error" role="alert" class="mount-error"></p>
+        <div class="mount-coordinates" aria-label="Mount reported coordinates">
+          <div><span>Altitude</span><strong id="mount-altitude">—</strong></div>
+          <div><span>Azimuth</span><strong id="mount-azimuth">—</strong></div>
+          <div><span>RA (reported)</span><strong id="mount-ra">—</strong></div>
+          <div><span>Dec (reported)</span><strong id="mount-dec">—</strong></div>
+        </div>
+        <div class="mount-jog-panel">
+          <p class="mount-caution">Software Stop is not fail-safe; keep physical Cancel/power accessible.</p>
+          <div class="mount-speed" role="group" aria-label="Manual mount jog speed">
+            <label for="mount-speed-slow" class="mount-speed-choice">
+              <input id="mount-speed-slow" name="mount-speed" type="radio" value="slow" checked disabled>
+              <span>Slow <small>8×</small></span>
+            </label>
+            <label for="mount-speed-medium" class="mount-speed-choice">
+              <input id="mount-speed-medium" name="mount-speed" type="radio" value="medium" disabled>
+              <span>Medium <small>20×</small></span>
+            </label>
+            <label for="mount-speed-fast" class="mount-speed-choice">
+              <input id="mount-speed-fast" name="mount-speed" type="radio" value="fast" disabled>
+              <span>Fast <small>60×</small></span>
+            </label>
+            <label for="mount-speed-slew" class="mount-speed-choice">
+              <input id="mount-speed-slew" name="mount-speed" type="radio" value="slew" disabled>
+              <span>Slew <small>720×</small></span>
+            </label>
+            <label for="mount-speed-max" class="mount-speed-choice">
+              <input id="mount-speed-max" name="mount-speed" type="radio" value="max" disabled>
+              <span>Max <small>1440×</small></span>
+            </label>
+          </div>
+          <div class="mount-directions" role="group" aria-label="Press and hold to jog mount">
+            <button type="button" id="mount-north" disabled aria-label="Hold to move altitude north">N ↑</button>
+            <button type="button" id="mount-west" disabled aria-label="Hold to move azimuth west">W ←</button>
+            <span class="mount-center">ALT / AZ</span>
+            <button type="button" id="mount-east" disabled aria-label="Hold to move azimuth east">E →</button>
+            <button type="button" id="mount-south" disabled aria-label="Hold to move altitude south">S ↓</button>
+          </div>
+          <p id="mount-motion" role="status" aria-live="polite">Idle</p>
+          <p id="mount-motion-warning" role="alert" class="mount-error"></p>
+        </div>
+        <div class="mount-environment">
+          <button type="button" id="mount-read-environment" disabled>Refresh Clock / Site</button>
+          <p id="mount-environment-state" role="status">Clock/site not read</p>
+          <div class="mount-coordinates" aria-label="Mount stored clock and observing site">
+            <div><span>Mount date</span><strong id="mount-env-date">—</strong></div>
+            <div><span>Mount time (UTC)</span><strong id="mount-env-time">—</strong></div>
+            <div><span>UTC offset</span><strong id="mount-env-offset">—</strong></div>
+            <div><span>Sidereal time</span><strong id="mount-env-sidereal">—</strong></div>
+            <div><span>Stored latitude</span><strong id="mount-env-latitude">—</strong></div>
+            <div><span>Stored longitude (W+)</span><strong id="mount-env-longitude">—</strong></div>
+          </div>
+          <p id="mount-environment-error" role="alert" class="mount-error"></p>
+        </div>
+        <p id="mount-flags">Status flags: —</p>
+        <p id="mount-raw-status" class="mount-small">Raw :GU#: —</p>
+        <p id="mount-update" class="mount-small">Last telemetry: —</p>
+        <p id="mount-error" role="alert" class="mount-error"></p>
+      </article>
+      </div>
+    </section>
+    <section id="panel-fotograph" class="workspace-panel" role="tabpanel" aria-labelledby="tab-fotograph">
+      <div class="dashboard-grid" aria-label="Photography workspace">
+
       <div class="imaging-column">
-      <article class="card preview-card">
+      <div id="fotograph-preview-slot" class="panel-slot">
+      <article id="shared-preview-card" class="card preview-card">
         <div class="preview-frame">
           <img id="preview-image" alt="Live SV705C camera preview" hidden>
           <span id="preview-placeholder">Camera preview is not running</span>
         </div>
         <div class="preview-footer"><span id="camera-phase">Camera stopped</span><span id="frame-count">0 JPEG frames · — preview fps · — raw fps</span></div>
       </article>
+      </div>
     <section class="card save-panel" aria-label="Capture and save">
       <h3>Capture</h3>
       <div class="save-formats" role="group" aria-label="Save formats">
@@ -59,7 +164,8 @@
         <p id="pi-uptime">Checking uptime…</p></article>
         </div>
       </div>
-      <article class="card controls">
+      <div id="fotograph-controls-slot" class="panel-slot">
+      <article id="shared-camera-controls" class="card controls">
         <h3>SVBONY SV705C</h3>
         <p id="camera-usb">Checking USB…</p>
         <div class="button-row">
@@ -156,77 +262,8 @@
         <p id="settings-message" role="status" class="settings-message"></p>
         <p id="camera-error" role="alert"></p>
       </article>
-      <article class="card mount-card">
-        <h3>ZWO AM3N · Mount control</h3>
-        <div class="metric" id="mount-usb">Checking…</div>
-        <p id="mount-serial">Checking serial alias…</p>
-        <div class="button-row">
-          <button id="mount-connect" disabled>Connect Mount</button>
-          <button id="mount-disconnect" disabled>Disconnect</button>
-        </div>
-        <p id="mount-phase" role="status">Mount disconnected</p>
-        <p id="mount-model">Model / firmware: —</p>
-        <p id="mount-time-sync" role="status">Pi NTP → mount clock: waiting to connect</p>
-        <p id="mount-time-sync-error" role="alert" class="mount-error"></p>
-        <div class="mount-coordinates" aria-label="Mount reported coordinates">
-          <div><span>Altitude</span><strong id="mount-altitude">—</strong></div>
-          <div><span>Azimuth</span><strong id="mount-azimuth">—</strong></div>
-          <div><span>RA (reported)</span><strong id="mount-ra">—</strong></div>
-          <div><span>Dec (reported)</span><strong id="mount-dec">—</strong></div>
-        </div>
-        <div class="mount-jog-panel">
-          <button id="mount-stop" class="mount-stop" disabled>STOP MOUNT</button>
-          <p class="mount-caution">Software Stop is not fail-safe; keep physical Cancel/power accessible.</p>
-          <div class="mount-speed" role="group" aria-label="Manual mount jog speed">
-            <label for="mount-speed-slow" class="mount-speed-choice">
-              <input id="mount-speed-slow" name="mount-speed" type="radio" value="slow" checked disabled>
-              <span>Slow <small>8×</small></span>
-            </label>
-            <label for="mount-speed-medium" class="mount-speed-choice">
-              <input id="mount-speed-medium" name="mount-speed" type="radio" value="medium" disabled>
-              <span>Medium <small>20×</small></span>
-            </label>
-            <label for="mount-speed-fast" class="mount-speed-choice">
-              <input id="mount-speed-fast" name="mount-speed" type="radio" value="fast" disabled>
-              <span>Fast <small>60×</small></span>
-            </label>
-            <label for="mount-speed-slew" class="mount-speed-choice">
-              <input id="mount-speed-slew" name="mount-speed" type="radio" value="slew" disabled>
-              <span>Slew <small>720×</small></span>
-            </label>
-            <label for="mount-speed-max" class="mount-speed-choice">
-              <input id="mount-speed-max" name="mount-speed" type="radio" value="max" disabled>
-              <span>Max <small>1440×</small></span>
-            </label>
-          </div>
-          <div class="mount-directions" role="group" aria-label="Press and hold to jog mount">
-            <button type="button" id="mount-north" disabled aria-label="Hold to move altitude north">N ↑</button>
-            <button type="button" id="mount-west" disabled aria-label="Hold to move azimuth west">W ←</button>
-            <span class="mount-center">ALT / AZ</span>
-            <button type="button" id="mount-east" disabled aria-label="Hold to move azimuth east">E →</button>
-            <button type="button" id="mount-south" disabled aria-label="Hold to move altitude south">S ↓</button>
-          </div>
-          <p id="mount-motion" role="status" aria-live="polite">Idle</p>
-          <p id="mount-motion-warning" role="alert" class="mount-error"></p>
-        </div>
-        <div class="mount-environment">
-          <button type="button" id="mount-read-environment" disabled>Refresh Clock / Site</button>
-          <p id="mount-environment-state" role="status">Clock/site not read</p>
-          <div class="mount-coordinates" aria-label="Mount stored clock and observing site">
-            <div><span>Mount date</span><strong id="mount-env-date">—</strong></div>
-            <div><span>Mount time (UTC)</span><strong id="mount-env-time">—</strong></div>
-            <div><span>UTC offset</span><strong id="mount-env-offset">—</strong></div>
-            <div><span>Sidereal time</span><strong id="mount-env-sidereal">—</strong></div>
-            <div><span>Stored latitude</span><strong id="mount-env-latitude">—</strong></div>
-            <div><span>Stored longitude (W+)</span><strong id="mount-env-longitude">—</strong></div>
-          </div>
-          <p id="mount-environment-error" role="alert" class="mount-error"></p>
-        </div>
-        <p id="mount-flags">Status flags: —</p>
-        <p id="mount-raw-status" class="mount-small">Raw :GU#: —</p>
-        <p id="mount-update" class="mount-small">Last telemetry: —</p>
-        <p id="mount-error" role="alert" class="mount-error"></p>
-      </article>
+      </div>
+      </div>
     </section>
     <footer>Last update: <span id="last-update">—</span></footer>
   </main>

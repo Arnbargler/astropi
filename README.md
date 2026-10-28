@@ -55,30 +55,28 @@ or an INDI server, avoiding simultaneous conflicting USB/Wi-Fi commands.
 
 ## Interface: current dashboard and agreed next design
 
-**Currently implemented:** a single responsive desktop dashboard, optimized
-for 1920×1080, with preview/capture/host at left, camera settings in the
-middle, and mount controls at right. Its format toggles, capture counts
-**1/5/50/100/150/200/Cancel**, progress, operator lease and safety messages
-remain functional. The atlas and three-tab navigation do **not** exist yet.
+**Implemented (step 1, 2026-10-28):** one persistent browser application
+with three tabs, **Focus / Find / Fotograph** (intentional spelling).
+The original dashboard has been split into dedicated workspaces, with no
+page navigation or new camera/mount sessions:
 
-**Agreed next architecture:** one persistent browser application with three
-tabs, **Focus / Find / Fotograph** (intentional spelling), not three pages
-that reload or create independent hardware sessions:
+- **Focus:** the same live SV705C preview and camera settings as Fotograph;
+  digital zoom and star-sharpness aids remain future work.
+- **Find:** existing manual AM3N controls/status, alongside an explicit
+  placeholder for the forthcoming offline VirtualSky atlas. No chart yet.
+- **Fotograph (default tab):** existing full-frame preview, exposure/gain,
+  binning/stretch/debayer, FITS/RAW16/JPG/PNG, capture buttons
+  **1/5/50/100/150/200/Cancel**, image sequences and USB/host status.
 
-- **Focus:** shared live SV705C preview; later click-to-centre digital zoom
-  and star-sharpness aids. Focusing aids are deferred while Find is built.
-- **Find:** offline VirtualSky chart and eventual target search, plus existing
-  manual AM3N controls/status; future alignment and atlas-selected GoTo.
-- **Fotograph:** existing camera exposure/gain/binning/stretch/debayer,
-  full-frame preview, format selection, image sequences and recording status.
+The global sticky status strip displays camera/mount/capture state and
+**STOP MOUNT** on all tabs, including for viewers. Existing preview and
+settings elements are moved between Focus and Fotograph; they are not
+duplicated. Tab changes preserve the operator lease, camera SDK session
+and Pi-owned captures; leaving Find requests Stop on an active manual jog
+and retains the mount's 600ms heartbeat failsafe. The underlying workers,
+camera/frame APIs and recording system were not changed.
 
-Global header/navigation keeps the operator lease, camera/mount/capture
-state and **STOP MOUNT** available from every tab, including to viewers.
-Tab changes must not restart the camera, release control, stop Pi-owned
-sequences, or start motion. Leaving Find must stop any active manual jog;
-all mount commands remain owned by its sole backend worker.
-
-**Immediate next milestone:** Find tab with **fully local VirtualSky**,
+**Immediate next milestone (step 2):** Find tab with **fully local VirtualSky**,
 no photographic imagery or network/CDN dependency, real-time local-sky
 view using the permanent observing site +45.2933° N, −75.8571°
 east-positive, Pi UTC/NTP status, stars/constellations/planets, horizon,

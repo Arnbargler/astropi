@@ -90,26 +90,25 @@ the original mosaic sample values for later desktop processing.
   No passwords/accounts for the trusted LAN; don't expose the Flask development
   server to the Internet.
 
-**Agreed UI redesign (not yet coded):** a single persistent AstroPi browser
-application with three tabs, **Focus / Find / Fotograph**. Avoid a separate
-`/atlas` page or reload-based navigation. The Raspberry Pi continues to
-own the *one* camera SDK worker, mount serial worker, capture manager and
-operator lease shared across all tabs.
+**Implemented tab shell (2026-10-28):** a single persistent AstroPi browser
+application with three tabs, **Focus / Find / Fotograph**. There is no
+separate `/atlas` route or reload-based navigation. One camera SDK worker,
+mount serial worker, capture manager and operator lease serve all tabs.
 
-- **Focus:** live preview and camera settings needed to focus; later click-
-  centred zoom/peaking/HFR. These aids are deferred until after the atlas.
-- **Find:** dominant offline VirtualSky chart, object selection and AM3N
-  manual mount controls/status; future alignment, mount marker and GoTo.
-- **Fotograph:** existing full preview, exposure/gain, binning, display
-  settings, FITS/RAW16/JPG/PNG and counted captures/USB/host status.
-- Shared visible navigation/status and **emergency STOP MOUNT on every tab**,
-  including for viewers. Maintain the operator heartbeat across tab changes.
-  Switching tabs must not stop the camera, cancel Pi-owned recording or
-  release operator ownership; an active jog must Stop when leaving Find.
-  No new movement commands from merely viewing/selecting a chart.
+- **Focus:** currently displays the same shared preview and camera
+  settings as Fotograph; click-centred zoom/peaking/HFR remain deferred.
+- **Find:** existing manual AM3N controls/status with a clearly labelled
+  **future atlas** placeholder. VirtualSky, target selection, sky alignment,
+  mount marker and GoTo are not yet implemented.
+- **Fotograph (initial tab):** existing full preview, exposure/gain, binning,
+  display settings, FITS/RAW16/JPG/PNG and counted captures/USB/host status.
+- Shared sticky status and **emergency STOP MOUNT on every tab**, including
+  viewers. Operator token/heartbeat and Pi-owned capture persist across
+  switches. Leaving Find stops an active manual jog; a hidden Find cannot
+  initiate a jog. Chart browsing will not issue mount movement commands.
 
-First deliver the tab shell preserving existing controls; then integrate the
-offline chart in Find. Keep mount control and capture safety regressions.
+**Next:** integrate the fully offline VirtualSky chart into Find without
+restructuring the hardware workers. Keep mount and capture safety tests.
 
 ## Exclusions and deferred decisions
 

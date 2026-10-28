@@ -82,27 +82,31 @@ checkboxes and **1/5/50/100/150/200/Cancel**, with Pi-owned sequences.
 Preserve IDs, polling, controls, error/status feedback and the existing
 camera/mount safety tests during migration.
 
-**Next (approved; not yet in code):** one persistent HTML/JS browser app
-with **Focus / Find / Fotograph** tabs; do **not** add the previously
-suggested distinct `/atlas` Flask page. Keep a single shared connection,
-operator token/heartbeat, camera and mount sessions, recording manager,
-global status and accessible **STOP MOUNT**. Only the active view's
-expensive rendering/polling needs to run; use care not to stop the backend
-camera/recording while hiding a view. Explicitly Stop an active manual jog
-on departure from Find; existing focus-loss and 600ms deadman are retained.
+**Implemented step 1:** one persistent HTML/JS app with
+**Focus / Find / Fotograph** tabs (no separate `/atlas` Flask page).
+`app.js` relocates the single `#shared-preview-card` and
+`#shared-camera-controls` between Focus and Fotograph slots via
+`appendChild`, preserving their IDs/event handlers and the one JPEG
+preview polling path. The operator token/heartbeat, camera/mount sessions,
+recording manager and capture progress continue across tab switches.
+A sticky global status strip includes **STOP MOUNT** for all viewers;
+leaving Find requests Stop before hiding a held jog, and hidden Find
+cannot start a jog. Existing focus-loss/600ms deadman still apply.
+There are no new mount commands or camera SDK changes.
 
-- **Focus:** shared preview now; click-to-centre zoom, peaking and HFR
-  remain future features.
-- **Find:** primarily VirtualSky with local chart controls and basic
-  Messier target information; move existing mount controls here.
-- **Fotograph:** existing preview, camera settings, capture and host/USB
-  status. Do not change acquisition or recording semantics.
+- **Focus:** shared live preview and camera controls; click-to-centre
+  zoom, peaking and HFR remain deferred.
+- **Find:** existing manual mount controls/status and an honest VirtualSky
+  placeholder; the chart and Messier search are still future work.
+- **Fotograph (default):** existing preview, camera settings, capture
+  and host/USB status; acquisition and recording semantics are unchanged.
 
 ### Immediate work plan: offline VirtualSky v0.1 (not yet started)
 
-1. **Tab shell:** refactor existing `/` into the persistent three-tab
-   application, preserving operator ownership, camera/mount status,
-   emergency Stop and recording progress. No independent page reloads.
+1. **Tab shell — IMPLEMENTED:** persistent three-tab interface on `/`,
+   shared preview/settings DOM, operator lease/status, sticky global
+   emergency Stop and recording progress; no independent reloads.
+   UI/capture/mount regression tests accompany this change.
 2. **Vendor local VirtualSky:** add pinned upstream JS/data and required
    supporting assets under `astropi/static/`, retain license/attribution,
    and wrap its API behind a replaceable local JS adapter. No CDNs or
@@ -142,8 +146,9 @@ Mocks test SDK ownership, data conversion, USB fail-closed, sequences,
 serial command gating, heartbeat Stop, NTP ACK/readback and UI behaviour.
 Hardware-confirmed work is summarized in HARDWARE.md.
 
-**Next priority:** implement the six-step **persistent tabs + offline
-VirtualSky v0.1** plan above, then conduct real-Pi/browser field checks.
+**Next priority:** start **step 2, local VirtualSky assets and adapter**,
+then proceed through site/time, chart controls, Messier selection and
+offline/field testing. The step-1 UI needs real-Pi/browser confirmation.
 Keep mount GoTo/alignment and focus aids explicitly deferred.
 
 **Other later work:** systemd startup/recovery; storage/USB failure and

@@ -34,13 +34,15 @@ Flask currently runs in the foreground; **no automatic startup service is
 installed**. No camera or mount serial session starts merely by loading
 the page. Internet exposure/authentication is not supported.
 
-**Planned, not yet installed:** a persistent three-tab browser UI,
-**Focus / Find / Fotograph**. Find will host a wholly offline VirtualSky
-pointing chart; the first version is observational only (no GoTo).
-The existing single dashboard remains the actual operator interface
-until this redesign is implemented. Switching tabs must preserve the
-operator session and Pi-owned exposures, while stopping active jogs;
-emergency mount Stop stays accessible on every tab.
+**Implemented three-tab browser UI (step 1): Focus / Find / Fotograph**.
+Fotograph is selected initially and retains existing imaging/capture
+controls; Focus shares the same preview and camera settings; Find
+contains existing manual mount controls and a placeholder for the future
+offline VirtualSky pointing chart (no atlas/GoTo installed yet).
+The operator token and Pi-owned exposures persist between tabs. Leaving
+Find while jogging requests Stop; **STOP MOUNT** is in the sticky status
+strip on every tab, including for viewers. After pulling this change,
+confirm the moved mount controls and shared preview work on the real Pi.
 
 ## Camera, recording and verification
 
