@@ -447,3 +447,18 @@ def test_binning_2_does_not_accept_full_resolution_input(tmp_path):
             received_at=WHEN, stretch="auto", binning=2
         )
     assert not (tmp_path / "captures").exists()
+
+
+
+def test_capture_manager_preserves_binning_through_async_save():
+    fake = FakeSave()
+    manager = CaptureManager(fake)
+    manager.request(["raw", "fits"])
+    assert manager.accept_frame(b"binned-frame", gain=10, exposure_us=250_000,
+                                stretch="fixed", binning=2)
+    deadline = time.monotonic() + 3
+    while manager.status()["phase"] == "saving" and time.monotonic() < deadline:
+        time.sleep(.01)
+    assert manager.status()["phase"] == "done"
+    assert fake.received[0][0] == b"binned-frame"
+    assert fake.received[0][2]["binning"] == 2
