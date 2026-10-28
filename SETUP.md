@@ -26,7 +26,6 @@ git pull --ff-only
 source .venv/bin/activate
 python -m pip install -r requirements-dev.txt
 python -m pytest -q
-node --test tests/test_ui.cjs
 python run.py --host 0.0.0.0 --port 8080
 ```
 
@@ -97,5 +96,6 @@ curl -s http://127.0.0.1:8080/api/status | python3 -m json.tool
 If manual movement or NTP verification fails, capture the UI error and the
 read-only mount status **after the mount has stopped**. Do not open the same
 USB serial port in a second diagnostic process while AstroPi owns it.
+Optional on any machine with Node.js 22+: `node --test tests/test_ui.cjs` (already run in GitHub CI). No Node installation is required to launch AstroPi on the Pi.
 For architecture and verified hardware quirks see [DEVELOPMENT.md](DEVELOPMENT.md)
 and [HARDWARE.md](HARDWARE.md).

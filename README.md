@@ -55,7 +55,6 @@ git pull --ff-only
 source .venv/bin/activate
 python -m pip install -r requirements-dev.txt
 python -m pytest -q
-node --test tests/test_ui.cjs
 python run.py --host 0.0.0.0 --port 8080
 ```
 
