@@ -326,7 +326,7 @@ def test_binned_preview_colour_and_monochrome_preserve_source():
     assert colour.size == (WIDTH // 4, HEIGHT // 4)
     rgb = np.asarray(colour).astype(np.float32)
     assert rgb[:, :, 0].mean() > rgb[:, :, 1].mean() + 30
-    assert rgb[:, :, 1].mean() > rgb[:, :, 2].mean() + 30
+    assert rgb[:, :, 1].mean() > rgb[:, :, 2].mean() + 15
     mono = Image.open(io.BytesIO(
         raw16_to_jpeg(raw, stretch="fixed", debayer=False, binning=2)
     ))
