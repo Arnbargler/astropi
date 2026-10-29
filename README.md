@@ -15,15 +15,21 @@ page or restart hardware sessions.
 | Tab | Available now | Not yet available |
 | --- | --- | --- |
 | **Focus** | Shared live preview and SV705C settings | Digital zoom, star-centred ROI, peaking, HFR/focus graph |
-| **Find** | AM3N manual controls/telemetry plus offline VirtualSky atlas, 110 Messier targets and local sky chart | Alignment, GoTo, tracking and full NGC/IC search |
+| **Find** | Full-width offline VirtualSky atlas, 110 Messier targets and target search | Alignment, GoTo, tracking and full NGC/IC search |
 | **Fotograph** (default) | Full camera preview/settings, capture formats/counts, USB/host status | Stacking and other deferred imaging tools |
 
-Sticky global camera/mount/capture status and **STOP MOUNT** are visible
-on every tab, including to viewers. The *same* preview and settings DOM
-moves between Focus and Fotograph. Switching tabs keeps the operator lease,
-camera stream and ongoing Pi-owned captures. Leaving Find while jogging
-requests Stop. Backend motion safeguards remain in force; software Stop
-is not a substitute for physical Cancel/power.
+The shared **Mount Controls** button in the sticky status bar slides a
+single **right-side overlay drawer** in/out from *any* tab. The drawer
+contains the existing AM3N Connect, telemetry, manual jog, clock/site and
+speed controls. It does **not resize** the camera preview or atlas, and
+remains open when changing tabs. No pin/dock mode yet. **STOP MOUNT** and
+global camera/mount/capture status remain visible above the drawer,
+including to viewers. Closing the drawer or changing tabs during a held
+jog requests Stop; idle closing/tab switching does not. The *same* preview
+and settings DOM moves between Focus and Fotograph. Switching tabs keeps
+the operator lease, camera stream and Pi-owned captures. Existing Pi-side
+deadman and Stop verification remain in force; physical Cancel/power
+is the last resort.
 
 ### Camera and recording
 

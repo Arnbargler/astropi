@@ -17,6 +17,7 @@ let selectedBinning = 1;
 let previousFrame = -1;
 const workspaceTabs = ["focus", "find", "fotograph"];
 let activeTab = "fotograph";
+let mountDrawerOpen = false;
 let progressBusy = false;
 let storageReady = false;
 let captureBusy = false;
@@ -86,7 +87,7 @@ function updateButtons() {
     $("mount-" + direction).disabled = !owner || mountPhase !== "connected" ||
       (mountMotionPhase !== "idle" && heldMountDirection !== direction) ||
       (Boolean(heldMountDirection) && heldMountDirection !== direction) ||
-      activeTab !== "find" || mountRequestPending ||
+      !mountDrawerOpen || mountRequestPending ||
       ["queued", "reading"].includes(mountEnvironmentPhase);
   }
   const saveReady = owner && currentPhase === "running" &&
@@ -248,12 +249,51 @@ for (const speed of mountSpeeds) {
     updateButtons();
   });
 }
+// The actual mount controls live in one off-canvas drawer, not in a tab.
+// The sticky global STOP remains above this overlay even while it is open.
+function positionMountDrawer() {
+  if (!mountDrawerOpen) return;
+  const status = $("global-status");
+  const bottom = status.getBoundingClientRect().bottom;
+  $("mount-drawer").style.top = Math.max(0, Math.ceil(bottom)) + "px";
+}
+function setMountDrawer(open, returnFocus=false) {
+  if (mountDrawerOpen && !open &&
+      (heldMountDirection || ["starting", "moving"].includes(mountMotionPhase)))
+    stopMount();
+  mountDrawerOpen = open;
+  const drawer = $("mount-drawer");
+  drawer.className = "mount-drawer" + (open ? " is-open" : "");
+  drawer.inert = !open;
+  drawer.setAttribute("aria-hidden", String(!open));
+  const toggle = $("mount-drawer-toggle");
+  toggle.setAttribute("aria-expanded", String(open));
+  toggle.textContent = open ? "Hide Mount" : "Mount Controls";
+  if (open) {
+    positionMountDrawer();
+    $("mount-drawer-close").focus();
+  } else if (returnFocus) {
+    toggle.focus();
+  }
+  updateButtons();
+}
+$("mount-drawer-toggle").addEventListener("click", () => setMountDrawer(!mountDrawerOpen));
+$("mount-drawer-close").addEventListener("click", () => setMountDrawer(false,true));
+window.addEventListener("keydown", event => {
+  if (event.key === "Escape" && mountDrawerOpen) {
+    event.preventDefault();
+    setMountDrawer(false,true);
+  }
+});
+window.addEventListener("scroll", positionMountDrawer);
+window.addEventListener("resize", positionMountDrawer);
+
 // Pointer holds have no click-to-latch behaviour. The *Pi* enforces the 600ms
 // deadline; browser events are an additional first line of defence.
-// Switching views must never leave a manual jog running.
+// Switching workspaces or closing the drawer must never leave a jog running.
 function activateTab(name, focusTab=false) {
   if (!workspaceTabs.includes(name)) return;
-  if (activeTab === "find" && name !== "find" &&
+  if (activeTab !== name &&
       (heldMountDirection || ["starting", "moving"].includes(mountMotionPhase)))
     stopMount();
   activeTab = name;
@@ -286,6 +326,7 @@ for (const tab of workspaceTabs) {
   });
 }
 activateTab("fotograph");
+setMountDrawer(false);
 
 async function stopMount() {
   heldMountDirection = null;
@@ -311,7 +352,7 @@ async function stopMount() {
 }
 $("mount-stop").addEventListener("click", stopMount);
 async function beginMountHold(direction) {
-  if (activeTab !== "find" || heldMountDirection || !token || mountPhase !== "connected" ||
+  if (!mountDrawerOpen || heldMountDirection || !token || mountPhase !== "connected" ||
       mountMotionPhase !== "idle" ||
       ["queued", "reading"].includes(mountEnvironmentPhase)) return;
   heldMountDirection = direction;
@@ -479,6 +520,7 @@ function showMount(data) {
     write("global-mount-alert", "");
   }
   updateButtons();
+  positionMountDrawer(); // Status alerts can change the sticky strip's height.
 }
 async function refreshMount() {
   try {

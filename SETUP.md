@@ -34,15 +34,22 @@ Flask currently runs in the foreground; **no automatic startup service is
 installed**. No camera or mount serial session starts merely by loading
 the page. Internet exposure/authentication is not supported.
 
-**Implemented three-tab browser UI: Focus / Find / Fotograph**.
-Fotograph is selected initially and retains existing imaging/capture
-controls; Focus shares the same preview and camera settings; Find
-contains manual mount controls and an offline VirtualSky chart with 110
-Messier objects and informational target selection (**no GoTo**).
-The operator token and Pi-owned exposures persist between tabs. Leaving
-Find while jogging requests Stop; **STOP MOUNT** is in the sticky status
-strip on every tab, including for viewers. The operator confirmed
-the three-tab interface works on the real Pi on 2026-10-28.
+**Three-tab browser UI: Focus / Find / Fotograph.**
+Fotograph is selected initially and retains imaging/capture controls;
+Focus shares the same preview and camera settings; Find contains the
+offline VirtualSky chart with all 110 Messier objects (**no GoTo**).
+The persistent **Mount Controls** button in the sticky status strip
+opens/closes the **right-side overlay drawer** with the existing AM3N
+Connect/Disconnect, speeds, directional jog, telemetry and clock/site
+controls in **every tab**. It does not resize the workspace. The drawer
+stays open during tab changes. Close using **Close ✕**, the top-bar
+toggle or **Escape**. Closing it or switching tabs **while jogging**
+requests Stop; an idle transition does not. A closed drawer cannot
+begin a jog. The top-bar **STOP MOUNT** always remains available to
+viewers, including when the drawer is open.
+The operator token and Pi-owned exposures persist across tabs.
+The original three-tab shell was Pi-checked on 2026-10-28; **the drawer
+still needs a real-Pi browser check**.
 
 ## Camera, recording and verification
 
@@ -91,7 +98,8 @@ python -m astropi.capture.verify   /media/astropi-data/captures/<capture-folder>
 
 ## AM3N manual movement and NTP clock
 
-Take Control, power and **Connect Mount**. Connection initializes the serial
+Power the mount, click **Take Control**, open **Mount Controls** from
+any tab, then click **Connect Mount**. Connection initializes the serial
 session, verifies model/firmware and checks `timedatectl` NTP status.
 If synchronized, Pi sends UTC offset `+00:00`, current UTC date/time,
 requires ACKs, then checks mount readbacks against Pi UTC. UI says

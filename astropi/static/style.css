@@ -9,7 +9,7 @@ h1,h2,h3,p{margin:0}h1{font-size:24px}.brand p,.intro p,.card p,footer{color:#93
 .connection{font-size:13px;border:1px solid #344558;padding:9px 14px;border-radius:30px;color:#c3d4df}
 .connection.online{color:#8dd4aa;border-color:#315849}.connection.offline{color:#f3aaa6;border-color:#754a4a}
 /* Persistent workspaces, visible shared state, and always-available mount Stop. */
-.global-status{position:sticky;top:0;z-index:20;display:flex;flex-wrap:wrap;align-items:center;
+.global-status{position:sticky;top:0;z-index:70;display:flex;flex-wrap:wrap;align-items:center;
   gap:8px 14px;padding:8px 0;background:#101a25;border-bottom:1px solid #324455}
 .global-state{display:flex;gap:7px;align-items:center;flex-wrap:wrap;flex:1}
 .global-state span{font-size:12px;color:#b5cbd6;border:1px solid #344b5b;border-radius:5px;
@@ -42,7 +42,7 @@ h1,h2,h3,p{margin:0}h1{font-size:24px}.brand p,.intro p,.card p,footer{color:#93
 .atlas-card .atlas-disclaimer{font-size:11px;color:#8fa6b5}
 .dashboard-grid,.focus-layout,.find-layout{display:grid;
   grid-template-columns:minmax(0,1.95fr) minmax(350px,.95fr);gap:14px;align-items:start}
-.find-layout{grid-template-columns:minmax(0,1.95fr) minmax(360px,1.06fr)}
+.find-layout{grid-template-columns:minmax(0,1fr)}
 .dashboard-grid>*{min-width:0}
 .imaging-column{display:flex;flex-direction:column;gap:14px;min-width:0}
 .health-strip{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;min-width:0}
@@ -132,6 +132,33 @@ button:hover:not(:disabled){background:#2a5669}button:disabled{opacity:.38;curso
   .save-panel>*{grid-column:1/-1}}
 @media (max-width:650px){.capture-presets{grid-template-columns:repeat(4,minmax(0,1fr))}}
 @media (max-width:400px){.capture-presets{grid-template-columns:repeat(3,minmax(0,1fr))}}
+
+
+/* Shared AM3N drawer: overlays without resizing Focus, Find or Fotograph.
+   The global status/STOP strip always has a higher stacking order.
+   JS positions the drawer immediately below the sticky status strip. */
+.mount-drawer-toggle{border-color:#6a9caf;background:#204c60;white-space:nowrap;min-height:40px}
+.mount-drawer-toggle[aria-expanded="true"]{background:#287087;border-color:#9bd9e8}
+.mount-drawer{position:fixed;top:64px;right:0;bottom:0;z-index:40;
+  width:min(470px,100vw);max-width:100vw;min-height:0;
+  overflow-x:hidden;overflow-y:auto;overscroll-behavior:contain;
+  padding:14px;background:#111d2a;border-left:1px solid #547083;
+  box-shadow:-14px 0 45px #0009;
+  transform:translateX(105%);visibility:hidden;pointer-events:none;
+  transition:transform .23s ease,visibility 0s linear .23s}
+.mount-drawer.is-open{transform:translateX(0);visibility:visible;pointer-events:auto;
+  transition:transform .23s ease,visibility 0s}
+.mount-drawer-heading{position:sticky;top:-14px;z-index:2;display:flex;
+  justify-content:space-between;align-items:center;gap:12px;
+  padding:8px 0 12px;margin-bottom:12px;background:#111d2a;
+  border-bottom:1px solid #425c71}
+.mount-drawer-heading h2{font-size:17px;line-height:1.3}
+.mount-drawer-heading p{font-size:12px;color:#9bb7c9;margin-top:3px}
+.mount-drawer-heading button{flex:none}
+.mount-drawer .mount-card{width:100%}
+@media (prefers-reduced-motion:reduce){
+  .mount-drawer,.mount-drawer.is-open{transition:none}
+}
 
 /* AM3N status, telemetry and mount controls */
 .mount-card .metric{font-size:16px;margin:8px 0 3px}

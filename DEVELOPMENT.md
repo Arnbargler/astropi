@@ -41,14 +41,25 @@ the JPEG preview stream, or navigate/reload on tab selection.
 
 - **Focus:** camera preview/settings; zoom and star focus measurements
   are not built.
-- **Find:** manual AM3N controls/status; offline VirtualSky chart, 110 Messier markers/search and read-only target selection.
+- **Find:** full-width offline VirtualSky chart, 110 Messier markers/search and read-only target selection. The shared mount controls are *not* in this tab.
 - **Fotograph (initial):** camera settings/preview, capture panel, USB and
   host status.
+- **Shared mount overlay drawer:** `#mount-drawer` is one actual AM3N
+  card, outside every `role=tabpanel`, opened by sticky
+  `#mount-drawer-toggle` in any workspace. JS `setMountDrawer()`
+  toggles `inert`, `aria-hidden` and slide CSS; `positionMountDrawer()`
+  keeps its top immediately below the sticky status strip (including
+  wrapped alerts). It overlays rather than resizes tab content; the drawer
+  stays open across tab switches. No pin/dock mode in this version.
 - Sticky global camera/mount/capture states and viewer-accessible
-  `#mount-stop` remain visible on every tab. Operator token, 5 s lease
-  heartbeat, capture state and Pi-owned jobs survive tab switches.
-  Leaving Find with manual motion requests Stop; hidden Find cannot
-  initiate a jog.
+  `#mount-stop` have higher stacking order and remain accessible with
+  drawer open or closed. Operator token, 5 s lease heartbeat, capture
+  state and Pi-owned jobs survive tab switches.
+  Closing the drawer or changing workspaces during a jog requests Stop
+  **before any subsequent jog**; closed/inert drawer prevents jog starts
+  in all tabs. Switching workspaces/closing the drawer when idle does
+  not send Stop. Retain pointer release/blur/visibility/pagehide Stop,
+  600 ms server deadman and physical Cancel/power warning.
 
 Browser polls camera progress every **50 ms** (while active), mount
 status every **1 s**, full status every **3 s**; JPEG URLs are updated

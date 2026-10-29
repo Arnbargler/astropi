@@ -35,7 +35,9 @@ function harness() {
     if (!elements.has(id)) elements.set(id, {
       id, value: "", textContent: "", checked: false, hidden: false,
       tabIndex: 0, parentNode: null, focused: false,
-      disabled: false, className: "", src: "", attributes: {}, handlers: {},
+      disabled: false, inert: false, className: "", src: "", style: {},
+       attributes: {}, handlers: {},
+       getBoundingClientRect() { return {bottom:72}; },
       setAttribute(name, value) { this.attributes[name] = value; },
       addEventListener(name, cb) { this.handlers[name] = cb; },
       appendChild(child) { child.parentNode = this; return child; },
@@ -141,7 +143,7 @@ function harness() {
     mount:()=>mount,
     updateMount:data=>{mount={...mount,...data}},
     documentEvent:kind=>documentHandlers[kind](),
-    windowEvent:kind=>windowHandlers[kind](),
+    windowEvent:(kind,event={})=>windowHandlers[kind](event),
     setHidden:flag=>{documentHidden=flag;},
     flush:()=>new Promise(resolve=>setImmediate(resolve))
   };
@@ -368,6 +370,7 @@ test("motion buttons start immediately for operator, no arm step",async()=>{
   await h.el("mount-connect").dispatch("click");
   assert.equal(h.el("mount-stop").disabled,false);
   await h.el("tab-find").dispatch("click");
+  await h.el("mount-drawer-toggle").dispatch("click");
   assert.equal(h.el("mount-north").disabled,false);
   assert.equal(h.calls.filter(c=>c.url==="/api/mount/jog").length,0);
   assert.equal(h.el("mount-east").disabled,false);
@@ -395,6 +398,7 @@ test("window blur and visibility change request Stop",async()=>{
   await h.el("take-control").dispatch("click");
   await h.el("mount-connect").dispatch("click");
   await h.el("tab-find").dispatch("click");
+  await h.el("mount-drawer-toggle").dispatch("click");
   await h.el("mount-north").dispatch("pointerdown");
   h.windowEvent("blur");
   await h.flush();
@@ -427,6 +431,7 @@ test("mount speed presets bind to immediate jogs and lock while moving",async()=
   await h.el("take-control").dispatch("click");
   await h.el("mount-connect").dispatch("click");
   await h.el("tab-find").dispatch("click");
+  await h.el("mount-drawer-toggle").dispatch("click");
   assert.equal(h.el("mount-speed-slow").checked,true);
   assert.equal(h.el("mount-speed-medium").disabled,false);
   h.el("mount-speed-medium").dispatch("change");
@@ -452,6 +457,7 @@ test("reconnect always restores slow mount speed",async()=>{
   await h.el("take-control").dispatch("click");
   await h.el("mount-connect").dispatch("click");
   await h.el("tab-find").dispatch("click");
+  await h.el("mount-drawer-toggle").dispatch("click");
   h.el("mount-speed-fast").dispatch("change");
   assert.equal(h.el("mount-speed-fast").checked,true);
   await h.el("mount-disconnect").dispatch("click");
@@ -500,6 +506,7 @@ test("720x and 1440x are selected without arm, with release Stop", async()=>{
   await h.el("take-control").dispatch("click");
   await h.el("mount-connect").dispatch("click");
   await h.el("tab-find").dispatch("click");
+  await h.el("mount-drawer-toggle").dispatch("click");
   h.el("mount-speed-slew").dispatch("change");
   assert.equal(h.el("mount-speed-slew").checked,true);
   await h.el("mount-north").dispatch("pointerdown");
@@ -553,6 +560,7 @@ test("NTP unavailable shows honest error while mount remains connected",async()=
   assert.match(h.el("mount-time-sync").textContent,/NOT synchronized/);
   assert.match(h.el("mount-time-sync-error").textContent,/not confirmed NTP/);
   await h.el("tab-find").dispatch("click");
+  await h.el("mount-drawer-toggle").dispatch("click");
   assert.equal(h.el("mount-east").disabled,false,
     "manual Alt/Az is still available without a verified sky clock");
 });
@@ -634,18 +642,101 @@ test("leaving Find during a held jog requests Stop before hiding controls",async
   await h.el("take-control").dispatch("click");
   await h.el("mount-connect").dispatch("click");
   await h.el("tab-find").dispatch("click");
+  await h.el("mount-drawer-toggle").dispatch("click");
   await h.el("mount-north").dispatch("pointerdown");
   assert.equal(h.calls.filter(c=>c.url==="/api/mount/jog").length,1);
   await h.el("tab-focus").dispatch("click");
   assert.equal(h.el("panel-find").hidden,true);
   assert.equal(h.calls.filter(c=>c.url==="/api/mount/stop").length,1);
-  assert.equal(h.el("mount-north").disabled,true);
+  assert.equal(h.el("mount-drawer").inert,false,"drawer stays open across tabs");
+  assert.equal(h.el("mount-north").disabled,true,"Stop must settle before next jog");
   await h.intervals.get(150)();
   assert.equal(h.calls.filter(c=>c.url==="/api/mount/jog-heartbeat").length,0,
     "no jog heartbeat continues after tab switch");
+  h.updateMount({motion_phase:"idle",motion_armed:false,stop_stable:true});
+  await h.intervals.get(1000)();
+  assert.equal(h.el("mount-west").disabled,false,"jog available in Focus when drawer open");
+  await h.el("mount-west").dispatch("pointerdown");
+  assert.equal(h.calls.filter(c=>c.url==="/api/mount/jog").length,2);
+  h.documentEvent("pointerup");
+});
+
+test("slide-out mount controls work in every tab without altering workspace",async()=>{
+  const h=harness();
+  await h.flush();
+  await h.el("take-control").dispatch("click");
+  await h.el("mount-drawer-toggle").dispatch("click");
+  assert.equal(h.el("mount-drawer-toggle").attributes["aria-expanded"],"true");
+  assert.equal(h.el("mount-drawer").inert,false);
+  assert.match(h.el("mount-drawer").className,/is-open/);
+  assert.equal(h.el("mount-drawer").style.top,"72px");
+  assert.equal(h.el("mount-drawer-close").focused,true);
+  await h.el("mount-connect").dispatch("click");
+  assert.equal(h.el("mount-north").disabled,false,
+    "Fotograph must allow mount jogging when shared drawer is open");
+  for (const tab of ["focus","find","fotograph"]) {
+    await h.el("tab-"+tab).dispatch("click");
+    assert.equal(h.el("mount-drawer").inert,false,"drawer remains open in "+tab);
+    assert.equal(h.el("mount-north").disabled,false);
+    assert.equal(h.el("mount-stop").disabled,false);
+  }
+  assert.equal(h.calls.filter(c=>c.url==="/api/mount/stop").length,0,
+    "idle tab switching must not send Stop");
+  await h.el("mount-drawer-close").dispatch("click");
+  assert.equal(h.el("mount-drawer").inert,true);
+  assert.equal(h.el("mount-drawer-toggle").attributes["aria-expanded"],"false");
+  assert.equal(h.el("mount-north").disabled,true);
+  assert.equal(h.calls.filter(c=>c.url==="/api/mount/stop").length,0,
+    "closing an idle drawer must not send Stop");
+  assert.equal(h.el("mount-drawer-toggle").focused,true);
+});
+
+test("drawer close, Escape and tab changes send Stop on held jog",async()=>{
+  const h=harness();
+  await h.flush();
+  await h.el("take-control").dispatch("click");
+  await h.el("mount-drawer-toggle").dispatch("click");
+  await h.el("mount-connect").dispatch("click");
+  await h.el("mount-east").dispatch("pointerdown");
+  assert.equal(h.calls.filter(c=>c.url==="/api/mount/jog").length,1);
+  await h.el("mount-drawer-close").dispatch("click");
+  await h.flush();
+  assert.equal(h.calls.filter(c=>c.url==="/api/mount/stop").length,1);
+  assert.equal(h.el("mount-drawer").inert,true);
+  await h.intervals.get(150)();
+  assert.equal(h.calls.filter(c=>c.url==="/api/mount/jog-heartbeat").length,0);
   await h.el("mount-west").dispatch("pointerdown");
   assert.equal(h.calls.filter(c=>c.url==="/api/mount/jog").length,1,
-    "hidden Find may not initiate motion");
+    "closed drawer cannot start jog");
+  h.updateMount({motion_phase:"idle",motion_armed:false,stop_stable:true});
+  await h.intervals.get(1000)();
+  await h.el("mount-drawer-toggle").dispatch("click");
+  await h.el("tab-focus").dispatch("click");
+  await h.el("mount-west").dispatch("pointerdown");
+  assert.equal(h.calls.filter(c=>c.url==="/api/mount/jog").length,2);
+  let prevented=false;
+  h.windowEvent("keydown",{key:"Escape",preventDefault(){prevented=true;}});
+  await h.flush();
+  assert.equal(prevented,true);
+  assert.equal(h.el("mount-drawer").inert,true);
+  assert.equal(h.calls.filter(c=>c.url==="/api/mount/stop").length,2);
+  assert.equal(h.el("mount-stop").disabled,false,
+    "global Stop remains accessible regardless of drawer state after settling");
+});
+
+test("closed drawer cannot trigger mount motion but viewer can always Stop",async()=>{
+  const h=harness();
+  await h.flush();
+  await h.el("take-control").dispatch("click");
+  await h.el("mount-drawer-toggle").dispatch("click");
+  await h.el("mount-connect").dispatch("click");
+  await h.el("mount-drawer-toggle").dispatch("click");
+  assert.equal(h.el("mount-east").disabled,true);
+  await h.el("mount-east").dispatch("pointerdown");
+  assert.equal(h.calls.filter(c=>c.url==="/api/mount/jog").length,0);
+  await h.el("release-control").dispatch("click");
+  await h.el("mount-stop").dispatch("click");
+  assert.equal(h.calls.filter(c=>c.url==="/api/mount/stop").length,1);
 });
 
 test("emergency Stop remains available to viewer on every tab",async()=>{
@@ -704,8 +795,14 @@ test("three workspaces retain responsive controls and safety warnings",()=>{
   assert.match(html,/id="focus-controls-slot"/);
   assert.ok(html.indexOf('id="mount-stop"') < html.indexOf('id="panel-focus"'),
     "Emergency Stop must be outside hidden tab panels");
-  assert.ok(html.indexOf('class="card mount-card"') > html.indexOf('id="panel-find"'));
-  assert.ok(html.indexOf('class="card mount-card"') < html.indexOf('id="panel-fotograph"'));
+  assert.match(html,/id="mount-drawer-toggle"/);
+  assert.match(html,/id="mount-drawer-close"/);
+  assert.match(html,/<aside id="mount-drawer"[^>]+aria-hidden="true" inert>/);
+  assert.ok(html.indexOf('class="card mount-card"') > html.indexOf('id="panel-fotograph"'),
+    "Shared mount card must be outside all workspace panels");
+  assert.ok(html.indexOf('class="card mount-card"') < html.indexOf('<footer>'));
+  assert.equal((html.match(/class="card mount-card"/g)||[]).length,1,
+    "One shared mount panel, never duplicate controls");
   assert.ok(html.indexOf('class="card preview-card"') < html.indexOf('class="card save-panel"'));
   assert.ok(html.indexOf('class="card save-panel"') < html.indexOf('class="card controls"'));
   assert.ok(html.indexOf('class="mount-jog-panel"') < html.indexOf('class="mount-environment"'));
@@ -725,6 +822,9 @@ test("three workspaces retain responsive controls and safety warnings",()=>{
   assert.equal(new Set(ids).size,ids.length,"No duplicate DOM IDs");
   assert.match(css,/\.shell\{width:100%;max-width:2160px/);
   assert.match(css,/\.global-status\{position:sticky/);
+  assert.match(css,/\.mount-drawer\{position:fixed/);
+  assert.match(css,/transform:translateX\(105%\)/);
+  assert.match(css,/\.mount-drawer\.is-open/);
   assert.match(css,/\.dashboard-grid,\.focus-layout,\.find-layout\{display:grid/);
   assert.match(css,/\.preview-frame\{width:100%;height:auto;aspect-ratio:3856\/2180/);
   assert.match(css,/@media \(max-width:1550px\)/);

@@ -101,10 +101,14 @@ separate later milestones.
   never expose Flask's development server publicly.
 - **Focus / Find / Fotograph** are **implemented as three persistent
   tabs**, not separate pages. The same preview/settings nodes move
-  between Focus and Fotograph. Find holds manual mount controls and
-  future atlas. Global Stop must never be hidden by tabs; leaving Find
-  during a jog requests Stop. Switching tabs preserves operator
-  ownership and Pi recording.
+  between Focus and Fotograph. Find contains the offline atlas only.
+  A **single shared mount control card** slides in from the right
+  as an **overlay drawer**, available from all three tabs, and stays
+  open across tab changes; no pin mode yet. Closing it or switching
+  tabs while jogging sends Stop, but idle transitions do not.
+  A closed drawer is inert and cannot begin a jog. Global viewer-
+  accessible Stop stays above the overlay and visible in all tabs;
+  ownership and Pi recording survive tab changes.
 
 ## Explicit exclusions
 
