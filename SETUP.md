@@ -78,6 +78,36 @@ If camera timing looks healthy during stutters, next check HTTP/browser
 scheduling, the 3 s full-status checks and high-volume foreground Flask
 request logging. Field validation of the diagnosis remains pending.
 
+### Optional Chrome-side probe for remaining preview freezes
+
+The stage-2 Pi timings showed short (sub-140 ms) RAW/JPEG frame gaps,
+yet the operator still reports visible browser pauses. To distinguish
+image delivery, camera-progress HTTP polling and browser timer delays,
+run the **opt-in** browser probe. After `git pull --ff-only`, hard-refresh
+Chrome and open its Developer Tools Console (F12):
+
+```js
+const p = document.createElement("script");
+p.src = "/static/preview_probe.js?t=" + Date.now();
+document.head.appendChild(p);
+```
+
+Run the normal live preview until several pauses occur; then execute:
+
+```js
+AstroPiPreviewProbe.report()
+```
+
+Copy the summary/gap tables, especially `progressAgeAtGapMs`,
+`progressInFlight`, `jpegSrcAgeAtGapMs` and `loopMaxGapMs`.
+`AstroPiPreviewProbe.stop()` removes the instrumentation and restores
+`window.fetch`; a browser reload also restores it. The probe is not
+loaded during ordinary operation. It doesn't change mount safety,
+hardware settings or capture rate. If `progressAgeAtGapMs` grows while
+the loop timer remains responsive, inspect delivery/server scheduling;
+if progress stays fresh but JPEG requests/loads lag, inspect the
+browser image loader/network. Field diagnosis remains pending.
+
 ## Camera, recording and verification
 
 Click **Take Control**, **Start preview**, choose exposure/gain and wait for

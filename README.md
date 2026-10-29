@@ -50,6 +50,12 @@ camera acquisition or exposure. See SETUP.md for the one-command check.
 The operator reports some remaining intermittent browser preview/HTTP
 logging pauses with the mount disconnected; cause not yet established.
 
+To examine remaining freezes **without modifying live UI logic**,
+`/static/preview_probe.js` is an opt-in browser-only diagnostic; see
+SETUP.md for the two-line Chrome Console loader and report command.
+It records whether progress requests, JPEG URL changes, image-load events
+or browser timers are pausing. It is not loaded during normal operation.
+
 ### Camera and recording
 
 - Sensor **3856×2180**, native 12-bit GRBG in RAW16. Supported hardware

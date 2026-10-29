@@ -117,6 +117,37 @@ can also be observed via `sdk_inflight_ms`, while an in-progress JPEG
 render shows `jpeg_busy_ms`; long exposures naturally increase SDK
 wait and frame ages.
 
+## Opt-in browser-side delivery probe (after stage-2 camera checks)
+
+`astropi/static/preview_probe.js` is deliberately **not** imported by
+the normal app. Its sole purpose is to correlate browser JPEG `load`
+events, JPEG `src` replacements, camera-progress/full-status fetch
+latency, missed image-load intervals and timer delays. The probe wraps
+`window.fetch` transparently for two read-only GET URLs only; it does
+not alter responses or camera/mount controls. A 550 ms JPEG-load gap
+generates a console warning after it resolves, with a snapshot of the
+most recent progress and image-request activity. A bounded report
+includes up to 40 gaps and 30 slow requests. It has no Pi-side
+acquisition, imaging or storage effect.
+
+After copying this version to the Pi (static file can be picked up
+without restarting the running Flask process), hard-refresh Chrome,
+then paste into the DevTools Console:
+
+```js
+const p = document.createElement("script");
+p.src = "/static/preview_probe.js?t=" + Date.now();
+document.head.appendChild(p);
+```
+
+After seeing several freezes, run `AstroPiPreviewProbe.report()` and
+copy the console tables. Use `AstroPiPreviewProbe.stop()` or reload to
+restore the ordinary browser behaviour. This is a **measurement tool**,
+not evidence that network or browser is definitively at fault. Compare
+with the Pi's `/api/camera/diagnostics` when possible. Keep the
+camera on and visible; changing tabs or stopping camera intentionally
+creates long gaps.
+
 ## Must-preserve invariants
 
 1. **Camera SDK:** one worker owns all SDK calls. Open by real
