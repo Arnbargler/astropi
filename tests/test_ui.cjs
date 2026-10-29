@@ -12,6 +12,8 @@ const BINNING = [1, 2];
 
 function harness() {
   const elements = new Map(), intervals = new Map(), calls = [];
+  const timeouts = new Map();
+  let nextTimeoutId = 1;
   const documentHandlers = {};
   const windowHandlers = {};
   let documentHidden = false;
@@ -36,7 +38,9 @@ function harness() {
       id, value: "", textContent: "", checked: false, hidden: false,
       tabIndex: 0, parentNode: null, focused: false,
       disabled: false, inert: false, className: "", src: "", style: {},
-       attributes: {}, handlers: {},
+       attributes: {}, handlers: {}, srcChanges: [],
+       onload: null, onerror: null,
+       removeAttribute(name) { if (name === "src") this.src = ""; },
        getBoundingClientRect() { return {bottom:72}; },
       setAttribute(name, value) { this.attributes[name] = value; },
       addEventListener(name, cb) { this.handlers[name] = cb; },
@@ -125,6 +129,8 @@ function harness() {
   // The real template initially checks FITS and JPG; emulate those DOM defaults.
   el("capture-fits").checked = true;
   el("capture-jpg").checked = true;
+  el("preview-image").hidden = true;
+  el("preview-image-buffer").hidden = true;
   el("shared-preview-card").parentNode = el("fotograph-preview-slot");
   el("shared-camera-controls").parentNode = el("fotograph-controls-slot");
   const code = fs.readFileSync(path.join(__dirname,"../astropi/static/app.js"),"utf8");
@@ -133,9 +139,17 @@ function harness() {
       addEventListener:(name,fn)=>{documentHandlers[name]=fn;},
       get hidden(){return documentHidden;}},
     window:{addEventListener:(name,fn)=>{windowHandlers[name]=fn;}},
-    fetch, setInterval:(fn,ms)=>intervals.set(ms,fn),Date,Number,Math,Promise
+    fetch, setInterval:(fn,ms)=>intervals.set(ms,fn),
+    setTimeout:(fn,ms)=>{const id=nextTimeoutId++;timeouts.set(id,{fn,ms});return id;},
+    clearTimeout:id=>timeouts.delete(id),Date,Number,Math,Promise
   });
-  return {el, intervals, calls,
+  return {el, intervals, timeouts, calls,
+    expirePreview:()=>{
+      const entry=[...timeouts.entries()].find(([id,t])=>t.ms===2000);
+      if (!entry) throw Error("No pending preview timeout");
+      timeouts.delete(entry[0]);
+      entry[1].fn();
+    },
     updateCamera:data=>{camera={...camera,...data}},
     camera:()=>camera,
     capture:()=>capture,
@@ -202,9 +216,139 @@ test("stretch and debayer toggles send operator-only mode changes",async()=>{
 test("fast preview polling and frame deduplication are retained",()=>{
   const js=fs.readFileSync(path.join(__dirname,"../astropi/static/app.js"),"utf8");
   assert.match(js,/setInterval\(pollPreview, 50\)/);
-  assert.match(js,/data\.frame_number !== previousFrame/);
+  assert.match(js,/queuePreview\(data\)/);
+  assert.match(js,/previewNewestFrame > previewRequestedFrame/);
+  assert.match(js,/previewInFlight/);
 });
 
+
+test("JPEG loader preserves the visible frame and requests only the latest after completion",async()=>{
+  const h=harness();
+  await h.flush();
+  const first=h.el("preview-image"),second=h.el("preview-image-buffer");
+  h.updateCamera({phase:"running",has_frame:true,frame_number:101});
+  await h.intervals.get(50)();
+  assert.match(second.src,/frame=101/);
+  assert.equal(first.hidden,true, "original image remains hidden before first load");
+  assert.equal(second.hidden,true, "pending buffer stays hidden until load");
+  assert.equal(h.el("preview-placeholder").hidden,false);
+  assert.equal(h.timeouts.size,1);
+  h.updateCamera({frame_number:102});
+  await h.intervals.get(50)();
+  h.updateCamera({frame_number:110});
+  await h.intervals.get(50)();
+  assert.match(second.src,/frame=101/,"no new request while first is loading");
+  assert.equal(first.src,"","main image remains untouched");
+  assert.equal(h.timeouts.size,1,"only one outstanding preview deadline");
+  second.onload();
+  assert.equal(second.hidden,false);
+  assert.equal(first.hidden,true);
+  assert.equal(h.el("preview-placeholder").hidden,true);
+  assert.match(first.src,/frame=110/,"skip 102-109 and request latest immediately");
+  assert.equal(h.timeouts.size,1);
+  h.updateCamera({frame_number:111});
+  await h.intervals.get(50)();
+  assert.match(first.src,/frame=110/,"one outstanding replacement at a time");
+  first.onload();
+  assert.equal(first.hidden,false);
+  assert.equal(second.hidden,true);
+  assert.match(second.src,/frame=111/);
+  second.onload();
+  assert.equal(h.timeouts.size,0);
+  assert.equal(h.calls.filter(c=>c.url==="/api/camera/frame.jpg").length,0,
+    "JPEGs are actual browser image downloads, not extra fetch requests");
+});
+
+test("failed JPEG leaves previous image visible and recovers with newest frame",async()=>{
+  const h=harness();
+  await h.flush();
+  const a=h.el("preview-image"),b=h.el("preview-image-buffer");
+  h.updateCamera({has_frame:true,frame_number:2});
+  await h.intervals.get(50)();
+  b.onload();
+  assert.equal(b.hidden,false);
+  assert.equal(h.el("preview-placeholder").hidden,true);
+  h.updateCamera({frame_number:3});
+  await h.intervals.get(50)();
+  const stale=a.onerror;
+  h.updateCamera({frame_number:5});
+  await h.intervals.get(50)();
+  stale();
+  assert.equal(b.hidden,false,"failure must keep last good frame visible");
+  assert.match(a.src,/frame=5/,"newer frame must be scheduled after failure");
+  a.onload();
+  assert.equal(a.hidden,false);
+  assert.equal(b.hidden,true);
+  assert.equal(h.timeouts.size,0);
+});
+
+test("JPEG timeout abandons only pending image and moves on to newer frame",async()=>{
+  const h=harness();
+  await h.flush();
+  const a=h.el("preview-image"),b=h.el("preview-image-buffer");
+  h.updateCamera({has_frame:true,frame_number:10});
+  await h.intervals.get(50)();
+  b.onload();
+  h.updateCamera({frame_number:11});
+  await h.intervals.get(50)();
+  const abandonedLoad=a.onload;
+  h.updateCamera({frame_number:20});
+  await h.intervals.get(50)();
+  h.expirePreview();
+  assert.equal(b.hidden,false);
+  assert.match(a.src,/frame=20/);
+  abandonedLoad(); // Old network event must not replace new frame.
+  assert.equal(b.hidden,false);
+  a.onload();
+  assert.equal(a.hidden,false);
+  assert.equal(h.timeouts.size,0);
+});
+
+test("stopping or restarting camera discards stale JPEG completions",async()=>{
+  const h=harness();
+  await h.flush();
+  const a=h.el("preview-image"),b=h.el("preview-image-buffer");
+  h.updateCamera({phase:"running",has_frame:true,frame_number:123});
+  await h.intervals.get(50)();
+  const stale=b.onload;
+  h.updateCamera({phase:"stopped",has_frame:false,frame_number:123});
+  await h.intervals.get(3000)();
+  assert.equal(h.timeouts.size,0);
+  assert.equal(b.src,"");
+  assert.equal(a.src,"");
+  assert.equal(a.hidden,true);
+  assert.equal(b.hidden,true);
+  assert.equal(h.el("preview-placeholder").hidden,false);
+  stale();
+  assert.equal(h.el("preview-placeholder").hidden,false,
+    "image from old camera session must never be shown");
+  h.updateCamera({phase:"running",has_frame:true,frame_number:1});
+  await h.intervals.get(3000)();
+  assert.match(b.src,/frame=1/,"new camera session can reuse same image elements");
+  b.onload();
+  assert.equal(b.hidden,false);
+  assert.equal(h.timeouts.size,0);
+  h.updateCamera({frame_number:0});
+  await h.intervals.get(50)();
+  assert.equal(b.hidden,true,"frame count rollback invalidates old image");
+  assert.equal(h.el("preview-placeholder").hidden,false);
+});
+
+test("preview buffer and in-flight image survive Focus/Find/Fotograph switches",async()=>{
+  const h=harness();
+  await h.flush();
+  h.updateCamera({has_frame:true,frame_number:9});
+  await h.intervals.get(50)();
+  const pending=h.el("preview-image-buffer");
+  await h.el("tab-focus").dispatch("click");
+  await h.el("tab-find").dispatch("click");
+  await h.el("tab-fotograph").dispatch("click");
+  assert.match(pending.src,/frame=9/);
+  pending.onload();
+  assert.equal(pending.hidden,false);
+  assert.equal(h.el("shared-preview-card").parentNode.id,"fotograph-preview-slot");
+  assert.equal(h.timeouts.size,0);
+});
 
 test("compact capture toggles submit exactly selected formats for one frame", async()=>{
   const h=harness();

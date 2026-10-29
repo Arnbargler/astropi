@@ -62,8 +62,21 @@ the JPEG preview stream, or navigate/reload on tab selection.
   600 ms server deadman and physical Cancel/power warning.
 
 Browser polls camera progress every **50 ms** (while active), mount
-status every **1 s**, full status every **3 s**; JPEG URLs are updated
-only when frame number changes. **No WebSockets.**
+status every **1 s**, full status every **3 s**. The **stage-1 browser
+preview loader** in `app.js` keeps two `<img>` elements inside the
+**single relocated** preview card and allows only **one outstanding JPEG
+request**. The currently visible JPEG stays on screen until its alternate
+element's `load` event; intermediate camera frame numbers are skipped
+and the newest available frame is requested afterward. Errors and a
+**2 s load timeout** release the request; closing/reopening the camera
+invalidates stale image callbacks. This changes only browser delivery,
+**not** SDK acquisition, preview conversion, FPS, camera polling rate, or
+the mount/lease/deadman path. No extra image stream or HTTP fetch.
+**No WebSockets.** Operator reported periodic preview freezes before
+this update; field-check the loader on the Pi. If gaps remain, the
+separate stage-2 investigation should time raw SDK acquisition,
+RAW-to-JPEG conversion and actual progress responses; don't assume
+frame-counter gaps alone prove a camera-side stall.
 
 ## Must-preserve invariants
 

@@ -14,7 +14,17 @@ let stretchChangePending = false;
 let debayerChangePending = false;
 let binningChangePending = false;
 let selectedBinning = 1;
-let previousFrame = -1;
+// Two existing DOM <img> elements alternate roles. A new JPEG never replaces
+// the visible image until its own load event confirms it is ready.
+let previewVisible = null;
+let previewWaiting = null;
+let previewNewestFrame = -1;
+let previewRequestedFrame = -1;
+let previewInFlight = false;
+let previewGeneration = 0;
+let previewAttempt = 0;
+let previewTimeout = null;
+const PREVIEW_LOAD_TIMEOUT_MS = 2000;
 const workspaceTabs = ["focus", "find", "fotograph"];
 let activeTab = "fotograph";
 let mountDrawerOpen = false;
@@ -652,6 +662,84 @@ function showCapture(job) {
   }
   updateButtons();
 }
+// Stage 1: one outstanding browser JPEG request, even if the camera produces
+// frames faster than the LAN/browser can load them. Drop intermediate frames;
+// this is a live preview, never an image archive.
+function resetPreviewImages() {
+  previewGeneration += 1; // A late load from the prior camera session is stale.
+  clearTimeout(previewTimeout);
+  previewTimeout = null;
+  previewInFlight = false;
+  previewNewestFrame = -1;
+  previewRequestedFrame = -1;
+  for (const id of ["preview-image", "preview-image-buffer"]) {
+    const image = $(id);
+    image.onload = null;
+    image.onerror = null;
+    image.removeAttribute("src"); // Cancel any pending request on camera stop.
+    image.hidden = true;
+  }
+  previewVisible = $("preview-image");
+  previewWaiting = $("preview-image-buffer");
+  $("preview-placeholder").hidden = false;
+}
+
+function loadNewestPreview() {
+  if (previewInFlight || previewNewestFrame <= previewRequestedFrame) return;
+  if (!previewVisible) {
+    previewVisible = $("preview-image");
+    previewWaiting = $("preview-image-buffer");
+  }
+  const frame = previewNewestFrame;
+  const generation = previewGeneration;
+  const attempt = ++previewAttempt;
+  const image = previewWaiting;
+  previewRequestedFrame = frame;
+  previewInFlight = true;
+
+  function complete(ok) {
+    if (generation !== previewGeneration || attempt !== previewAttempt || !previewInFlight) return;
+    clearTimeout(previewTimeout);
+    previewTimeout = null;
+    image.onload = null;
+    image.onerror = null;
+    if (ok) {
+      // Leave the previous JPEG displayed until its replacement is loaded.
+      previewVisible.hidden = true;
+      image.hidden = false;
+      $("preview-placeholder").hidden = true;
+      previewWaiting = previewVisible;
+      previewVisible = image;
+    } else {
+      // A stalled or failed image may be retried only when a NEW frame is
+      // available; do not restart requests for a permanently missing frame.
+      image.removeAttribute("src");
+    }
+    previewInFlight = false;
+    // Choose the newest frame after the prior load, not every intervening one.
+    if (previewNewestFrame > previewRequestedFrame && currentPhase === "running")
+      loadNewestPreview();
+  }
+  image.onload = () => complete(true);
+  image.onerror = () => complete(false);
+  previewTimeout = setTimeout(() => complete(false), PREVIEW_LOAD_TIMEOUT_MS);
+  image.src = "/api/camera/frame.jpg?frame=" + frame + "&t=" + Date.now();
+}
+
+function queuePreview(data) {
+  if (!data.has_frame || data.phase !== "running") {
+    if (previewNewestFrame >= 0 || previewInFlight) resetPreviewImages();
+    return;
+  }
+  const frame = data.frame_number;
+  if (!Number.isSafeInteger(frame) || frame < 0) return;
+  if (frame < previewNewestFrame) resetPreviewImages(); // new camera session
+  if (frame > previewNewestFrame) {
+    previewNewestFrame = frame;
+    loadNewestPreview();
+  }
+}
+
 function showProgress(data) {
   currentPhase = data.phase;
   if (!binningChangePending && [1, 2].includes(data.binning)) {
@@ -685,17 +773,7 @@ function showProgress(data) {
       " · saturated: " + data.raw_saturated_percent.toFixed(2) + "%");
   } else write("raw-metrics", "Raw sensor signal: waiting for frames…");
   updateButtons();
-  const img = $("preview-image");
-  if (!data.has_frame) {
-    img.hidden = true;
-    $("preview-placeholder").hidden = false;
-    previousFrame = -1;
-  } else if (data.frame_number !== previousFrame) {
-    previousFrame = data.frame_number;
-    img.src = "/api/camera/frame.jpg?frame=" + data.frame_number + "&t=" + Date.now();
-    img.hidden = false;
-    $("preview-placeholder").hidden = true;
-  }
+  queuePreview(data);
 }
 async function refresh() {
   const el = $("connection");
