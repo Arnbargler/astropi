@@ -5,8 +5,6 @@ immutable copies of the newest available full RAW16 frames via a one-slot
 mailbox. When processing lags acquisition, frames are dropped, not queued.
 """
 import ctypes as C
-from collections import deque
-from datetime import datetime, timezone
 from queue import Empty, Full, Queue
 import threading
 import time
@@ -58,60 +56,6 @@ class CameraWorker:
         self._raw_mean_adu = None
         self._raw_p99_adu = None
         self._raw_saturated_percent = None
-        self._reset_diagnostics_locked()
-
-    def _reset_diagnostics_locked(self):
-        """Only timing counters; no effect on camera SDK or preview scheduling."""
-        self._diag_events = deque(maxlen=32)
-        self._raw_frames = 0
-        self._sdk_last_frame_at = None
-        self._sdk_last_gap_ms = None
-        self._sdk_max_gap_ms = 0.0
-        self._sdk_wait_started_at = None
-        self._sdk_wait_ms = None
-        self._sdk_max_wait_ms = 0.0
-        self._jpeg_last_frame_at = None
-        self._jpeg_last_gap_ms = None
-        self._jpeg_max_gap_ms = 0.0
-        self._jpeg_max_processing_ms = 0.0
-        self._jpeg_processing_started_at = None
-
-    def _diagnostic_event_locked(self, kind, duration_ms):
-        """Bounded, in-memory outliers; never log or write from hot path."""
-        self._diag_events.append({
-            "utc": datetime.now(timezone.utc).isoformat(),
-            "kind": kind,
-            "duration_ms": round(duration_ms, 1),
-            "exposure_us": self._exposure_us,
-            "raw_frames": self._raw_frames,
-            "jpeg_frames": self._sequence,
-        })
-
-    def diagnostics(self):
-        """Read-only Pi timings; usable independently of browser frame updates."""
-        now = time.monotonic()
-        def age(stamp):
-            return round((now - stamp) * 1000, 1) if stamp is not None else None
-        with self._lock:
-            return {
-                "phase": self._phase,
-                "exposure_us": self._exposure_us,
-                "raw_frames": self._raw_frames,
-                "jpeg_frames": self._sequence,
-                "raw_age_ms": age(self._sdk_last_frame_at),
-                "jpeg_age_ms": age(self._jpeg_last_frame_at),
-                "sdk_inflight_ms": age(self._sdk_wait_started_at),
-                "jpeg_busy_ms": age(self._jpeg_processing_started_at),
-                "sdk_last_gap_ms": self._sdk_last_gap_ms,
-                "sdk_max_gap_ms": self._sdk_max_gap_ms,
-                "sdk_last_wait_ms": self._sdk_wait_ms,
-                "sdk_max_wait_ms": self._sdk_max_wait_ms,
-                "jpeg_last_gap_ms": self._jpeg_last_gap_ms,
-                "jpeg_max_gap_ms": self._jpeg_max_gap_ms,
-                "jpeg_last_processing_ms": self._preview_ms,
-                "jpeg_max_processing_ms": self._jpeg_max_processing_ms,
-                "recent_events": list(self._diag_events),
-            }
 
     def status(self):
         with self._lock:
@@ -177,7 +121,6 @@ class CameraWorker:
             self._raw_mean_adu = None
             self._raw_p99_adu = None
             self._raw_saturated_percent = None
-            self._reset_diagnostics_locked()
             self._thread = threading.Thread(target=self._run, name="sv705c-sdk", daemon=True)
             self._thread.start()
             return True
@@ -260,7 +203,6 @@ class CameraWorker:
                 t0 = time.monotonic()
                 with self._lock:
                     mode, debayer = self._preview_mode, self._debayer
-                    self._jpeg_processing_started_at = t0
                 if binning == 1:
                     stats = raw16_statistics(raw)
                     jpeg = raw16_to_jpeg(raw, stretch=mode, debayer=debayer)
@@ -276,17 +218,6 @@ class CameraWorker:
                     self._image = jpeg
                     self._sequence += 1
                     self._preview_ms = round(duration_ms, 1)
-                    self._jpeg_processing_started_at = None
-                    self._jpeg_last_frame_at = finished
-                    self._jpeg_max_processing_ms = max(self._jpeg_max_processing_ms, round(duration_ms, 1))
-                    if duration_ms > 500:
-                        self._diagnostic_event_locked("jpeg_slow", duration_ms)
-                    if interval is not None and interval > 0:
-                        gap_ms = round(interval * 1000, 1)
-                        self._jpeg_last_gap_ms = gap_ms
-                        self._jpeg_max_gap_ms = max(self._jpeg_max_gap_ms, gap_ms)
-                        if interval > max(0.65, self._exposure_us / 1_000_000 * 1.75 + 0.2):
-                            self._diagnostic_event_locked("jpeg_gap", gap_ms)
                     self._raw_mean_adu = stats["raw_mean_adu"]
                     self._raw_p99_adu = stats["raw_p99_adu"]
                     self._raw_saturated_percent = stats["raw_saturated_percent"]
@@ -296,7 +227,6 @@ class CameraWorker:
                         self._preview_fps = round(rate if prior == 0 else 0.25 * rate + 0.75 * prior, 2)
         except Exception as exc:
             with self._lock:
-                self._jpeg_processing_started_at = None
                 self._preview_error = f"JPEG preview failed: {exc}"
             self._stop.set()
 
@@ -320,7 +250,6 @@ class CameraWorker:
                 self._settings_request_id = self._settings_applied_id = 0
                 self._capture_fps = self._preview_fps = self._preview_ms = 0.0
                 self._raw_mean_adu = self._raw_p99_adu = self._raw_saturated_percent = None
-                self._reset_diagnostics_locked()
 
     def _run_session(self):
         driver = None
@@ -361,9 +290,6 @@ class CameraWorker:
                         self._gain, self._exposure_us = gain, exposure_us
                         self._settings_applied_id = request_id
 
-                started = time.monotonic()
-                with self._lock:
-                    self._sdk_wait_started_at = started
                 try:
                     driver.get_frame(raw, frame_wait_ms(exposure_us))
                 except SDKError as exc:
@@ -374,28 +300,13 @@ class CameraWorker:
                         break
                     if exc.code == 11 and timeouts < 3:
                         timeouts += 1
-                        with self._lock:
-                            self._diagnostic_event_locked("sdk_timeout_11", (time.monotonic() - started) * 1000)
                         continue
                     raise
-                finally:
-                    waited_ms = (time.monotonic() - started) * 1000
-                    with self._lock:
-                        self._sdk_wait_started_at = None
-                        self._sdk_wait_ms = round(waited_ms, 1)
-                        self._sdk_max_wait_ms = max(self._sdk_max_wait_ms, self._sdk_wait_ms)
                 timeouts = 0
                 now = time.monotonic()
                 with self._lock:
-                    self._raw_frames += 1
-                    self._sdk_last_frame_at = now
                     if last_capture is not None and now > last_capture:
                         interval = now - last_capture
-                        gap_ms = round(interval * 1000, 1)
-                        self._sdk_last_gap_ms = gap_ms
-                        self._sdk_max_gap_ms = max(self._sdk_max_gap_ms, gap_ms)
-                        if interval > max(0.65, exposure_us / 1_000_000 * 1.75 + 0.2):
-                            self._diagnostic_event_locked("sdk_gap", gap_ms)
                         rate = 1.0 / interval
                         prior = self._capture_fps
                         self._capture_fps = round(rate if prior == 0 else 0.25 * rate + 0.75 * prior, 2)

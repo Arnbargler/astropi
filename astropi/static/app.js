@@ -666,7 +666,7 @@ function showCapture(job) {
   }
   updateButtons();
 }
-// Stage 1: one outstanding browser JPEG request, even if the camera produces
+// Keep one outstanding browser JPEG request, even if the camera produces
 // frames faster than the LAN/browser can load them. Drop intermediate frames;
 // this is a live preview, never an image archive.
 function resetPreviewImages() {

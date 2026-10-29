@@ -6,7 +6,7 @@ Flask serves a trusted-LAN browser application at
 `http://astropi.local:8080/`. The Pi owns camera acquisition, mount serial
 I/O and captures; the desktop/browser is only a client.
 
-## Working state — 2026-10-28
+## Working state — 2026-10-29
 
 **Previously implemented and operator-tested on the Pi:** the persistent
 **Focus / Find / Fotograph** three-tab interface. Tabs do not reload the
@@ -31,30 +31,27 @@ the operator lease, camera stream and Pi-owned captures. Existing Pi-side
 deadman and Stop verification remain in force; physical Cancel/power
 is the last resort.
 
-**Preview delivery (browser):** two alternating JPEG image elements within
-the same preview card, only one image load at a time; keep the last
-successful frame visible, skip superseded frames and recover after failed
-loads/2 s timeout. Status responses are ordered by request start: a late
-older response cannot reset a newer preview or overwrite its camera
-telemetry. The camera SDK, JPEG worker and 50 ms status polling are
-unchanged. **Remaining intermittent pauses still require field testing.**
+**Preview delivery:** Two alternating JPEG image elements keep the last
+successful frame visible, skip superseded frames and avoid concurrent
+image loads. Browser-side request ordering ignores stale camera status
+responses. These correctness fixes remain in the code.
 
-### Intermittent preview diagnostics
-
-**Stage 1:** the browser uses alternating JPEG elements, allowing only one
-image request at a time and retaining the last successfully loaded frame.
-**Stage 2 (diagnostic only, field check pending):** read-only
-`GET /api/camera/diagnostics` exposes RAW SDK acquisition/JPEG completion
-ages, max gaps and a bounded history of slow events. It does not alter
-camera acquisition or exposure. See SETUP.md for the one-command check.
-The operator reports some remaining intermittent browser preview/HTTP
-logging pauses with the mount disconnected; cause not yet established.
-
-To examine remaining freezes **without modifying live UI logic**,
-`/static/preview_probe.js` is an opt-in browser-only diagnostic; see
-SETUP.md for the two-line Chrome Console loader and report command.
-It records whether progress requests, JPEG URL changes, image-load events
-or browser timers are pausing. It is not loaded during normal operation.
+**Wi-Fi preview latency — investigated 2026-10-29:** Over the normal
+5 GHz wireless link the preview still freezes intermittently for
+~0.5–1 s. Pi-local HTTP was consistently fast (~2–10 ms), and a
+camera-session sample had max RAW/JPEG completion intervals of about
+109/133 ms, while independent Mint-to-Pi HTTP requests over Wi-Fi
+sometimes took ~0.5–1 s. **Direct Pi-to-Mint Ethernet eliminated the
+visible freezes** with no camera-code changes. This strongly implicates
+the wireless path (exact radio/AP cause unconfirmed), not camera
+acquisition or JPEG processing. The normal client already uses the Pi
+numeric IP; changing DNS and disabling Wi-Fi power saving didn't solve
+the pauses. **The operator chooses Wi-Fi for field astronomy and accepts
+minor focusing-preview lag; no permanent Ethernet is planned.**
+Scientific FITS/RAW capture and file saving run locally on the Pi, not
+paced by browser JPEG delivery, though an actual capture through the
+same network stalls was not separately tested. Temporary troubleshooting
+probes/endpoints were removed; see DEVELOPMENT.md for evidence.
 
 ### Camera and recording
 

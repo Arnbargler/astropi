@@ -20,8 +20,7 @@ The user confirmed the three-tab UI works on the Pi on 2026-10-28.
 | `tests/`, `.github/workflows/tests.yml` | Fake-hardware Python tests and Node 22 browser regressions |
 
 **GET routes:** `/`, `/api/status`, `/api/camera/progress`,
-`/api/camera/frame.jpg`, `/api/camera/diagnostics`,
-`/api/capture/status`, `/api/mount/status`.
+`/api/camera/frame.jpg`, `/api/capture/status`, `/api/mount/status`.
 
 **POST routes:** `/api/control/{take,heartbeat,release}`,
 `/api/camera/{start,stop,settings,binning,preview-mode,debayer}`,
@@ -62,91 +61,62 @@ the JPEG preview stream, or navigate/reload on tab selection.
   not send Stop. Retain pointer release/blur/visibility/pagehide Stop,
   600 ms server deadman and physical Cancel/power warning.
 
-Browser polls camera progress every **50 ms** (while active), mount
-status every **1 s**, full status every **3 s**. The **stage-1 browser
-preview loader** in `app.js` keeps two `<img>` elements inside the
-**single relocated** preview card and allows only **one outstanding JPEG
-request**. The currently visible JPEG stays on screen until its alternate
-element's `load` event; intermediate camera frame numbers are skipped
-and the newest available frame is requested afterward. Errors and a
-**2 s load timeout** release the request; closing/reopening the camera
-invalidates stale image callbacks. This changes only browser delivery,
-**not** SDK acquisition, preview conversion, FPS, camera polling rate, or
-the mount/lease/deadman path. No extra image stream or HTTP fetch.
-**No WebSockets.** Camera UI replies from `/api/status` and
-`/api/camera/progress` carry a browser-local request sequence. A response
-to an older-started request that returns after a newer response has
-already been applied is **ignored for camera state and JPEG updates**.
-This prevents stale frame-number rollbacks or stale stopped/connecting
-status from hiding a running preview. Genuine new camera sessions still
-reset the loader when current data has no frame or a lower frame number.
-Regression tests deliberately delay full-status responses. Operator
-reports some stutters after stage 1; this is a targeted logic correction,
-not proof that all pauses were caused by out-of-order replies.
+Browser polls camera progress every **50 ms** while active, mount
+status every **1 s**, full status every **3 s**. `app.js` uses two
+alternating `<img>` elements in the one relocated preview card. Only
+one JPEG load can be outstanding; keep the previous successful frame
+visible, skip superseded frames and release failed loads after 2 s.
+Camera sessions invalidate stale image callbacks. Responses to
+`/api/status` and `/api/camera/progress` are ordered by browser-local
+request start, so delayed older camera state cannot reset a newer
+preview. **Keep the regression tests** for these correctness fixes.
+No WebSockets; the Pi camera/capture and mount safety code are separate.
 
-## Intermittent preview pauses — Stage 2 diagnostics (implemented, Pi test pending)
+## Preview freezes — wireless transport identified (2026-10-29)
 
-**Observation:** Browser preview and Flask access-log traffic still sometimes
-pause even after stage-1 JPEG serialization; user disconnected AM3N and
-confirmed that intercepting ~33 `/api/mount/status` requests in ~30 s
-did not eliminate pauses. The HTTP mount-status endpoint is a cached dict
-read; the mount serial worker was disconnected. Do not blame mount polling.
+**Operator decision:** Normal field use is **Wi-Fi**, not Ethernet;
+minor ~0.5–1 s live-preview/focus pauses every few seconds are accepted
+for now. Do not make temporary direct-Ethernet addresses permanent or
+restart this performance investigation without new evidence.
 
-Read-only `GET /api/camera/diagnostics` returns in-memory counters **without
-touching the camera SDK**: `raw_frames` (successful SDK acquisitions),
-`jpeg_frames` (completed preview conversions), `raw_age_ms` /
-`jpeg_age_ms`, currently active `sdk_inflight_ms` /
-`jpeg_busy_ms`, last/max SDK-return interval and wait time, last/max
-JPEG-completion interval and processing duration. It retains **up to 32
-recent outliers** (`sdk_gap`, `jpeg_gap`, `jpeg_slow`,
-`sdk_timeout_11`) tagged with UTC, exposure and frame counts. The
-threshold for gap events is max(0.65 s, 1.75 × exposure + 0.2 s);
-JPEG processing >500 ms logs a slow event. This avoids classifying a
-deliberate multi-second exposure as an abnormal gap. The counter history
-resets with a fresh camera session; this does NOT change SDK calls,
-exposure settings, threading, JPEG buffering or browser polling.
+**Evidence and exclusions:**
 
-From the Pi with the camera preview running:
-`curl -s http://127.0.0.1:8080/api/camera/diagnostics | python3 -m json.tool`
-Run after several visible stutters; compare SDK gaps vs JPEG gaps.
-If both remain short despite browser freezes, investigate HTTP scheduling,
-Werkzeug per-request terminal logging, 3-second `/api/status` system
-checks, browser requests and networking. The Flask access log timestamps
-completed requests, not request issuance. A long in-progress SDK wait
-can also be observed via `sdk_inflight_ms`, while an in-progress JPEG
-render shows `jpeg_busy_ms`; long exposures naturally increase SDK
-wait and frame ages.
+- Camera SDK/JPEG diagnostic snapshot during pauses: ~298 RAW,
+  296 JPEG, max SDK completion gap ~109 ms and JPEG completion gap
+  ~133 ms, no recorded slow events. A snapshot does not guarantee
+  acquisition can *never* stall, but it shows no corresponding ~1 s
+  camera pause in that sample.
+- Browser probe: JPEG load gaps ~619–1276 ms and some slow progress
+  HTTP requests. Independent `curl` on Mint over Wi-Fi saw ~0.5–1 s
+  responses/connection setups while simultaneous Pi-local `curl`
+  remained ~2–10 ms. The problem was not confined to Chrome.
+- Both Pi and Mint were downstairs on **5 GHz Wi-Fi**, same upstairs
+  access point, signal −59/−58 dBm. Ping 300/300 arrived,
+  mean ~6.9 ms, maximum ~215 ms. Disabling Wi-Fi power saving on
+  both clients did not eliminate pauses. `.local` DNS sometimes took
+  ~1 s in fresh `curl` processes, but the operator normally uses a
+  numeric IP and still experiences the issue, so DNS is not the cause
+  of the usual browser freezes.
+- **Controlled A/B:** direct Pi-to-Mint Ethernet, Flask and camera
+  unchanged, gave a **silky-smooth live preview**. Temporary addresses
+  were Pi `10.77.77.1/30` and Mint `10.77.77.2/30`. Therefore
+  wireless transport/AP is the main identified contributor; which
+  radio or access-point behaviour causes the delay is not resolved.
 
-## Opt-in browser-side delivery probe (after stage-2 camera checks)
+**Impact:** RAW/FITS science acquisition, Pi-local sequence scheduling
+and USB writes do **not** depend on browser JPEG arrival. This is a
+design/property statement, not a claim that a new science capture was
+performed during this exact Wi-Fi fault. Remote mount commands do
+traverse the network: retain the server-side 600 ms jog deadman and
+physical Cancel/power fallback when connectivity is unreliable.
 
-`astropi/static/preview_probe.js` is deliberately **not** imported by
-the normal app. Its sole purpose is to correlate browser JPEG `load`
-events, JPEG `src` replacements, camera-progress/full-status fetch
-latency, missed image-load intervals and timer delays. The probe wraps
-`window.fetch` transparently for two read-only GET URLs only; it does
-not alter responses or camera/mount controls. A 550 ms JPEG-load gap
-generates a console warning after it resolves, with a snapshot of the
-most recent progress and image-request activity. A bounded report
-includes up to 40 gaps and 30 slow requests. It has no Pi-side
-acquisition, imaging or storage effect.
-
-After copying this version to the Pi (static file can be picked up
-without restarting the running Flask process), hard-refresh Chrome,
-then paste into the DevTools Console:
-
-```js
-const p = document.createElement("script");
-p.src = "/static/preview_probe.js?t=" + Date.now();
-document.head.appendChild(p);
-```
-
-After seeing several freezes, run `AstroPiPreviewProbe.report()` and
-copy the console tables. Use `AstroPiPreviewProbe.stop()` or reload to
-restore the ordinary browser behaviour. This is a **measurement tool**,
-not evidence that network or browser is definitively at fault. Compare
-with the Pi's `/api/camera/diagnostics` when possible. Keep the
-camera on and visible; changing tabs or stopping camera intentionally
-creates long gaps.
+**Cleanup:** Removed temporary `/api/camera/diagnostics` endpoint,
+SDK/JPEG diagnostic-event counters, optional `preview_probe.js` and
+their dedicated tests. Normal preview processing/FPS display, camera
+polling, safe image loader and its regression tests remain. The
+Werkzeug logging override was only a manual test launch, never a
+committed runtime option. Further experimental details remain in
+Git history.
 
 ## Must-preserve invariants
 

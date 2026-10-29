@@ -242,11 +242,6 @@ def create_app(settings: Settings | None = None, camera=None, lease=None, mount=
         data["capture"] = worker.capture_status()
         return jsonify(data)
 
-    @app.get("/api/camera/diagnostics")
-    def camera_diagnostics():
-        # Read-only timing snapshot: no SDK calls or extra preview processing.
-        return jsonify(worker.diagnostics())
-
     @app.get("/api/camera/frame.jpg")
     def frame():
         jpeg, number = worker.frame()

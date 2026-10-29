@@ -1,6 +1,6 @@
 # AstroPi hardware reference
 
-Current verified hardware and protocol facts (2026-10-28). Older detailed probe logs are in [Git history](https://github.com/Arnbargler/astropi/blob/f01ae019f9ba840f90b5bb5e566d0fc17dab41b7/HARDWARE.md); they are not current setup instructions.
+Current verified hardware and protocol facts (updated 2026-10-29). Older detailed probe logs are in [Git history](https://github.com/Arnbargler/astropi/blob/f01ae019f9ba840f90b5bb5e566d0fc17dab41b7/HARDWARE.md); they are not current setup instructions.
 
 ## Devices and installation
 
@@ -13,6 +13,30 @@ Current verified hardware and protocol facts (2026-10-28). Older detailed probe 
 | Time | systemd NTP; Pi has no battery RTC. AM3N automatic UTC sync is active only when Pi NTP is confirmed |
 
 AM3N stable serial alias: `/dev/serial/by-id/usb-ZWO_Systems_ZWO_Device_123456-if00`; Pi user belongs to `dialout`. Do not depend on shifting `/dev/ttyACM*` numbers. SVBONY SDK 1.13.4 at `/home/arn/svbony-sdk/SVBCameraSDK/lib/armv8/libSVBCameraSDK.so` (or `ASTROPI_SVB_SDK`). Camera USB permissions: `/etc/udev/rules.d/90-ckusb.rules`. Vendor binaries are not in Git.
+
+## Wireless preview field observation (2026-10-29)
+
+The Pi 4 onboard Wi-Fi and Linux Mint n100 were both on 5 GHz
+(5180 MHz) through the same upstairs access point, with both
+machines together in the basement. Signal was ~−59 dBm (Pi) and
+~−58 dBm (Mint), and Wi-Fi power saving was enabled initially.
+Turning it off temporarily did not stop the stutters. During
+the recurring ~0.5–1 s browser JPEG pauses, Pi-local Flask HTTP
+remained ~2–10 ms and short camera SDK/JPEG frame intervals were
+observed, but Mint-to-Pi Wi-Fi HTTP/TCP sometimes took ~1 s.
+A 300-packet ping showed 0% loss, ~6.9 ms average and 215 ms max.
+The user usually accesses AstroPi by Pi numeric IP, so occasional
+mDNS delays were not the root of the usual symptom.
+
+**Direct Pi-to-Mint Ethernet made the preview silky smooth** with
+no imaging/Flask code changes: the wireless path was the dominant
+identified source of the visible delays. Which radio/AP mechanism
+was responsible was not determined. **No permanent Ethernet is
+wanted:** observing is remote, and occasional Wi-Fi focusing-preview
+lag is acceptable. Acquisition, Pi-side sequence management, and
+RAW/FITS recording do not wait for browser JPEG loads; this does
+not assert a simultaneous science-capture field test of the Wi-Fi
+stalls. The temporary wired addresses were experimental only.
 
 ## SV705C integration quirks
 
