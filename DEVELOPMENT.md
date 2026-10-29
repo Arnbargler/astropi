@@ -72,51 +72,53 @@ request start, so delayed older camera state cannot reset a newer
 preview. **Keep the regression tests** for these correctness fixes.
 No WebSockets; the Pi camera/capture and mount safety code are separate.
 
-## Preview freezes — wireless transport identified (2026-10-29)
+## Wireless preview findings and current field setup
 
-**Operator decision:** Normal field use is **Wi-Fi**, not Ethernet;
-minor ~0.5–1 s live-preview/focus pauses every few seconds are accepted
-for now. Do not make temporary direct-Ethernet addresses permanent or
-restart this performance investigation without new evidence.
+**Diagnosis (2026-10-29):** Pi SDK/JPEG completion intervals stayed
+~109/133 ms maximum in a sample taken through the freezes, while
+browser and independent Mint-to-Pi Wi-Fi HTTP had occasional ~0.5–1 s
+delays. Pi-local HTTP was ~2–10 ms. Disabling Wi-Fi power saving and
+using a numeric IP did not eliminate pauses. **Temporary direct
+Ethernet made the preview silky smooth** with unchanged application
+code: wireless delivery is the main identified contributor, though
+the exact adapter/AP fault remains unknown. History of the
+investigation is preserved before cleanup commit `57e0e4f`.
+There is **no plan to install permanent Ethernet or re-engineer the
+preview for this minor focusing annoyance**.
 
-**Evidence and exclusions:**
+**New Pi Wi-Fi (2026-10-29):** BrosTrend AC5L USB `0bda:c811`,
+`rtw88_8821cu` on Pi kernel `6.18.39+rpt-rpi-v8`, firmware
+`24.11.0`; `wlan1` while onboard was present. Its saved
+NetworkManager profile `Bazingas-Minions-USB` is autoconnect=yes,
+MAC-bound to `74:19:f8:17:b1:f5` (not interface-name bound),
+priority=50 and IPv4/IPv6 metric=100. Internal profile
+`Bazingas-Minions` had priority=0, metric=600. USB adapter
+tested across multiple reboots, associated at 5 GHz with signal
+as strong as −44 dBm, and live preview worked with fewer—but
+persistent—brief pauses. Client Mint's second AC5L was **ordered,
+not yet installed or tested**.
 
-- Camera SDK/JPEG diagnostic snapshot during pauses: ~298 RAW,
-  296 JPEG, max SDK completion gap ~109 ms and JPEG completion gap
-  ~133 ms, no recorded slow events. A snapshot does not guarantee
-  acquisition can *never* stall, but it shows no corresponding ~1 s
-  camera pause in that sample.
-- Browser probe: JPEG load gaps ~619–1276 ms and some slow progress
-  HTTP requests. Independent `curl` on Mint over Wi-Fi saw ~0.5–1 s
-  responses/connection setups while simultaneous Pi-local `curl`
-  remained ~2–10 ms. The problem was not confined to Chrome.
-- Both Pi and Mint were downstairs on **5 GHz Wi-Fi**, same upstairs
-  access point, signal −59/−58 dBm. Ping 300/300 arrived,
-  mean ~6.9 ms, maximum ~215 ms. Disabling Wi-Fi power saving on
-  both clients did not eliminate pauses. `.local` DNS sometimes took
-  ~1 s in fresh `curl` processes, but the operator normally uses a
-  numeric IP and still experiences the issue, so DNS is not the cause
-  of the usual browser freezes.
-- **Controlled A/B:** direct Pi-to-Mint Ethernet, Flask and camera
-  unchanged, gave a **silky-smooth live preview**. Temporary addresses
-  were Pi `10.77.77.1/30` and Mint `10.77.77.2/30`. Therefore
-  wireless transport/AP is the main identified contributor; which
-  radio or access-point behaviour causes the delay is not resolved.
+**Onboard-radio change:** The operator requested the Raspberry Pi
+boot overlay `dtoverlay=disable-wifi` to reduce power/heat. We
+provided commands to add it to `/boot/firmware/config.txt` and
+to restore the radio via Ethernet if USB networking fails. **No
+post-overlay reboot output was received**; do not claim verified
+absence of the onboard interface. After disabling it, the USB
+adapter may be renamed from `wlan1` to `wlan0`; use the
+MAC-bound NetworkManager profile, `nmcli`, and `iw dev`,
+not a hardcoded interface name. See SETUP.md.
 
-**Impact:** RAW/FITS science acquisition, Pi-local sequence scheduling
-and USB writes do **not** depend on browser JPEG arrival. This is a
-design/property statement, not a claim that a new science capture was
-performed during this exact Wi-Fi fault. Remote mount commands do
-traverse the network: retain the server-side 600 ms jog deadman and
-physical Cancel/power fallback when connectivity is unreliable.
+**Architecture:** Pi-owned RAW/FITS science acquisitions, sequence
+scheduling and local USB storage do not wait for browser JPEG
+loads. This does not imply the exact wireless hiccups were tested
+during a saved science run. Wi-Fi may delay manual mount control;
+retain server-side 600 ms deadman and physical Cancel/power fallback.
 
-**Cleanup:** Removed temporary `/api/camera/diagnostics` endpoint,
-SDK/JPEG diagnostic-event counters, optional `preview_probe.js` and
-their dedicated tests. Normal preview processing/FPS display, camera
-polling, safe image loader and its regression tests remain. The
-Werkzeug logging override was only a manual test launch, never a
-committed runtime option. Further experimental details remain in
-Git history.
+**Clean state:** Temporary browser probe, server camera-timing API
+and per-frame diagnostic event counters were already removed in
+`57e0e4f`. Live preview processing/FPS fields, alternating JPEG
+loader, stale-response guard and regression tests are intentional
+features. Do not resurrect old troubleshooting code without evidence.
 
 ## Must-preserve invariants
 

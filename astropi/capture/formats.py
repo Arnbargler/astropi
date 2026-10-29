@@ -13,7 +13,7 @@ import numpy as np
 from PIL import Image
 
 from astropi.camera.preview import _stretch_lut
-from astropi.camera.sdk import WIDTH, HEIGHT, frame_bytes, frame_dimensions
+from astropi.camera.sdk import frame_bytes, frame_dimensions
 
 FORMATS = ("raw", "fits", "jpg", "png")
 EXTENSIONS = {"raw": "raw16", "fits": "fits", "jpg": "jpg", "png": "png"}

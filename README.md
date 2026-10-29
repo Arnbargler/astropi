@@ -2,8 +2,8 @@
 
 Observatory controller running on a **Raspberry Pi 4B (4 GB)** with Debian 13
 Trixie, one **SVBONY SV705C** camera and one **ZWO AM3N** Alt/Az mount.
-Flask serves a trusted-LAN browser application at
-`http://astropi.local:8080/`. The Pi owns camera acquisition, mount serial
+Flask serves a trusted-LAN browser application on port **8080** (Pi Wi-Fi
+IP or `astropi.local`). The Pi owns camera acquisition, mount serial
 I/O and captures; the desktop/browser is only a client.
 
 ## Working state — 2026-10-29
@@ -36,22 +36,29 @@ successful frame visible, skip superseded frames and avoid concurrent
 image loads. Browser-side request ordering ignores stale camera status
 responses. These correctness fixes remain in the code.
 
-**Wi-Fi preview latency — investigated 2026-10-29:** Over the normal
-5 GHz wireless link the preview still freezes intermittently for
-~0.5–1 s. Pi-local HTTP was consistently fast (~2–10 ms), and a
-camera-session sample had max RAW/JPEG completion intervals of about
-109/133 ms, while independent Mint-to-Pi HTTP requests over Wi-Fi
-sometimes took ~0.5–1 s. **Direct Pi-to-Mint Ethernet eliminated the
-visible freezes** with no camera-code changes. This strongly implicates
-the wireless path (exact radio/AP cause unconfirmed), not camera
-acquisition or JPEG processing. The normal client already uses the Pi
-numeric IP; changing DNS and disabling Wi-Fi power saving didn't solve
-the pauses. **The operator chooses Wi-Fi for field astronomy and accepts
-minor focusing-preview lag; no permanent Ethernet is planned.**
-Scientific FITS/RAW capture and file saving run locally on the Pi, not
-paced by browser JPEG delivery, though an actual capture through the
-same network stalls was not separately tested. Temporary troubleshooting
-probes/endpoints were removed; see DEVELOPMENT.md for evidence.
+**Field networking (2026-10-29):** The Pi now uses a
+**BrosTrend AC5L USB Wi-Fi adapter** (Realtek `0bda:c811`,
+in-kernel `rtw88_8821cu` driver) with a stronger external antenna.
+The saved NetworkManager profile `Bazingas-Minions-USB` autoconnects
+with route metric **100**, ahead of the internal radio's old **600**.
+The dongle survived multiple reboots and worked for SSH and live
+preview (last observed DHCP IP: `192.168.0.98`, **not static**).
+Its signal improved from about **−59 dBm** (internal Pi Wi-Fi)
+to **−44 dBm**, with fewer reported preview stutters but not zero.
+The operator has requested disabling the **onboard Wi-Fi** with
+`dtoverlay=disable-wifi` for power/heat saving; *post-change reboot
+verification has not yet been supplied*. This is a Pi boot setting,
+not application code. See [SETUP.md](SETUP.md) for verification/recovery.
+
+**Preview delays:** The original ~0.5–1 s pauses vanished when Pi
+and Mint were joined by temporary direct Ethernet, strongly pointing
+to the Wi-Fi/AP path rather than the Pi camera pipeline. Field
+observing **will remain wireless**: no permanent LAN cable is wanted,
+and occasional focusing delay is accepted. Science FITS/RAW capture
+and USB saves operate on the Pi, independently of browser JPEG delivery
+(although recording during the exact Wi-Fi stalls was not separately
+field-tested). Old timing probes were removed; browser JPEG
+serialization and stale-response protection remain.
 
 ### Camera and recording
 

@@ -110,6 +110,19 @@ separate later milestones.
   accessible Stop stays above the overlay and visible in all tabs;
   ownership and Pi recording survive tab changes.
 
+## Field connectivity (operator decision, 2026-10-29)
+
+- **Wi-Fi only in normal outdoor operation:** No fixed LAN link or
+  permanent direct-Ethernet configuration is wanted.
+- **Pi radio:** Prefer the tested BrosTrend AC5L external USB Wi-Fi
+  adapter using its built-in Linux driver. The operator requested
+  disabling internal Pi Wi-Fi at boot for modest power/heat savings;
+  the resulting reboot has not yet been confirmed. See SETUP.md.
+- **Live preview:** Brief Wi-Fi JPEG delays are acceptable during
+  focusing. Do not change the Pi's independent science capture
+  scheduling to match browser frame delivery. The remaining
+  stutters need not be solved before further astronomy features.
+
 ## Explicit exclusions
 
 SV705C only; no alternative cameras, cooling or camera switching.

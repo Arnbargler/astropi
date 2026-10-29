@@ -29,7 +29,9 @@ python -m pytest -q
 python run.py --host 0.0.0.0 --port 8080
 ```
 
-Open http://astropi.local:8080/ (or Pi LAN IP), Ctrl+Shift+R after an update.
+Open `http://astropi.local:8080/` or `http://<Pi-current-Wi-Fi-IP>:8080/`;
+hard-refresh (Ctrl+Shift+R) after an update. The last observed
+USB Wi-Fi DHCP address was `192.168.0.98`, but **it is not static**.
 Flask currently runs in the foreground; **no automatic startup service is
 installed**. No camera or mount serial session starts merely by loading
 the page. Internet exposure/authentication is not supported.
@@ -51,31 +53,86 @@ The operator token and Pi-owned exposures persist across tabs.
 The original three-tab shell was Pi-checked on 2026-10-28; **the drawer
 still needs a real-Pi browser check**.
 
-## Wi-Fi preview behaviour (2026-10-29 field decision)
+## Field network — BrosTrend AC5L USB Wi-Fi
 
-Over 5 GHz Wi-Fi, live browser preview sometimes pauses ~0.5–1 s
-even though the camera SDK/JPEG pipeline and Pi-local HTTP were
-responsive in tests. Mint and Pi were both in a basement, talking
-through an access point one floor above. **Direct Pi-to-Mint Ethernet
-made the preview silky smooth**, with unchanged AstroPi/Flask code.
-The specific wireless radio/AP cause was not isolated. The
-operator normally accesses the Pi by numeric IP (not mDNS);
-disabling Wi-Fi power saving also did not eliminate the pauses.
+**Normal connection:** USB AC5L external-antenna adapter
+(Realtek `0bda:c811`, driver `rtw88_8821cu`, Pi kernel
+`6.18.39+rpt-rpi-v8`). It was detected automatically without
+vendor driver installation and tested on the Pi with SSH and AstroPi
+preview over multiple reboots. The saved NetworkManager profile is
+`Bazingas-Minions-USB`, MAC-bound to `74:19:f8:17:b1:f5`,
+`connection.autoconnect=yes`, priority **50**, route metric **100**.
+The old onboard profile `Bazingas-Minions` remains in NetworkManager
+as fallback, priority **0**, route metric **600**. The last observed
+USB adapter IP was **192.168.0.98** (DHCP, may change).
 
-**Use Wi-Fi in the field.** Ethernet was a *temporary diagnostic*,
-not a permanent requirement, and the temporary wired addresses
-`10.77.77.1/30` and `10.77.77.2/30` are not normal field URLs.
-Minor focus-preview stutter is acceptable. RAW/FITS science captures
-and sequence storage execute on the Pi independently of browser
-JPEG delivery; actual saved exposures under this particular Wi-Fi
-failure pattern were not separately field-tested. Network latency can
-also delay operator commands to the mount: use its physical
-Cancel/power safety fallback when needed.
+At the last verified post-reboot network inspection, both radios
+were connected and **USB Wi-Fi was preferred**. The operator
+subsequently requested **disabling the onboard Wi-Fi radio at boot**;
+instructions were given, but a confirming reboot report was *not*
+received. Do **not** assume it is disabled until checking. The
+boot setting belongs to the Pi, not Git:
 
-There are no special diagnostic launch flags. The temporary timing
-API and Chrome probe were removed after investigation; use the
-ordinary start procedure above. No permanent network changes were
-committed.
+```ini
+# In /boot/firmware/config.txt under [all]
+dtoverlay=disable-wifi
+```
+
+To verify the field network after a restart:
+
+```bash
+iw dev
+nmcli device status
+nmcli connection show "Bazingas-Minions-USB" | grep -E 'connection.autoconnect:|connection.interface-name:|802-11-wireless.mac-address:'
+ip route
+lsusb -t
+grep -n '^dtoverlay=disable-wifi$' /boot/firmware/config.txt
+```
+
+Expected if the overlay was applied: only **one** wireless interface
+(the AC5L), connected via `Bazingas-Minions-USB`, with the
+`rtw88_8821cu` USB driver and preferred route. **It might be named
+`wlan0`, not `wlan1`**, after the internal radio disappears.
+Do not bind the USB connection to a device-name string; its MAC
+binding is intentional. Avoid `nmcli radio wifi off` because it
+disables *all* Wi-Fi adapters.
+
+**Recovery if USB Wi-Fi stops working:** connect through Ethernet
+to the Pi (for example via a LAN port providing DHCP), open a shell
+and remove *only* the exact onboard-disable line, then reboot:
+
+```bash
+sudo sed -i '/^dtoverlay=disable-wifi$/d' /boot/firmware/config.txt
+sudo reboot
+```
+
+This should restore the built-in radio and its existing NetworkManager
+profile. A backup was prescribed at
+`/boot/firmware/config.txt.before-wifi-disable`, but its presence
+has not been rechecked. Do not replace the entire boot file unless
+necessary. **No Wi-Fi password or boot firmware settings are stored
+in this repository.**
+
+### Known preview behaviour
+
+Occasional ~0.5–1 s preview freezes over Wi-Fi were isolated to
+the wireless/network delivery path: direct Pi-to-Mint Ethernet
+made preview silky smooth without changing AstroPi code. With
+the AC5L, signal improved from ~−59 dBm onboard to as strong as
+~−44 dBm, and stutters seemed less frequent but **did not disappear**.
+The Mint n100 still had its internal Wi-Fi; a **second AC5L has been
+ordered for Mint**, not installed/tested as of this handoff. Its
+future results should not be assumed. Permanent Ethernet is *not*
+wanted at the telescope. For now, brief focusing-preview pauses
+are acceptable; no more performance work is planned.
+
+Pi SDK acquisition, science RAW/FITS capture and USB writes are
+independent of browser JPEG timing; the actual saving of science
+exposures during these network stalls was not separately verified.
+A laggy Wi-Fi connection can also delay mount jog commands: retain
+the mount's backend 600 ms deadman and physical hand-controller
+Cancel/power fallback. Previous temporary browser/server timing
+probes were removed; no special launch flags are needed.
 
 ## Camera, recording and verification
 

@@ -14,29 +14,49 @@ Current verified hardware and protocol facts (updated 2026-10-29). Older detaile
 
 AM3N stable serial alias: `/dev/serial/by-id/usb-ZWO_Systems_ZWO_Device_123456-if00`; Pi user belongs to `dialout`. Do not depend on shifting `/dev/ttyACM*` numbers. SVBONY SDK 1.13.4 at `/home/arn/svbony-sdk/SVBCameraSDK/lib/armv8/libSVBCameraSDK.so` (or `ASTROPI_SVB_SDK`). Camera USB permissions: `/etc/udev/rules.d/90-ckusb.rules`. Vendor binaries are not in Git.
 
-## Wireless preview field observation (2026-10-29)
+## Network hardware and field decision (2026-10-29)
 
-The Pi 4 onboard Wi-Fi and Linux Mint n100 were both on 5 GHz
-(5180 MHz) through the same upstairs access point, with both
-machines together in the basement. Signal was ~−59 dBm (Pi) and
-~−58 dBm (Mint), and Wi-Fi power saving was enabled initially.
-Turning it off temporarily did not stop the stutters. During
-the recurring ~0.5–1 s browser JPEG pauses, Pi-local Flask HTTP
-remained ~2–10 ms and short camera SDK/JPEG frame intervals were
-observed, but Mint-to-Pi Wi-Fi HTTP/TCP sometimes took ~1 s.
-A 300-packet ping showed 0% loss, ~6.9 ms average and 215 ms max.
-The user usually accesses AstroPi by Pi numeric IP, so occasional
-mDNS delays were not the root of the usual symptom.
+- **Pi onboard:** Broadcom Wi-Fi, initially `wlan0`, around
+  −59 dBm to the upstairs 5 GHz access point.
+- **BrosTrend AC5L USB external antenna:** USB ID `0bda:c811`
+  (RTL8821CU), `rtw88_8821cu` in-kernel driver on
+  `6.18.39+rpt-rpi-v8`, firmware `24.11.0`, USB 2.0
+  480 Mbps. Appeared as `wlan1` with the onboard radio active.
+  No vendor/DKMS installer was needed. MAC address
+  `74:19:f8:17:b1:f5` binds the autoconnect NetworkManager
+  profile `Bazingas-Minions-USB`. Metric **100** wins over the
+  onboard connection's metric **600**. After removing onboard
+  Wi-Fi, the USB interface may become `wlan0`.
+- **Observed AC5L results:** At the same 5180 MHz AP,
+  −48 dBm immediately and −44 dBm after reboot, with link
+  RX ~390 Mbps / TX ~433 Mbps at best observed. SSH and
+  AstroPi browser preview worked. USB profile survived
+  several reboots; Wi-Fi preview stutters continued, reportedly
+  less frequently.
+- **Client:** Linux Mint n100 uses its built-in Wi-Fi,
+  approximately −58 dBm in this test. Another AC5L has been
+  **ordered for Mint but not received/tested**.
+- **Onboard shutdown:** User requested `dtoverlay=disable-wifi`
+  under `[all]` in Pi `/boot/firmware/config.txt` to
+  save power/heat. Instructions were provided, including an
+  Ethernet rollback; **the result of rebooting after applying
+  that overlay has not yet been reported**. Do not claim
+  it is confirmed disabled. See SETUP.md.
 
-**Direct Pi-to-Mint Ethernet made the preview silky smooth** with
-no imaging/Flask code changes: the wireless path was the dominant
-identified source of the visible delays. Which radio/AP mechanism
-was responsible was not determined. **No permanent Ethernet is
-wanted:** observing is remote, and occasional Wi-Fi focusing-preview
-lag is acceptable. Acquisition, Pi-side sequence management, and
-RAW/FITS recording do not wait for browser JPEG loads; this does
-not assert a simultaneous science-capture field test of the Wi-Fi
-stalls. The temporary wired addresses were experimental only.
+**Wireless pause isolation:** Browser JPEG preview paused
+~0.5–1 s over Wi-Fi while camera SDK/JPEG production and
+Pi-local HTTP remained fast in sampled measurements.
+Independent Mint-to-Pi Wi-Fi HTTP occasionally took ~1 s.
+Turning off Wi-Fi power saving did not solve it; numeric IP
+access was already used. Direct Pi-to-Mint Ethernet made
+the unchanged application's preview silky smooth. This
+identifies the wireless/AP delivery path as the primary
+contributor, not a particular adapter or Wi-Fi mechanism.
+The operator **does not want permanent Ethernet** at an
+outdoor telescope and accepts occasional focusing stutter.
+RAW/FITS capture/storage operates on the Pi, independent of
+browser JPEG delivery; simultaneous captured science data
+under this exact stall pattern was not re-verified.
 
 ## SV705C integration quirks
 

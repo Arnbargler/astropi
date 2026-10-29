@@ -11,7 +11,7 @@ from io import BytesIO
 import numpy as np
 from PIL import Image
 
-from .sdk import WIDTH, HEIGHT, frame_dimensions, frame_bytes
+from .sdk import frame_dimensions, frame_bytes
 
 _LEVELS = np.arange(4096, dtype=np.float32)
 # Precompute fixed gamma so preview processing requires no per-pixel power().
@@ -90,7 +90,7 @@ def raw16_to_jpeg(raw, stretch="auto", debayer=True, *, binning=1) -> bytes:
 
 
 def raw16_statistics(raw, *, binning=1) -> dict:
-    """Sparse, un-stretched 12-bit sensor statistics for gain/exposure diagnosis."""
+    """Sparse, un-stretched 12-bit signal readouts for gain/exposure feedback."""
     width, height = frame_dimensions(binning)
     if memoryview(raw).nbytes != frame_bytes(binning):
         raise ValueError("Unexpected SV705C RAW16 buffer length")

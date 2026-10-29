@@ -9,7 +9,7 @@ from queue import Empty, Full, Queue
 import threading
 import time
 
-from .sdk import SVBDriver, SDKError, RAW_BYTES, GAIN, EXPOSURE, frame_bytes, frame_dimensions, SUPPORTED_BINNING
+from .sdk import SVBDriver, SDKError, GAIN, EXPOSURE, frame_bytes, frame_dimensions
 from .preview import raw16_to_jpeg, raw16_statistics
 
 
