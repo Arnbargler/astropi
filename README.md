@@ -38,6 +38,17 @@ after load failure/2 s timeout. The camera SDK, JPEG worker and 50 ms
 status polling are unchanged. This addresses suspected overlapping
 browser image requests; **real-Pi pause verification is still needed**.
 
+### Intermittent preview diagnostics
+
+**Stage 1:** the browser uses alternating JPEG elements, allowing only one
+image request at a time and retaining the last successfully loaded frame.
+**Stage 2 (diagnostic only, field check pending):** read-only
+`GET /api/camera/diagnostics` exposes RAW SDK acquisition/JPEG completion
+ages, max gaps and a bounded history of slow events. It does not alter
+camera acquisition or exposure. See SETUP.md for the one-command check.
+The operator reports some remaining intermittent browser preview/HTTP
+logging pauses with the mount disconnected; cause not yet established.
+
 ### Camera and recording
 
 - Sensor **3856×2180**, native 12-bit GRBG in RAW16. Supported hardware

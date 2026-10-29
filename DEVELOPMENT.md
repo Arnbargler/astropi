@@ -20,7 +20,8 @@ The user confirmed the three-tab UI works on the Pi on 2026-10-28.
 | `tests/`, `.github/workflows/tests.yml` | Fake-hardware Python tests and Node 22 browser regressions |
 
 **GET routes:** `/`, `/api/status`, `/api/camera/progress`,
-`/api/camera/frame.jpg`, `/api/capture/status`, `/api/mount/status`.
+`/api/camera/frame.jpg`, `/api/camera/diagnostics`,
+`/api/capture/status`, `/api/mount/status`.
 
 **POST routes:** `/api/control/{take,heartbeat,release}`,
 `/api/camera/{start,stop,settings,binning,preview-mode,debayer}`,
@@ -77,6 +78,39 @@ this update; field-check the loader on the Pi. If gaps remain, the
 separate stage-2 investigation should time raw SDK acquisition,
 RAW-to-JPEG conversion and actual progress responses; don't assume
 frame-counter gaps alone prove a camera-side stall.
+
+## Intermittent preview pauses — Stage 2 diagnostics (implemented, Pi test pending)
+
+**Observation:** Browser preview and Flask access-log traffic still sometimes
+pause even after stage-1 JPEG serialization; user disconnected AM3N and
+confirmed that intercepting ~33 `/api/mount/status` requests in ~30 s
+did not eliminate pauses. The HTTP mount-status endpoint is a cached dict
+read; the mount serial worker was disconnected. Do not blame mount polling.
+
+Read-only `GET /api/camera/diagnostics` returns in-memory counters **without
+touching the camera SDK**: `raw_frames` (successful SDK acquisitions),
+`jpeg_frames` (completed preview conversions), `raw_age_ms` /
+`jpeg_age_ms`, currently active `sdk_inflight_ms` /
+`jpeg_busy_ms`, last/max SDK-return interval and wait time, last/max
+JPEG-completion interval and processing duration. It retains **up to 32
+recent outliers** (`sdk_gap`, `jpeg_gap`, `jpeg_slow`,
+`sdk_timeout_11`) tagged with UTC, exposure and frame counts. The
+threshold for gap events is max(0.65 s, 1.75 × exposure + 0.2 s);
+JPEG processing >500 ms logs a slow event. This avoids classifying a
+deliberate multi-second exposure as an abnormal gap. The counter history
+resets with a fresh camera session; this does NOT change SDK calls,
+exposure settings, threading, JPEG buffering or browser polling.
+
+From the Pi with the camera preview running:
+`curl -s http://127.0.0.1:8080/api/camera/diagnostics | python3 -m json.tool`
+Run after several visible stutters; compare SDK gaps vs JPEG gaps.
+If both remain short despite browser freezes, investigate HTTP scheduling,
+Werkzeug per-request terminal logging, 3-second `/api/status` system
+checks, browser requests and networking. The Flask access log timestamps
+completed requests, not request issuance. A long in-progress SDK wait
+can also be observed via `sdk_inflight_ms`, while an in-progress JPEG
+render shows `jpeg_busy_ms`; long exposures naturally increase SDK
+wait and frame ages.
 
 ## Must-preserve invariants
 

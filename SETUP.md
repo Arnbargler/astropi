@@ -51,6 +51,33 @@ The operator token and Pi-owned exposures persist across tabs.
 The original three-tab shell was Pi-checked on 2026-10-28; **the drawer
 still needs a real-Pi browser check**.
 
+## Diagnosing periodic preview pauses (Stage 2)
+
+The shared browser JPEG loader now requests only one new JPEG at a time,
+but the operator still sees occasional freezes even with the mount
+disconnected and one-second mount-status requests suppressed. Stage 2
+adds read-only timing metrics without changing capture or mount behaviour.
+
+Start the camera preview, keep it running through a few pauses, then in
+a **second Pi terminal** run:
+
+```bash
+curl -s http://127.0.0.1:8080/api/camera/diagnostics | python3 -m json.tool
+```
+
+The endpoint does **not** start a camera, require a controller token, poll
+serial, or perform extra JPEG work. `raw_frames` counts SDK acquisition,
+`jpeg_frames` counts completed JPEGs. `raw_age_ms` and `jpeg_age_ms`
+show how long since the latest of each; `sdk_inflight_ms` and
+`jpeg_busy_ms` show work underway when the snapshot was taken.
+`sdk_max_gap_ms` and `jpeg_max_gap_ms` capture the largest gaps since
+the last camera start (including gaps no longer in progress).
+`recent_events` is the last 32 significant timing anomalies, including
+UTC timestamps. Long exposures naturally yield longer SDK waits.
+If camera timing looks healthy during stutters, next check HTTP/browser
+scheduling, the 3 s full-status checks and high-volume foreground Flask
+request logging. Field validation of the diagnosis remains pending.
+
 ## Camera, recording and verification
 
 Click **Take Control**, **Start preview**, choose exposure/gain and wait for

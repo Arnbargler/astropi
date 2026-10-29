@@ -470,3 +470,117 @@ def test_capture_request_freezes_debayer_setting():
     camera.set_debayer(True)
     assert camera.request_capture(["fits", "jpg"]) == "job"
     assert capture.last[1]["debayer"] is True
+
+
+def test_camera_diagnostics_initial_and_bounded_events(tmp_path):
+    """Timing snapshots are cheap, read-only and do not need a live SDK."""
+    import time
+
+    camera = CameraWorker()
+    initial = camera.diagnostics()
+    assert initial["phase"] == "stopped"
+    assert initial["raw_frames"] == initial["jpeg_frames"] == 0
+    assert initial["raw_age_ms"] is None
+    assert initial["jpeg_age_ms"] is None
+    assert initial["sdk_inflight_ms"] is None
+    assert initial["jpeg_busy_ms"] is None
+    assert initial["recent_events"] == []
+
+    with camera._lock:
+        now = time.monotonic()
+        camera._phase = "running"
+        camera._raw_frames = 20
+        camera._sequence = 10
+        camera._sdk_last_frame_at = now - 0.25
+        camera._jpeg_last_frame_at = now - 0.50
+        camera._sdk_wait_started_at = now - 0.1
+        camera._jpeg_processing_started_at = now - 0.2
+        camera._sdk_last_gap_ms = 230.0
+        camera._sdk_max_gap_ms = 960.0
+        camera._jpeg_max_processing_ms = 600.0
+        for _ in range(40):
+            camera._diagnostic_event_locked("sdk_gap", 950.5)
+
+    state = camera.diagnostics()
+    assert state["phase"] == "running"
+    assert state["raw_frames"] == 20 and state["jpeg_frames"] == 10
+    assert 200 <= state["raw_age_ms"] < 1000
+    assert 400 <= state["jpeg_age_ms"] < 1100
+    assert 80 <= state["sdk_inflight_ms"] < 900
+    assert 180 <= state["jpeg_busy_ms"] < 900
+    assert state["sdk_last_gap_ms"] == 230.0
+    assert state["sdk_max_gap_ms"] == 960.0
+    assert state["jpeg_max_processing_ms"] == 600.0
+    assert len(state["recent_events"]) == 32
+    assert state["recent_events"][-1]["kind"] == "sdk_gap"
+    assert state["recent_events"][-1]["duration_ms"] == 950.5
+    assert "utc" in state["recent_events"][-1]
+
+    # A fresh session must not inherit earlier timing outliers.
+    with camera._lock:
+        camera._reset_diagnostics_locked()
+    reset = camera.diagnostics()
+    assert reset["raw_frames"] == 0
+    assert reset["jpeg_frames"] == 10  # JPEG counter belongs to actual camera state
+    assert reset["sdk_max_gap_ms"] == 0.0
+    assert reset["recent_events"] == []
+
+
+def test_camera_diagnostics_endpoint_is_read_only_and_needs_no_operator(tmp_path):
+    config = Settings(tmp_path, "expected", tmp_path / "missing-serial", tmp_path / "missing-usb")
+    camera = CameraWorker()
+    client = create_app(settings=config, camera=camera).test_client()
+    response = client.get("/api/camera/diagnostics")
+    assert response.status_code == 200
+    d = response.get_json()
+    assert d["phase"] == "stopped"
+    assert d["raw_frames"] == 0
+    assert d["jpeg_frames"] == 0
+    assert d["recent_events"] == []
+    assert camera._thread is None
+    # No command is sent to the camera; existing lightweight status API is intact.
+    assert client.get("/api/camera/progress").status_code == 200
+
+
+def test_camera_diagnostics_capture_real_sdk_and_jpeg_gaps(monkeypatch):
+    """Fake hardware creates an SDK delay; telemetry must record it."""
+    import time
+    from astropi.camera import worker as module
+
+    monkeypatch.setattr(module, "raw16_to_jpeg", lambda *args, **kwargs: b"JPEG")
+    monkeypatch.setattr(module, "raw16_statistics", lambda *args, **kwargs: {
+        "raw_mean_adu": 1, "raw_p99_adu": 2, "raw_saturated_percent": 0.0,
+    })
+
+    class DelayedFakeDriver:
+        def __init__(self):
+            self.count = 0
+        def open(self):
+            pass
+        def set_control(self, control, value):
+            return value
+        def start(self):
+            pass
+        def get_frame(self, buffer, wait_ms):
+            self.count += 1
+            time.sleep(0.72 if self.count == 3 else 0.04)
+        def close(self):
+            pass
+
+    camera = CameraWorker(driver_factory=DelayedFakeDriver)
+    assert camera.start()
+    deadline = time.monotonic() + 4
+    while camera.diagnostics()["raw_frames"] < 5 and time.monotonic() < deadline:
+        time.sleep(0.02)
+    d = camera.diagnostics()
+    assert d["raw_frames"] >= 5
+    assert d["jpeg_frames"] >= 1
+    assert d["sdk_max_wait_ms"] >= 650
+    assert d["sdk_max_gap_ms"] >= 650
+    assert d["jpeg_max_gap_ms"] >= 650
+    kinds = [entry["kind"] for entry in d["recent_events"]]
+    assert "sdk_gap" in kinds
+    assert "jpeg_gap" in kinds
+    assert camera.stop()
+    camera._thread.join(timeout=3)
+    assert not camera._thread.is_alive()
