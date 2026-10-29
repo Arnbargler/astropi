@@ -73,11 +73,16 @@ and the newest available frame is requested afterward. Errors and a
 invalidates stale image callbacks. This changes only browser delivery,
 **not** SDK acquisition, preview conversion, FPS, camera polling rate, or
 the mount/lease/deadman path. No extra image stream or HTTP fetch.
-**No WebSockets.** Operator reported periodic preview freezes before
-this update; field-check the loader on the Pi. If gaps remain, the
-separate stage-2 investigation should time raw SDK acquisition,
-RAW-to-JPEG conversion and actual progress responses; don't assume
-frame-counter gaps alone prove a camera-side stall.
+**No WebSockets.** Camera UI replies from `/api/status` and
+`/api/camera/progress` carry a browser-local request sequence. A response
+to an older-started request that returns after a newer response has
+already been applied is **ignored for camera state and JPEG updates**.
+This prevents stale frame-number rollbacks or stale stopped/connecting
+status from hiding a running preview. Genuine new camera sessions still
+reset the loader when current data has no frame or a lower frame number.
+Regression tests deliberately delay full-status responses. Operator
+reports some stutters after stage 1; this is a targeted logic correction,
+not proof that all pauses were caused by out-of-order replies.
 
 ## Intermittent preview pauses — Stage 2 diagnostics (implemented, Pi test pending)
 

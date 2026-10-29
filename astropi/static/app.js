@@ -29,6 +29,10 @@ const workspaceTabs = ["focus", "find", "fotograph"];
 let activeTab = "fotograph";
 let mountDrawerOpen = false;
 let progressBusy = false;
+// /api/status and /api/camera/progress can finish out of order.
+// Accept only responses to camera requests started after the last accepted one.
+let cameraRequestSerial = 0;
+let latestAppliedCameraRequest = 0;
 let storageReady = false;
 let captureBusy = false;
 let captureRequestPending = false;
@@ -733,14 +737,18 @@ function queuePreview(data) {
   }
   const frame = data.frame_number;
   if (!Number.isSafeInteger(frame) || frame < 0) return;
-  if (frame < previewNewestFrame) resetPreviewImages(); // new camera session
+  // A lower frame number can be genuine after a camera session restart.
+  // Delayed responses from an earlier request are discarded in showProgress.
+  if (frame < previewNewestFrame) resetPreviewImages();
   if (frame > previewNewestFrame) {
     previewNewestFrame = frame;
     loadNewestPreview();
   }
 }
 
-function showProgress(data) {
+function showProgress(data, requestSerial) {
+  if (requestSerial < latestAppliedCameraRequest) return;
+  latestAppliedCameraRequest = requestSerial;
   currentPhase = data.phase;
   if (!binningChangePending && [1, 2].includes(data.binning)) {
     selectedBinning = data.binning;
@@ -777,6 +785,7 @@ function showProgress(data) {
 }
 async function refresh() {
   const el = $("connection");
+  const cameraSerial = ++cameraRequestSerial;
   try {
     const response = await fetch("/api/status", {cache:"no-store"});
     if (!response.ok) throw Error("HTTP " + response.status);
@@ -797,7 +806,7 @@ async function refresh() {
     write("pi-uptime", typeof s === "number" ? "Uptime: " + Math.floor(s / 86400) +
       "d " + Math.floor(s % 86400 / 3600) + "h" : "Uptime unavailable");
     write("last-update", new Date(data.utc).toLocaleTimeString());
-    showProgress({...data.camera, capture:data.capture});
+    showProgress({...data.camera, capture:data.capture}, cameraSerial);
   } catch (error) {
     el.textContent = "Service unavailable";
     el.className = "connection offline";
@@ -806,12 +815,13 @@ async function refresh() {
 async function pollPreview() {
   if (progressBusy || !["connecting", "running", "stopping", "reconfiguring"].includes(currentPhase)) return;
   progressBusy = true;
+  const cameraSerial = ++cameraRequestSerial;
   try {
     const response = await fetch("/api/camera/progress", {cache:"no-store"});
     if (response.ok) {
       const data = await response.json();
       if (data.last_error) write("camera-error", data.last_error);
-      showProgress(data);
+      showProgress(data, cameraSerial);
     }
   } catch {
     // Full status poll will report backend connection failures.

@@ -14,6 +14,7 @@ function harness() {
   const elements = new Map(), intervals = new Map(), calls = [];
   const timeouts = new Map();
   let nextTimeoutId = 1;
+  let holdNextStatus = false, heldStatusReply = null, heldStatusOverride = null;
   const documentHandlers = {};
   const windowHandlers = {};
   let documentHidden = false;
@@ -53,13 +54,26 @@ function harness() {
   const fetch = async (url, options={}) => {
     const payload = options.body ? JSON.parse(options.body) : {};
     calls.push({url, payload});
-    if (url === "/api/status") return {ok:true, json:async()=>({
-      camera:{...camera, usb_detected:true}, capture:{...capture},
-      mount:{usb_detected:true,serial_present:true,...mount},
-      storage:{ready:true,free_bytes:1000000000},
-      host:{cpu_temperature_c:42,uptime_seconds:3600},
-      utc:"2026-10-27T19:00:00Z"
-    })};
+    if (url === "/api/status") {
+      // Take the snapshot NOW, but optionally delay its HTTP completion.
+      // This reproduces an older full-status result arriving after a
+      // faster camera-progress poll has already updated the browser.
+      const snapshot = {
+        camera:{...camera, usb_detected:true,...(heldStatusOverride || {})},
+        capture:{...capture},
+        mount:{usb_detected:true,serial_present:true,...mount},
+        storage:{ready:true,free_bytes:1000000000},
+        host:{cpu_temperature_c:42,uptime_seconds:3600},
+        utc:"2026-10-27T19:00:00Z"
+      };
+      const reply = {ok:true,json:async()=>snapshot};
+      if (holdNextStatus) {
+        holdNextStatus = false;
+        heldStatusOverride = null;
+        return new Promise(resolve=>{heldStatusReply=()=>{heldStatusReply=null;resolve(reply);};});
+      }
+      return reply;
+    }
     if (url === "/api/camera/binning") {
       camera={...camera,binning:payload.binning,
         width:3856/payload.binning,height:2180/payload.binning};
@@ -144,6 +158,9 @@ function harness() {
     clearTimeout:id=>timeouts.delete(id),Date,Number,Math,Promise
   });
   return {el, intervals, timeouts, calls,
+    holdStatus:(override=null)=>{holdNextStatus=true;heldStatusOverride=override;},
+    releaseStatus:()=>{if(!heldStatusReply)throw Error("No delayed full-status response");
+                       heldStatusReply();},
     expirePreview:()=>{
       const entry=[...timeouts.entries()].find(([id,t])=>t.ms===2000);
       if (!entry) throw Error("No pending preview timeout");
@@ -257,6 +274,82 @@ test("JPEG loader preserves the visible frame and requests only the latest after
   assert.equal(h.timeouts.size,0);
   assert.equal(h.calls.filter(c=>c.url==="/api/camera/frame.jpg").length,0,
     "JPEGs are actual browser image downloads, not extra fetch requests");
+});
+
+test("late full-status frame rollback cannot reset a newer preview",async()=>{
+  const h=harness();
+  await h.flush();
+  const a=h.el("preview-image"),b=h.el("preview-image-buffer");
+  h.updateCamera({phase:"running",has_frame:true,frame_number:100});
+  await h.intervals.get(50)();
+  b.onload();
+  assert.equal(b.hidden,false);
+
+  h.holdStatus(); // Snapshots frame 100, but response will be delayed.
+  const stale=h.intervals.get(3000)();
+  h.updateCamera({frame_number:120});
+  await h.intervals.get(50)();
+  assert.match(a.src,/frame=120/);
+  a.onload();
+  assert.equal(a.hidden,false);
+  assert.equal(b.hidden,true);
+  assert.match(h.el("frame-count").textContent,/120 JPEG frames/);
+
+  h.releaseStatus();
+  await stale;
+  assert.equal(a.hidden,false,"late 100 must not reset 120 or hide it");
+  assert.equal(b.hidden,true);
+  assert.match(h.el("frame-count").textContent,/120 JPEG frames/,
+    "old full status must not roll back displayed counters");
+  assert.equal(h.timeouts.size,0);
+  h.updateCamera({frame_number:121});
+  await h.intervals.get(50)();
+  assert.match(b.src,/frame=121/,"live preview still accepts newer frames");
+});
+
+test("late stopped/full-status snapshot cannot stop a running preview",async()=>{
+  const h=harness();
+  await h.flush();
+  const a=h.el("preview-image"),b=h.el("preview-image-buffer");
+  h.updateCamera({phase:"running",has_frame:true,frame_number:200});
+  await h.intervals.get(50)();
+  b.onload();
+  assert.equal(b.hidden,false);
+
+  h.holdStatus({phase:"stopped",has_frame:false,frame_number:0});
+  const stale=h.intervals.get(3000)();
+  h.updateCamera({frame_number:202});
+  await h.intervals.get(50)();
+  a.onload();
+  assert.equal(a.hidden,false);
+  assert.equal(b.hidden,true);
+
+  h.releaseStatus();
+  await stale;
+  assert.equal(a.hidden,false,"old stopped response must not hide preview");
+  assert.equal(b.hidden,true);
+  assert.match(h.el("camera-phase").textContent,/running/);
+  assert.match(h.el("frame-count").textContent,/202 JPEG frames/);
+  h.updateCamera({frame_number:203});
+  await h.intervals.get(50)();
+  assert.match(b.src,/frame=203/);
+});
+
+test("newest camera restart still resets frame counter and JPEG buffer",async()=>{
+  const h=harness();
+  await h.flush();
+  const a=h.el("preview-image"),b=h.el("preview-image-buffer");
+  h.updateCamera({phase:"running",has_frame:true,frame_number:500});
+  await h.intervals.get(50)();
+  b.onload();
+  assert.equal(b.hidden,false);
+  h.updateCamera({frame_number:2});
+  await h.intervals.get(50)();
+  assert.equal(b.hidden,true,"actual current frame rollback invalidates previous image");
+  assert.equal(h.el("preview-placeholder").hidden,false);
+  assert.match(b.src,/frame=2/);
+  b.onload();
+  assert.equal(b.hidden,false);
 });
 
 test("failed JPEG leaves previous image visible and recovers with newest frame",async()=>{

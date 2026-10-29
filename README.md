@@ -31,12 +31,13 @@ the operator lease, camera stream and Pi-owned captures. Existing Pi-side
 deadman and Stop verification remain in force; physical Cancel/power
 is the last resort.
 
-**Preview delivery, stage 1 (browser):** two alternating JPEG image
-elements within the same preview card, only one new image load at a time,
-keep the last successful frame visible, skip superseded frames, recover
-after load failure/2 s timeout. The camera SDK, JPEG worker and 50 ms
-status polling are unchanged. This addresses suspected overlapping
-browser image requests; **real-Pi pause verification is still needed**.
+**Preview delivery (browser):** two alternating JPEG image elements within
+the same preview card, only one image load at a time; keep the last
+successful frame visible, skip superseded frames and recover after failed
+loads/2 s timeout. Status responses are ordered by request start: a late
+older response cannot reset a newer preview or overwrite its camera
+telemetry. The camera SDK, JPEG worker and 50 ms status polling are
+unchanged. **Remaining intermittent pauses still require field testing.**
 
 ### Intermittent preview diagnostics
 
