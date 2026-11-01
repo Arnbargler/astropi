@@ -226,10 +226,10 @@ class MountWorker:
             self._ever_moved = False
             self._stop_sent_at = None
             self._stop_attempts = 0
-        self._goto_pending = None
-        self._goto_coords = None
-        self._goto_started_at = None
-        self._goto_stable_count = 0
+            self._goto_pending = None
+            self._goto_coords = None
+            self._goto_started_at = None
+            self._goto_stable_count = 0
             self._last_axes = None
             self._stable_count = 0
             self._state.update(
