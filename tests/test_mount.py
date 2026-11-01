@@ -1034,7 +1034,7 @@ class TrackingFakePort(ClockSyncFakePort):
         if cmd in (":Te#", ":Td#"):
             self.commands.append(cmd)
             self.last = cmd
-            if not self.stale and cmd != self.reject:
+            if not self.stale and not self.invalid_status and cmd != self.reject:
                 self.responses[":GAT#"] = "1" if cmd == ":Te#" else "0"
             return
         super().write(data)
