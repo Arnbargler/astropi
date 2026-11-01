@@ -15,7 +15,7 @@ page or restart hardware sessions.
 | Tab | Available now | Not yet available |
 | --- | --- | --- |
 | **Focus** | Shared live preview and SV705C settings | Digital zoom, star-centred ROI, peaking, HFR/focus graph |
-| **Find** | Offline VirtualSky, 110 Messier targets, selection and live calculated Alt/Az/horizon visibility | Alignment, enabled GoTo, tracking and full NGC/IC search |
+| **Find** | Offline VirtualSky, 110 Messier targets, live Alt/Az/visibility and explicitly commanded catalogue GoTo | Optical alignment, verified sky pointing, tracking controls and full NGC/IC search |
 | **Fotograph** (default) | Full camera preview/settings, capture formats/counts, USB/host status | Stacking and other deferred imaging tools |
 
 The shared **Mount Controls** button in the sticky status bar slides a
@@ -94,8 +94,10 @@ UTC date/time to the mount; ACKs and readback are checked. Failure is
 reported, not disguised. The mount-stored **permanent observing site**
 is **+45.2933° N, −75.8571° east-positive** (75.8571° W).
 It is **read-only** in AstroPi. Reported RA/Dec are *not* verified
-optical pointing; there is **no alignment, GoTo, tracking control,
-Home or Park** in the browser.
+optical pointing; **Find now supports explicitly requested Messier GoTo**
+via the serial-owning worker, with asynchronous mount-reported progress,
+verified NTP prerequisite, and global Stop. No optical alignment,
+tracking control, Home or Park has been implemented or field-tested.
 
 ## Offline VirtualSky atlas in Find — implemented in code
 
@@ -117,8 +119,12 @@ RA/Dec to mean equator/equinox of date, then calculates local Alt/Az.
 This is a **planning estimate**: no refraction, local obstructions,
 mount alignment or mechanical clearance. The readout updates with
 the sky clock without querying or controlling the mount. **Chart
-selection never sends a mount command.** A separate GoTo button
-is present but **disabled** until later stages.
+selection never sends a mount command.** After selecting, the separate
+GoTo button is enabled only for the operator with a connected, idle,
+NTP-synchronized AM3N. An explicit confirmation starts the native
+`:Sr`/`:Sd`/`:MS` sequence. Global Stop aborts it. The Pi-side worker
+records reported coordinate progress and completion; actual optical
+accuracy remains unverified until star alignment outdoors.
 
 The atlas uses the fixed site **45.2933° N, −75.8571° east-positive**
 and Pi UTC from existing `/api/status`, fetched on entering Find and
@@ -131,9 +137,10 @@ English-label and Messier assets under
 `astropi/static/vendor/virtualsky/PROVENANCE.md`.
 
 **Status:** implemented in Git; GitHub CI exercises offline asset, UTC, geometric coordinate, chart-interaction and DOM
-regressions. Browser appearance/interaction on the **actual Pi** have
-not yet been reverified by the operator. Full OpenNGC, precise pointing
-marker, alignment, GoTo and focus tools remain deferred.
+regressions. Operator confirmed chart selection and the popup fix on
+real hardware. **Actual GoTo motor movement on the real AM3N is not yet
+verified**; only the fake-serial CI tests are complete. Full OpenNGC,
+precise pointing marker, optical alignment and focus tools remain deferred.
 
 ## Operate and continue development
 

@@ -57,7 +57,7 @@ def create_app(settings: Settings | None = None, camera=None, lease=None, mount=
             return jsonify(error="Not the current operator"), 403
         # A release can never leave an active manual movement authorized.
         try:
-            if mount_worker.status().get("motion_phase") in ("starting", "moving"):
+            if mount_worker.status().get("motion_phase") in ("starting", "moving", "goto_queued", "goto_slewing"):
                 mount_worker.emergency_stop("Operator released control")
         except RuntimeError:
             pass
@@ -90,6 +90,18 @@ def create_app(settings: Settings | None = None, camera=None, lease=None, mount=
         except RuntimeError as exc:
             return jsonify(error=str(exc)), 409
         return jsonify(ok=True, direction=direction), 202
+
+    @app.post("/api/mount/goto")
+    def mount_goto():
+        require_operator()
+        payload = request.get_json(silent=True) or {}
+        try:
+            target = mount_worker.goto(payload.get("target"))
+        except ValueError as exc:
+            return jsonify(error=str(exc)), 400
+        except RuntimeError as exc:
+            return jsonify(error=str(exc)), 409
+        return jsonify(ok=True, target=target, state="queued"), 202
 
     @app.post("/api/mount/jog-heartbeat")
     def mount_jog_heartbeat():

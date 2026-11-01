@@ -44,6 +44,8 @@ let heldMountDirection = null;
 let mountStopPending = false;
 let mountHeartbeatBusy = false;
 let mountEnvironmentPhase = "idle";
+let mountClockVerified = false;
+let mountGotoPending = false;
 const mountSpeeds = ["slow", "medium", "fast", "slew", "max"];
 let selectedMountSpeed = "slow";
 function showMountSpeed(speed) {
@@ -104,6 +106,7 @@ function updateButtons() {
       !mountDrawerOpen || mountRequestPending ||
       ["queued", "reading"].includes(mountEnvironmentPhase);
   }
+  window.AstroPiAtlas?.syncControls?.();
   const saveReady = owner && currentPhase === "running" &&
     storageReady && !captureBusy && !captureRequestPending &&
     saveFormats.some(fmt => $("capture-" + fmt).checked);
@@ -467,6 +470,7 @@ function showMount(data) {
   mountMotionPhase = data.motion_phase || "idle";
   mountEnvironmentPhase = data.environment_phase || "idle";
   const syncPhase = data.time_sync_phase || "idle";
+  mountClockVerified = syncPhase === "verified";
   const syncLabels = {
     idle: "Pi NTP → mount clock: not synchronized",
     checking: "Pi NTP → mount clock: checking NTP synchronization…",
@@ -499,12 +503,15 @@ function showMount(data) {
     idle: data.stop_stable ? "Axes stable" : "Idle",
     starting: "Starting jog",
     moving: "Jog " + (data.jog_speed || "slow") + " active",
+    goto_queued: "GoTo queued: " + (data.goto_target || "target"),
+    goto_slewing: "GoTo slewing: " + (data.goto_target || "target"),
     stopping: "Stop requested · checking position stability…",
     uncertain: "STOP NOT CONFIRMED — use physical Cancel/power!",
     disconnecting: "Disconnecting (Stop attempted if necessary)"
   };
   write("mount-motion", motionDescription[mountMotionPhase] || mountMotionPhase);
   write("mount-motion-warning", data.motion_warning || "");
+  window.AstroPiAtlas?.syncMount?.(data);
   write("mount-model", data.model ?
     "Model: " + data.model + " · firmware " + (data.firmware || "—") :
     "Model / firmware: —");
@@ -536,6 +543,30 @@ function showMount(data) {
   updateButtons();
   positionMountDrawer(); // Status alerts can change the sticky strip's height.
 }
+// GoTo is an explicit Find-only target action; the browser sends names,
+ // never arbitrary coordinates or raw mount serial commands.
+window.AstroPiGoto = {
+  ready: () => Boolean(token) && mountPhase === "connected" &&
+    mountClockVerified && mountMotionPhase === "idle" &&
+    !mountRequestPending && !mountGotoPending && !heldMountDirection &&
+    !["queued","reading"].includes(mountEnvironmentPhase),
+  request: async target => {
+    if (!window.AstroPiGoto.ready()) throw Error(
+      "Take Control, connect the mount and verify its UTC clock before GoTo");
+    mountGotoPending = true;
+    mountMotionPhase = "goto_queued";
+    updateButtons();
+    try {
+      await post("/api/mount/goto", {target});
+      return target;
+    } finally {
+      mountGotoPending = false;
+      await refreshMount();
+      updateButtons();
+    }
+  }
+};
+
 async function refreshMount() {
   try {
     const response = await fetch("/api/mount/status", {cache:"no-store"});

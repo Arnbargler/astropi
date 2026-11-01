@@ -82,9 +82,10 @@
           </div>
           <p class="atlas-disclaimer">Calculated from J2000 catalogue coordinates, Pi UTC and the permanent site. Geometric horizon only: no terrain, refraction, telescope alignment or mount clearance is considered.</p>
           <div class="atlas-goto-row">
-            <button type="button" id="atlas-goto" disabled aria-describedby="atlas-goto-note">GoTo selected target (future stage)</button>
-            <span id="atlas-goto-note">Selection never moves the mount. GoTo remains disabled until alignment and movement controls are developed and tested.</span>
+            <button type="button" id="atlas-goto" disabled aria-describedby="atlas-goto-note">Select a target for GoTo</button>
+            <span id="atlas-goto-note">GoTo requires Take Control, connected AM3N and verified Pi NTP clock. Click a target first; unaligned pointing is approximate. Global STOP MOUNT can abort.</span>
           </div>
+          <p id="atlas-goto-state" role="status" aria-live="polite">Connect the mount, then select a Messier object to enable GoTo.</p>
         </article>
       </div>
     </section>

@@ -11,7 +11,7 @@ const entries = JSON.parse(fs.readFileSync(
 
 function harness({clockAvailable=true}={}) {
   const elems = new Map(), requests = [], timers = [];
-  const state = {monotonic: 1200, sky: null, options: null};
+  const state = {monotonic: 1200, sky: null, options: null, gotoReady:false, confirmed:false, gotoRequests:[]};
   function el(id) {
     if (!elems.has(id)) {
       elems.set(id, {id, value:"", textContent:"", handlers:{}, children:[],
@@ -45,7 +45,12 @@ function harness({clockAvailable=true}={}) {
   };
   const fakeWindow = {
     S:{virtualsky(options){state.options=options;state.sky=sky;return sky;}},
-    addEventListener(){},requestAnimationFrame(fn){fn();}
+    addEventListener(){},requestAnimationFrame(fn){fn();},
+    confirm(){return state.confirmed;},
+    AstroPiGoto:{
+      ready(){return state.gotoReady;},
+      async request(target){state.gotoRequests.push(target);return target;}
+    }
   };
   const fetch = async (url) => {
     requests.push(url);
@@ -216,5 +221,30 @@ test("selected Messier target shows updated geometric visibility from Pi UTC onl
   h.timers.find(t=>t.ms===1000).fn();
   assert.notEqual(h.el("atlas-altitude").textContent,oldAltitude);
   assert.equal(h.el("atlas-search").value,"M42");
+  assert.ok(h.requests.every(url=>!url.startsWith("/api/mount/")));
+});
+
+test("GoTo requires separate selection, verified mount readiness and confirmation",async()=>{
+  const h=harness();
+  await h.api.show();
+  assert.notEqual(h.el("atlas-goto").disabled,false);
+  h.el("atlas-search").value="M31";
+  h.el("atlas-search-form").dispatch("submit",{preventDefault(){}});
+  assert.equal(h.el("atlas-goto").disabled,true);
+  h.state.gotoReady=true;
+  h.api.syncControls();
+  assert.equal(h.el("atlas-goto").disabled,false);
+  assert.equal(h.el("atlas-goto").textContent,"GoTo M31");
+  await h.el("atlas-goto").dispatch("click");
+  assert.deepEqual(h.state.gotoRequests,[]);  // declined the confirmation
+  h.state.confirmed=true;
+  await h.el("atlas-goto").dispatch("click");
+  assert.deepEqual(h.state.gotoRequests,["M31"]);
+  h.api.syncMount({goto_phase:"slewing",goto_target:"M31",
+                   goto_position_error_deg:12.5});
+  assert.match(h.el("atlas-goto-state").textContent,/reported angular difference 12.50°/);
+  h.state.gotoReady=false;
+  h.api.syncControls();
+  assert.equal(h.el("atlas-goto").disabled,true);
   assert.ok(h.requests.every(url=>!url.startsWith("/api/mount/")));
 });

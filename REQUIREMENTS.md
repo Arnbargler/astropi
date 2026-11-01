@@ -26,7 +26,7 @@ not been independently calibrated.
 | IDs | Selected scope | Current state |
 | --- | --- | --- |
 | **#14–17** | Serial Connect, reported coordinates, hold N/S/E/W, five speeds, Stop and deadman | **Implemented**, with field checks |
-| **#18** | GoTo **only after choosing an atlas target and explicitly pressing GoTo**, never manual RA/Dec entry | Select-first UI and disabled GoTo placeholder implemented; motion deferred |
+| **#18** | GoTo **only after choosing an atlas target and explicitly pressing GoTo**, never manual RA/Dec entry | Implemented in code with NTP/mount-idle checks and Stop; physical AM3N and optical verification pending |
 | **#19** | Tracking control/status; AM3N firmware handles Alt/Az tracking | Deferred (some status flags are read-only) |
 | **#20** | Native Home and separate Park, carefully verified | Deferred; earlier standalone Home probe is **not** a UI feature |
 | **#21–22, #26** | Initial north/level, manual two-star and optional extra-star alignment | Deferred |
@@ -45,8 +45,8 @@ On explicit mount Connect, only if Pi NTP is synchronized, set and
 verify AM3N UTC date/time and offset zero; fail visibly on bad ACK or
 readback. **This existing mount-control safety condition remains unchanged
 and is independent of the atlas.** Pi has **no RTC**. Neither mount RA/Dec nor native Home
-proves optical sky alignment; verify site and alignment before
-introducing GoTo.
+proves optical sky alignment. Catalogue GoTo can be tested indoors,
+but is **not confirmed accurately pointed** until aligned against stars.
 
 ## Offline atlas — Find tab (v0.1 and stage 1 implemented, Pi verification pending)
 
@@ -71,16 +71,18 @@ Real-Pi atlas verification is pending.
   horizon/cardinal directions, constellation lines/labels and RA/Dec grid.
 - Bundle all **110 Messier objects** for basic `M1`–`M110` search,
   click/centre and **name/RA/Dec** details. Selection is informational;
-  **no GoTo/mount motion** in v0.1. Stage 1 separately displays
+  no mount motion from **selection itself**. Stage 1 separately displays
   approximate altitude, true-north azimuth and above/below geometric
   horizon using J2000-to-date precession and Pi UTC. The separate GoTo
-  button remains **disabled**. Local obstructions, mount limits and
+  button enables only when operator, connected idle AM3N and verified
+  clock are available; confirmation sends an actual catalogue GoTo.
+  Physical test and stellar alignment are pending. Local obstructions, mount limits and
   alignment are not inferred from these coordinates.
 
 **Later:** full local **OpenNGC NGC/IC** catalogue (#28), full catalogue
 search independent of plot filters (#30), and a carefully labelled
-reported/estimated mount marker (#32). Alignment and GoTo are still
-separate later milestones.
+reported/estimated mount marker (#32). Stellar alignment and accurate
+pointing verification remain separate later milestones.
 
 ## Capture and safety
 

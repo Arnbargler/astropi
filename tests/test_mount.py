@@ -758,3 +758,173 @@ def test_ntp_status_checks_systemd_report_not_merely_service_enabled(monkeypatch
         raise TimeoutExpired(cmd="timedatectl", timeout=2)
     monkeypatch.setattr(module.subprocess, "run", timeout)
     assert not real_system_ntp_synchronized()
+
+
+# --- Catalogue GoTo through the existing single-owner serial worker ---
+
+class GoToFakePort(ClockSyncFakePort):
+    """AM3N simulator: setter replies, :MS start, reported target, and Stop."""
+    def __init__(self, *, reject_ms=False, arrive=True):
+        super().__init__()
+        self.reject_ms = reject_ms
+        self.arrive = arrive
+        self.started = False
+        self.target_ra = None
+        self.target_dec = None
+
+    def write(self, data):
+        cmd = data.decode("ascii")
+        if cmd.startswith((":Sr", ":Sd")) or cmd in (":MS#", ":Q#"):
+            self.commands.append(cmd)
+            self.last = cmd
+            if cmd.startswith(":Sr"):
+                self.target_ra = cmd[3:-1]
+            elif cmd.startswith(":Sd"):
+                self.target_dec = cmd[3:-1]
+            elif cmd == ":MS#" and not self.reject_ms:
+                self.started = True
+                if self.arrive:
+                    self.responses[":GR#"] = self.target_ra
+                    self.responses[":GD#"] = self.target_dec
+            return
+        super().write(data)
+
+    def read_until(self, expected, size):
+        if self.last.startswith((":Sr", ":Sd")):
+            return b"1#"
+        if self.last == ":MS#":
+            return b"1#" if self.reject_ms else b"0#"
+        return super().read_until(expected, size)
+
+
+class GoToFakeFactory(FakeFactory):
+    def __init__(self, **kwargs):
+        super().__init__()
+        self.options = kwargs
+
+    def __call__(self, **kwargs):
+        port = GoToFakePort(**self.options)
+        self.ports.append(port)
+        return port
+
+
+def test_goto_coordinate_epoch_format_validation():
+    from datetime import datetime, timezone
+    from astropi.mount.goto import target_of_date, goto_commands, angular_error_deg
+    j2000 = datetime(2000, 1, 1, 12, tzinfo=timezone.utc)
+    ra, dec = target_of_date("M31", j2000)
+    assert ra == pytest.approx(10.6847083, abs=1e-5)
+    assert dec == pytest.approx(41.26875, abs=1e-5)
+    assert goto_commands(ra, dec) == (
+        ":Sr00:42:44#", ":Sd+41*16:08#", ":MS#")
+    assert goto_commands(359.9999, -0.001) == (
+        ":Sr00:00:00#", ":Sd-00*00:04#", ":MS#")
+    assert angular_error_deg(1, 40, 359, 40) < 2
+    for bad in ("M0", "M111", "m31", ":MS#", "M31;rm -rf", 31, None):
+        with pytest.raises(ValueError):
+            target_of_date(bad, j2000)
+
+
+def test_goto_real_protocol_sequence_and_reported_completion(tmp_path):
+    from datetime import datetime, timezone
+    alias = tmp_path / "serial"
+    alias.touch()
+    fixed = datetime(2026, 10, 31, 22, tzinfo=timezone.utc)
+    factory = GoToFakeFactory()
+    worker = MountWorker(alias, serial_factory=factory, poll_interval=0.04,
+                         ntp_checker=lambda: True, utc_clock=lambda: fixed)
+    app = create_app(settings=Settings(tmp_path, "expected", alias, tmp_path / "usb"),
+                     mount=worker).test_client()
+    assert app.post("/api/mount/goto", json={"target":"M31"}).status_code == 403
+    token = app.post("/api/control/take").get_json()["token"]
+    headers = {"X-AstroPi-Control":token}
+    assert app.post("/api/mount/goto", headers=headers,
+                    json={"target":"M31"}).status_code == 409
+    assert app.post("/api/mount/connect", headers=headers).status_code == 202
+    wait_until(lambda: worker.status()["time_sync_phase"] == "verified")
+    wait_until(lambda: worker.status()["environment_phase"] == "ready")
+    for bad in ({"target":"M0"},{"target":":MS#"},{"target":"m31"},
+                {"target":12}, {"ra":12.3,"dec":45.6}):
+        assert app.post("/api/mount/goto", headers=headers, json=bad).status_code == 400
+    assert app.post("/api/mount/goto", headers=headers,
+                    json={"target":"M31"}).status_code == 202
+    wait_until(lambda: worker.status()["goto_phase"] == "completed", timeout=5)
+    port = factory.ports[0]
+    pos = [i for i,x in enumerate(port.commands) if x.startswith(":Sr")]
+    assert len(pos) == 1
+    assert port.commands[pos[0]].startswith(":Sr")
+    assert port.commands[pos[0]+1].startswith(":Sd")
+    assert port.commands[pos[0]+2] == ":MS#"
+    assert port.commands.index(":SL22:00:00#") < pos[0]
+    assert worker.status()["goto_target"] == "M31"
+    assert worker.status()["motion_phase"] == "idle"
+    assert worker.status()["goto_position_error_deg"] < 0.35
+    assert not any(x.startswith((":St",":Sg",":CM",":hC")) for x in port.commands)
+    worker.disconnect()
+    worker._thread.join(timeout=3)
+
+
+def test_goto_viewer_stop_aborts_and_locks_manual_jog(tmp_path):
+    from datetime import datetime, timezone
+    alias=tmp_path/"serial"
+    alias.touch()
+    factory=GoToFakeFactory(arrive=False)
+    worker=MountWorker(alias, serial_factory=factory, poll_interval=0.04,
+                       ntp_checker=lambda: True,
+                       utc_clock=lambda: datetime(2026,10,31,22,tzinfo=timezone.utc))
+    client=create_app(settings=Settings(tmp_path,"expected",alias,tmp_path/"usb"),
+                      mount=worker).test_client()
+    token=client.post("/api/control/take").get_json()["token"]
+    headers={"X-AstroPi-Control":token}
+    client.post("/api/mount/connect", headers=headers)
+    wait_until(lambda: worker.status()["time_sync_phase"]=="verified")
+    wait_until(lambda: worker.status()["environment_phase"]=="ready")
+    assert client.post("/api/mount/goto",headers=headers,json={"target":"M42"}).status_code==202
+    wait_until(lambda: ":MS#" in factory.ports[0].commands)
+    with pytest.raises(RuntimeError):
+        worker.jog("east")
+    assert client.post("/api/mount/goto",headers=headers,json={"target":"M31"}).status_code==409
+    # A non-operator can still request the physical stop command.
+    assert client.post("/api/mount/stop").status_code==202
+    wait_until(lambda: ":Q#" in factory.ports[0].commands)
+    wait_until(lambda: worker.status()["stop_stable"], timeout=5)
+    assert worker.status()["goto_phase"] == "aborted"
+    assert not worker.status()["motion_armed"]
+    worker.disconnect()
+    worker._thread.join(timeout=3)
+
+
+def test_goto_rejected_ms_fails_closed_and_requests_stop(tmp_path):
+    from datetime import datetime, timezone
+    alias=tmp_path/"serial"
+    alias.touch()
+    factory=GoToFakeFactory(reject_ms=True)
+    worker=MountWorker(alias, serial_factory=factory, poll_interval=0.04,
+                       ntp_checker=lambda: True,
+                       utc_clock=lambda: datetime(2026,10,31,22,tzinfo=timezone.utc))
+    worker.connect()
+    wait_until(lambda: worker.status()["time_sync_phase"]=="verified")
+    wait_until(lambda: worker.status()["environment_phase"]=="ready")
+    worker.goto("M31")
+    wait_until(lambda: worker.status()["goto_phase"]=="error")
+    wait_until(lambda: ":Q#" in factory.ports[0].commands)
+    assert "rejected" in worker.status()["goto_error"]
+    assert worker.status()["goto_phase"] == "error"
+    assert ":MS#" in factory.ports[0].commands
+    worker.disconnect()
+    worker._thread.join(timeout=3)
+
+
+def test_goto_requires_verified_mount_clock(tmp_path):
+    alias=tmp_path/"serial"
+    alias.touch()
+    factory=GoToFakeFactory()
+    worker=MountWorker(alias,serial_factory=factory,poll_interval=0.04,
+                       ntp_checker=lambda: False)
+    worker.connect()
+    wait_until(lambda:worker.status()["connected"])
+    with pytest.raises(RuntimeError, match="Verified"):
+        worker.goto("M31")
+    assert not any(cmd.startswith((":Sr",":Sd",":MS")) for cmd in factory.ports[0].commands)
+    worker.disconnect()
+    worker._thread.join(timeout=3)

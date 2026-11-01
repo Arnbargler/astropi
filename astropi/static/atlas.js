@@ -1,5 +1,5 @@
 "use strict";
-// Offline VirtualSky adapter for Find. Informational only: NO mount APIs or motion.
+// Offline VirtualSky target selection; GoTo requires a separate explicit button.
 (() => {
   const LAT = 45.2933;
   const LON = -75.8571; // east-positive; AM3N serial site is west-positive
@@ -7,9 +7,34 @@
   const $ = id => document.getElementById(id);
   let sky = null, catalogue = new Map(), active = false, loading = null;
   let utcAnchor = null, monotonicAnchor = null, selected = null;
+  let mountStatus = null, gotoBusy = false;
   const now = () => performance.now();
   const piNow = () => utcAnchor === null ? null : new Date(utcAnchor + (now() - monotonicAnchor));
   const note = message => { $("atlas-status").textContent = message; };
+
+  function syncGotoButtons() {
+    const ready = Boolean(window.AstroPiGoto?.ready?.());
+    $("atlas-goto").disabled = !selected || !ready || gotoBusy;
+    $("atlas-goto").textContent = selected ? "GoTo " + selected : "Select a target for GoTo";
+  }
+
+  function syncMount(data) {
+    mountStatus = data;
+    const phase = data?.goto_phase || "idle";
+    let message = {
+      idle: "Select a Messier object, then press GoTo (mount connection and verified clock required).",
+      queued: "GoTo queued: " + (data.goto_target || "target"),
+      sending: "Sending target coordinates to AM3N…",
+      slewing: "Mount slewing to " + (data.goto_target || "target") +
+        (Number.isFinite(data.goto_position_error_deg)
+          ? " · reported angular difference " + data.goto_position_error_deg.toFixed(2) + "°" : ""),
+      completed: "GoTo completed by mount-reported coordinates · optical pointing not yet aligned.",
+      aborted: "GoTo stopped. Await confirmed stable axes before another command.",
+      error: "GoTo error: " + (data.goto_error || "check mount status")
+    }[phase] || "GoTo status: " + phase;
+    $("atlas-goto-state").textContent = message;
+    syncGotoButtons();
+  }
 
   function updateTarget() {
     if (!selected || !catalogue.has(selected)) return;
@@ -118,6 +143,7 @@
     sky.setFOV(45);
     sky.setRADec(object.ra.decimal, object.dec.decimal).draw();
     updateTarget();
+    syncGotoButtons();
     note(key + " selected. Chart centred; mount unchanged.");
     return true;
   }
@@ -241,6 +267,23 @@
     sky.checkLoaded();
     sky.draw();
   });
+  $("atlas-goto").addEventListener("click", async () => {
+    if (!selected || gotoBusy || !window.AstroPiGoto?.ready?.()) return;
+    const target = selected;
+    if (!window.confirm("GoTo " + target + "? The mount will slew. " +
+      "Telescope alignment has not been verified. Continue?")) return;
+    gotoBusy = true;
+    syncGotoButtons();
+    try {
+      await window.AstroPiGoto.request(target);
+      $("atlas-goto-state").textContent = "GoTo " + target + " requested; watching mount telemetry…";
+    } catch(error) {
+      $("atlas-goto-state").textContent = "GoTo failed: " + error.message;
+    } finally {
+      gotoBusy = false;
+      syncGotoButtons();
+    }
+  });
   $("atlas-grid").addEventListener("change", event => {
     if (sky) { sky.grid.eq = event.target.checked; sky.draw(); }
   });
@@ -249,5 +292,5 @@
   });
   // A steady local clock between Pi's periodic authoritative UTC samples.
   setInterval(() => { if (active) updateClock(); }, 1000);
-  window.AstroPiAtlas = {show, hide, syncUTC};
+  window.AstroPiAtlas = {show, hide, syncUTC, syncMount, syncControls:syncGotoButtons};
 })();

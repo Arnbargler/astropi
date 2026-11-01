@@ -2,14 +2,16 @@
 
 Each explicit serial Connect automatically sets the mount clock from the Pi
 ONLY after systemd reports NTP synchronization, and verifies date/time from
-mount readback. No site changes, GoTo, Home, Park, tracking, manual time entry
-or arbitrary serial commands. A 600ms lost-heartbeat Stop still protects jogs.
+mount readback. No site changes, Home, Park, tracking, manual time entry or arbitrary
+serial commands. Catalogue-only GoTo is operator-triggered;
+manual jogging retains its 600ms lost-heartbeat Stop.
 """
 from datetime import datetime, timezone
 import subprocess
 from pathlib import Path
 import re
 import threading
+from .goto import target_of_date, goto_commands, angular_error_deg
 import time
 
 import serial
@@ -42,6 +44,7 @@ STOP_COMMAND = ":Q#"
 DEADMAN_SECONDS = 0.6
 STILL_TOLERANCE_DEG = 0.0006  # ~2 arcsec
 CLOCK_VERIFY_TOLERANCE_SECONDS = 6
+GOTO_TIMEOUT_SECONDS = 300
 _CLOCK_DATE = re.compile(r"^(\d{2})/(\d{2})/(\d{2})$")
 _CLOCK_TIME = re.compile(r"^(\d{2}):(\d{2}):(\d{2})$")
 
@@ -176,6 +179,10 @@ class MountWorker:
         self._ever_moved = False
         self._stop_sent_at = None
         self._stop_attempts = 0
+        self._goto_pending = None
+        self._goto_coords = None
+        self._goto_started_at = None
+        self._goto_stable_count = 0
         self._last_axes = None
         self._stable_count = 0
         self._stop = threading.Event()
@@ -195,6 +202,8 @@ class MountWorker:
             "environment": None,
             "time_sync_phase": "idle", "time_sync_error": None,
             "time_sync_verified_utc": None, "time_sync_source": "Pi NTP (UTC)",
+            "goto_phase": "idle", "goto_target": None, "goto_error": None,
+            "goto_requested_utc": None, "goto_position_error_deg": None,
             **_TELEMETRY,
         }
 
@@ -217,6 +226,10 @@ class MountWorker:
             self._ever_moved = False
             self._stop_sent_at = None
             self._stop_attempts = 0
+        self._goto_pending = None
+        self._goto_coords = None
+        self._goto_started_at = None
+        self._goto_stable_count = 0
             self._last_axes = None
             self._stable_count = 0
             self._state.update(
@@ -228,7 +241,9 @@ class MountWorker:
                 environment_phase="idle", environment_updated_utc=None,
                 environment_error=None, environment=None,
                 time_sync_phase="checking", time_sync_error=None,
-                time_sync_verified_utc=None, **_TELEMETRY
+                time_sync_verified_utc=None, goto_phase="idle",
+                goto_target=None, goto_error=None, goto_requested_utc=None,
+                goto_position_error_deg=None, **_TELEMETRY
             )
             self._thread = threading.Thread(
                 target=self._run, name="am3n-serial", daemon=True
@@ -275,6 +290,32 @@ class MountWorker:
                                motion_direction=direction, jog_speed=speed)
             return direction
 
+    def goto(self, target):
+        """Queue only a validated Messier catalogue target; no raw coordinates."""
+        if not isinstance(target, str) or not re.fullmatch(
+            r"M(?:[1-9]|[1-9][0-9]|10[0-9]|110)", target
+        ):
+            raise ValueError("GoTo requires M1–M110 selected in Find")
+        ra, dec = target_of_date(target, self._utc_clock())
+        goto_commands(ra, dec)
+        with self._lock:
+            if not self._state["connected"] or self._state["phase"] != "connected":
+                raise RuntimeError("Connect the AM3N before GoTo")
+            if self._state["time_sync_phase"] != "verified":
+                raise RuntimeError("Verified Pi NTP → mount clock required before GoTo")
+            if (self._state["motion_phase"] != "idle" or self._stop_pending or
+                self._stop.is_set() or self._environment_pending or
+                self._environment_in_progress):
+                raise RuntimeError("Mount must be idle before GoTo")
+            self._goto_pending = (target, ra, dec)
+            self._goto_coords = (ra, dec)
+            self._goto_stable_count = 0
+            self._state.update(goto_phase="queued", goto_target=target,
+                goto_error=None, goto_position_error_deg=None,
+                goto_requested_utc=self._utc_clock().isoformat(),
+                motion_phase="goto_queued", stop_stable=False)
+            return target
+
     def heartbeat(self, direction):
         with self._lock:
             if (direction != self._direction and direction != self._pending_direction) or not self._armed:
@@ -293,6 +334,9 @@ class MountWorker:
         self._pending_direction = None
         self._motion_deadline = 0.0
         self._stop_pending = True
+        self._goto_pending = None
+        if self._state["goto_phase"] in ("queued", "sending", "slewing"):
+            self._state["goto_phase"] = "aborted"
         self._state.update(
             motion_armed=False, motion_phase="stopping",
             last_stop_reason=reason, stop_stable=False, motion_warning=None
@@ -345,6 +389,69 @@ class MountWorker:
                 raise RuntimeError("Mount serial port is not connected; use physical Stop")
             self._queue_stop_locked(reason)
             return True
+
+    def _write_goto(self, port, command, expected):
+        """Only internally generated, whitelisted :Sr/:Sd/:MS protocol."""
+        if not (re.fullmatch(r":Sr\d{2}:\d{2}:\d{2}#", command) or
+                re.fullmatch(r":Sd[+-]\d{2}\*\d{2}:\d{2}#", command) or
+                command == ":MS#"):
+            raise MountProtocolError("Refusing unapproved GoTo command")
+        port.write(command.encode("ascii"))
+        port.flush()
+        ack = port.read_until(b"#", size=12)
+        if ack not in (expected.encode("ascii"), (expected + "#").encode("ascii")):
+            raise MountProtocolError(f"AM3N rejected {command[:3]} (reply {ack!r})")
+
+    def _service_goto(self, port):
+        """Sole serial owner; pending GoTo may be cancelled by Stop."""
+        with self._lock:
+            pending = self._goto_pending
+            if pending is None or self._stop_pending or self._stop.is_set():
+                return
+            self._goto_pending = None
+            self._state["goto_phase"] = "sending"
+        name, ra, dec = pending
+        try:
+            commands = goto_commands(ra, dec)
+            for command in commands[:2]:
+                with self._lock:
+                    if self._stop_pending or self._stop.is_set():
+                        return
+                self._write_goto(port, command, "1")
+            # Lock around the actual start command: a concurrent Stop cannot
+            # slip between checking pending Stop and writing :MS.
+            with self._lock:
+                if self._stop_pending or self._stop.is_set():
+                    return
+                self._ever_moved = True
+                self._write_goto(port, commands[2], "0")
+                self._goto_started_at = self._clock()
+                self._state.update(goto_phase="slewing", motion_phase="goto_slewing")
+        except (MountProtocolError, OSError, serial.SerialException) as exc:
+            with self._lock:
+                self._queue_stop_locked("GoTo command failed")
+                self._state.update(goto_phase="error", goto_error=str(exc))
+
+    def _check_goto(self, parsed):
+        with self._lock:
+            if self._state["goto_phase"] != "slewing" or not self._goto_coords:
+                return
+            ra, dec = self._goto_coords
+            error = angular_error_deg(ra, dec,
+                                      parsed["ra_hours"] * 15, parsed["dec_deg"])
+            self._state["goto_position_error_deg"] = round(error, 3)
+            if parsed["slewing"] is False and error < 0.35:
+                self._goto_stable_count += 1
+            else:
+                self._goto_stable_count = 0
+            if self._goto_stable_count >= 2:
+                self._state.update(goto_phase="completed", motion_phase="idle")
+                self._ever_moved = False
+            elif (self._goto_started_at is not None and
+                  self._clock() - self._goto_started_at > GOTO_TIMEOUT_SECONDS):
+                self._queue_stop_locked("GoTo timeout")
+                self._state.update(goto_phase="error",
+                                   goto_error="GoTo did not reach its reported target within five minutes")
 
     def _write_motion(self, port, command):
         if command not in (
@@ -531,6 +638,7 @@ class MountWorker:
             if not self._stop.is_set():
                 self._state.update(parsed, phase="connected", connected=True)
         self._check_stopped(parsed["altitude_deg"], parsed["azimuth_deg"])
+        self._check_goto(parsed)
 
     def _run(self):
         port = None
@@ -556,10 +664,11 @@ class MountWorker:
             last_poll = -float("inf")
             while not self._stop.is_set():
                 self._service_motion(port)
+                self._service_goto(port)
                 now = self._clock()
                 with self._lock:
                     phase = self._state["motion_phase"]
-                interval = min(self._interval, 0.35) if phase in ("moving", "starting", "stopping") else self._interval
+                interval = min(self._interval, 0.35) if phase in ("moving", "starting", "stopping", "goto_queued", "goto_slewing") else self._interval
                 if now - last_poll >= interval:
                     self._poll(port)
                     last_poll = self._clock()
@@ -578,7 +687,7 @@ class MountWorker:
             # the motor controller is unresponsive, physical Stop is mandatory.
             with self._lock:
                 needs_stop = (self._ever_moved or self._stop_pending or
-                              self._state["motion_phase"] in ("moving","starting","stopping"))
+                              self._state["motion_phase"] in ("moving","starting","stopping","goto_queued","goto_slewing"))
                 self._armed = False
                 self._pending_direction = self._direction = None
             if port is not None:
@@ -602,5 +711,7 @@ class MountWorker:
                     environment=None, environment_updated_utc=None,
                     environment_error=None, time_sync_phase="idle",
                     time_sync_error=None, time_sync_verified_utc=None,
+                    goto_phase="idle", goto_target=None, goto_error=None,
+                    goto_requested_utc=None, goto_position_error_deg=None,
                     **_TELEMETRY,
                 )

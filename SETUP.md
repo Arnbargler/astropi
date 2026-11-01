@@ -39,7 +39,7 @@ the page. Internet exposure/authentication is not supported.
 **Three-tab browser UI: Focus / Find / Fotograph.**
 Fotograph is selected initially and retains imaging/capture controls;
 Focus shares the same preview and camera settings; Find contains the
-offline VirtualSky chart with all 110 Messier objects (**no GoTo**).
+offline VirtualSky chart with all 110 Messier objects and explicit catalogue GoTo.
 The persistent **Mount Controls** button in the sticky status strip
 opens/closes the **right-side overlay drawer** with the existing AM3N
 Connect/Disconnect, speeds, directional jog, telemetry and clock/site
@@ -197,7 +197,8 @@ arm and no fixed time limit. Browser focus loss or missing valid heartbeat for
 New direction cannot start until stop/settling verification completes.
 Do not deliberately unplug USB while motors are moving; serial loss can defeat
 software Stop. Use the physical hand-controller Cancel/power if necessary.
-**No astronomical GoTo, tracking, Home or Park button exists.**
+**Find now includes explicit Messier GoTo; no automatic Home, Park,
+tracking control or automatic mount alignment is implemented.**
 
 The on-demand **Refresh Clock / Site** button shows date, time, UTC
 offset, sidereal time, and persistent site latitude/longitude (west-positive
@@ -222,14 +223,20 @@ object's **altitude**, **azimuth clockwise from true north** and
 **above/below geometric horizon** for the permanent observing site,
 and that the values advance with Pi UTC. This is a planning estimate,
 not verified optical pointing or mechanical clearance. The separate
-**GoTo selected target** button is intentionally **disabled**; selecting
-a marker must never move the mount. Moving the mouse over targets
+**GoTo** button remains disabled until Take Control, mount connection,
+verified Pi NTP→AM3N clock and idle axes. Selecting a marker alone never
+moves the mount; pressing the separate GoTo button and confirming may
+start a real slew. Use global STOP MOUNT to abort. The current mount
+coordinates are **reported**, not optically calibrated. Test on the real
+AM3N with ample clearance and physical Cancel/power available; only
+simulated serial tests have passed so far. Moving the mouse over targets
 must **not** open any floating VirtualSky info box over the label or
 marker; only the permanent AstroPi target readout should change on
 selection. **Horizon view** resets to the all-sky projection.
 Try Constellations and RA/Dec grid toggles. Verify Pi UTC advances
 without a mount connection, and no external network requests occur.
-Do not interpret a chart selection as a mount GoTo. Verify camera
+Do not interpret a chart selection as a mount GoTo; only the separate
+GoTo button is allowed to start motion. Verify camera
 preview and global viewer Stop still work; leaving Find during
 manual jogging must request Stop.
 

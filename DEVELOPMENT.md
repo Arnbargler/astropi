@@ -3,7 +3,7 @@
 **Read README → REQUIREMENTS → HARDWARE → DEVELOPMENT → SETUP.**
 Code/tests establish implementation truth; requirements also include future work.
 The user confirmed the three-tab UI works on the Pi on 2026-10-28.
-**Current task: Find stage 1 (catalogue selection and live geometric Alt/Az/visibility) is implemented; verify its browser behaviour on the real Pi. GoTo remains disabled.**
+**Current task: stage-2 catalogue GoTo is implemented in code; field-test native AM3N slew/Stop and report any protocol differences before adding alignment. No verified optical pointing yet.**
 
 ## Code map
 
@@ -14,7 +14,7 @@ The user confirmed the three-tab UI works on the Pi on 2026-10-28.
 | `astropi/camera/sdk.py`, `worker.py` | SVBONY ctypes; sole SDK thread, acquisition, settings, binning session restart, one-slot preview mailbox |
 | `astropi/camera/preview.py` | JPEG colour/mono, stretches, sparse raw statistics |
 | `astropi/capture/{manager,formats,storage,verify}.py` | Pi-owned jobs, science/quicklook formats, UUID-safe writes, read-only integrity verification |
-| `astropi/mount/worker.py` | Sole AM3N serial worker: telemetry, verified UTC sync, manual jog/Stop/deadman |
+| `astropi/mount/{worker,goto}.py` | Sole AM3N serial worker: telemetry, UTC sync, jog/deadman, catalogue-only native GoTo, Stop and coordinate precession |
 | `astropi/templates/index.html`, `astropi/static/{app.js,style.css}` | Persistent Focus/Find/Fotograph UI |
 | `astropi/static/atlas.js`, `astropi/static/coordinates.js`, `astropi/static/vendor/virtualsky/` | Offline VirtualSky adapter, J2000→date geometric Alt/Az/visibility and pinned catalogue/scripts |
 | `tests/`, `.github/workflows/tests.yml` | Fake-hardware Python tests and Node 22 browser regressions |
@@ -25,9 +25,9 @@ The user confirmed the three-tab UI works on the Pi on 2026-10-28.
 **POST routes:** `/api/control/{take,heartbeat,release}`,
 `/api/camera/{start,stop,settings,binning,preview-mode,debayer}`,
 `/api/capture`, `/api/capture/{sequence,cancel}`,
-`/api/mount/{connect,disconnect,jog,jog-heartbeat,stop,environment/read}`.
+`/api/mount/{connect,disconnect,jog,jog-heartbeat,stop,environment/read,goto}`.
 
-**Absent:** `/atlas`, full OpenNGC search, GoTo, Home, Park, tracking
+**Absent:** `/atlas`, full OpenNGC search, Home, Park, tracking
 and arbitrary serial-command endpoints. **No separate atlas time/NTP
 endpoint is needed**; `/api/status` already includes Pi UTC.
 
@@ -41,7 +41,7 @@ the JPEG preview stream, or navigate/reload on tab selection.
 
 - **Focus:** camera preview/settings; zoom and star focus measurements
   are not built.
-- **Find:** full-width offline VirtualSky chart, 110 Messier markers/search, read-only target selection and live calculated Alt/Az/visibility (stage 1). GoTo button is visible but disabled; the shared mount controls are *not* in this tab.
+- **Find:** offline VirtualSky, 110 Messier markers/search, geometric Alt/Az/visibility, and a separate GoTo button enabled only for the controller on a ready, NTP-verified idle mount. No auto-GoTo on selection or tab entry.
 - **Fotograph (initial):** camera settings/preview, capture panel, USB and
   host status.
 - **Shared mount overlay drawer:** `#mount-drawer` is one actual AM3N
@@ -191,8 +191,9 @@ NTP check remains unchanged. The atlas does not modify mount site.
 **Interactions:** polar horizon/cardinal view with pan, and zoomable
 gnomic detail view. Search M1–M110 or click a local marker to centre
 and show name, RA and Dec; constellation line/label and equatorial grid
-toggles. Target selection is informational; **no GoTo, tracking,
-alignment, Home/Park or motion API calls**. On Find reveal call
+toggles. **Selection alone is informational and sends no mount command.**
+The separate GoTo button requires confirmation; no automatic tracking,
+alignment, Home or Park operation is initiated by selection. On Find reveal call
 `resize()`, keeping the chart inside the persistent DOM. Do not clone
 camera preview/settings nodes. Global Stop and jog-on-tab-departure
 Stop remain untouched.
@@ -217,12 +218,36 @@ horizon readout updates from the same Pi UTC clock as VirtualSky.
 It is approximate, **not** proof that a target clears trees,
 mount travel limits or that an unaligned telescope is pointed at it;
 no atmospheric refraction, proper motion or topocentric effects are
-included. A **disabled**, separate GoTo button makes the eventual
-click-select-then-GoTo workflow explicit. No new mount endpoint,
-serial commands, motion or mount clock behaviour is introduced.
-Next stages: simulate/validate GoTo, then implement physically guarded
-slew and Stop states after indoor hardware checks, and only then
-verify stellar pointing/alignment outdoors.
+included. The separate GoTo button was subsequently enabled for a ready
+mount. See Stage 2 below for the native command implementation.
+
+**Find stage 2 — native catalogue GoTo (2026-10-31):**
+`POST /api/mount/goto` accepts only an operator-held `{"target":"M31"}`
+for an exact M1–M110 in the Pi's trusted local catalogue. The backend
+independently reads that catalogue and precesses J2000 RA/Dec to the mean
+equator/equinox of date (IAU 1976, matching `coordinates.js`).
+The sole serial worker sends validated `:SrHH:MM:SS#`,
+`:Sd±DD*MM:SS#` setters (each expects 1), then `:MS#` (expects 0);
+reply may include `#`. This follows the INDIGO AM driver protocol,
+not yet tested on this actual AM3N firmware. **Never permit raw serial
+command or browser-provided RA/Dec.** Preconditions: connected, idle,
+no conflicting job, `time_sync_phase=verified` from existing Connect.
+One confirmation click starts motion. Status includes goto_phase,
+goto_target, goto_error and reported angular difference; a pair of
+N/not-slewing telemetry samples within 0.35° marks reported completion,
+which is **not optical verification**. After five minutes without
+completion, request Stop and report failure. The global viewer-accessible
+Stop cancels queued/sending/slewing GoTo, disarming it; normal serial
+stop/settling verification remains in place. GoTo is autonomous and is
+not a manual-jog heartbeat, so the 600 ms deadman still applies only to
+manually held jog directions. Operator release requests Stop if an
+active GoTo is underway. No mount limits or local obstruction map was
+added; the operator says there are no obstructions at the indoor test
+location. The mount can still reach mechanically unexpected positions.
+**Pending actual Pi test:** verify :Sr/:Sd/:MS acknowledgments, physical
+motion, global Stop and reported completion before declaring stage 2
+hardware-verified. Outdoor star alignment is later.
+
 
 **Verification:** `tests/test_atlas.py` checks local assets, all 110
 catalogue entries and motion-free adapter. `tests/test_atlas.cjs`
@@ -234,7 +259,7 @@ Stop, and unbroken capture/lease continuity on the actual Pi.
 
 **Deferred:** OpenNGC NGC/IC catalogue and filter-independent search,
 read-only mount marker, north/level and two-star alignment,
-atlas-selected GoTo/tracking, focus zoom/HFR, plate solving, stacking,
+optical GoTo accuracy and tracking controls, focus zoom/HFR, plate solving, stacking,
 manual time/site override.
 
 ## Testing / open verification
