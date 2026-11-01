@@ -26,7 +26,7 @@ not been independently calibrated.
 | IDs | Selected scope | Current state |
 | --- | --- | --- |
 | **#14–17** | Serial Connect, reported coordinates, hold N/S/E/W, five speeds, Stop and deadman | **Implemented**, with field checks |
-| **#18** | GoTo **only by choosing an atlas target**, never manual RA/Dec entry | Deferred |
+| **#18** | GoTo **only after choosing an atlas target and explicitly pressing GoTo**, never manual RA/Dec entry | Select-first UI and disabled GoTo placeholder implemented; motion deferred |
 | **#19** | Tracking control/status; AM3N firmware handles Alt/Az tracking | Deferred (some status flags are read-only) |
 | **#20** | Native Home and separate Park, carefully verified | Deferred; earlier standalone Home probe is **not** a UI feature |
 | **#21–22, #26** | Initial north/level, manual two-star and optional extra-star alignment | Deferred |
@@ -48,10 +48,11 @@ and is independent of the atlas.** Pi has **no RTC**. Neither mount RA/Dec nor n
 proves optical sky alignment; verify site and alignment before
 introducing GoTo.
 
-## Offline atlas — Find tab (implemented v0.1, Pi verification pending)
+## Offline atlas — Find tab (v0.1 and stage 1 implemented, Pi verification pending)
 
-**#28–30, #32** are selected long-term requirements. VirtualSky v0.1 and
-110-object Messier search are now in code; full OpenNGC/NGC/IC remains deferred.
+**#28–30, #32** are selected long-term requirements. VirtualSky v0.1,
+110-object Messier search and live selected-target geometric Alt/Az/visibility
+are now in code; full OpenNGC/NGC/IC remains deferred.
 Real-Pi atlas verification is pending.
 
 **VirtualSky v0.1 (implemented in Git):**
@@ -70,7 +71,11 @@ Real-Pi atlas verification is pending.
   horizon/cardinal directions, constellation lines/labels and RA/Dec grid.
 - Bundle all **110 Messier objects** for basic `M1`–`M110` search,
   click/centre and **name/RA/Dec** details. Selection is informational;
-  **no GoTo/mount motion** in v0.1.
+  **no GoTo/mount motion** in v0.1. Stage 1 separately displays
+  approximate altitude, true-north azimuth and above/below geometric
+  horizon using J2000-to-date precession and Pi UTC. The separate GoTo
+  button remains **disabled**. Local obstructions, mount limits and
+  alignment are not inferred from these coordinates.
 
 **Later:** full local **OpenNGC NGC/IC** catalogue (#28), full catalogue
 search independent of plot filters (#30), and a carefully labelled

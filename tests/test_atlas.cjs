@@ -48,13 +48,15 @@ function harness({clockAvailable=true}={}) {
       return {ok:true,json:async()=>entries};
     throw Error("Unexpected or online URL: "+url);
   };
+  const coordinatesCode = fs.readFileSync(path.join(root,"astropi/static/coordinates.js"),"utf8");
+  vm.runInNewContext(coordinatesCode,{window:fakeWindow,Date,Number,Math,RangeError,Object});
   const code = fs.readFileSync(path.join(root,"astropi/static/atlas.js"),"utf8");
   vm.runInNewContext(code,{
     window:fakeWindow, document:{getElementById:el,createElement:()=>({value:""})},
     fetch, performance:{now:()=>state.monotonic},setInterval:(fn,ms)=>{timers.push({fn,ms})},
     Date, Number, Map, Promise
   });
-  return {state,el,requests,timers,api:fakeWindow.AstroPiAtlas,sky};
+  return {state,el,requests,timers,api:fakeWindow.AstroPiAtlas,coordinates:fakeWindow.AstroPiCoordinates,sky};
 }
 
 test("opens local atlas from Pi UTC, fixed site and all 110 text-only pointers",async()=>{
@@ -119,4 +121,54 @@ test("without Pi UTC atlas waits rather than substituting browser time",async()=
   const last=h.sky.clock.toISOString();
   h.api.syncUTC("2026-10-28T16:01:00Z");
   assert.equal(h.sky.clock.toISOString(),last);
+});
+
+test("J2000 to local geometric Alt/Az: zenith, east, west, below horizon",()=>{
+  const {position,precessJ2000}=harness().coordinates;
+  const utc=new Date("2000-01-01T12:00:00.000Z");
+  const gmst=280.46061837;
+  const at=(ra,dec,lat=0,lon=0)=>position((ra+360)%360,dec,utc,lat,lon);
+  assert.ok(Math.abs(at(gmst,0).altitudeDeg-90)<0.0001);
+  const east=at(gmst+90,0);
+  assert.ok(Math.abs(east.altitudeDeg)<0.0001);
+  assert.ok(Math.abs(east.azimuthDeg-90)<0.0001);
+  const west=at(gmst-90,0);
+  assert.ok(Math.abs(west.altitudeDeg)<0.0001);
+  assert.ok(Math.abs(west.azimuthDeg-270)<0.0001);
+  const north=at(gmst,30);
+  assert.ok(Math.abs(north.altitudeDeg-60)<0.0001);
+  assert.ok(Math.min(north.azimuthDeg,360-north.azimuthDeg)<0.0001);
+  assert.ok(Math.abs(at(gmst+180,0).altitudeDeg+90)<0.0001);
+  const southern=at(gmst,0,45);
+  assert.ok(Math.abs(southern.altitudeDeg-45)<0.0001);
+  assert.ok(Math.abs(southern.azimuthDeg-180)<0.0001);
+  const future=precessJ2000(0,0,0.5);
+  assert.ok(future.raDeg>0.63 && future.raDeg<0.65);
+  assert.ok(future.decDeg>0.27 && future.decDeg<0.29);
+  assert.throws(()=>position(360,0,utc,45,-75),RangeError);
+  assert.throws(()=>position(0,91,utc,45,-75),RangeError);
+  assert.throws(()=>position(0,0,new Date("invalid"),45,-75),RangeError);
+});
+
+test("selected Messier target shows updated geometric visibility from Pi UTC only",async()=>{
+  const h=harness();
+  await h.api.show();
+  assert.notEqual(h.el("atlas-target-readout").hidden,false);
+  h.el("atlas-search").value="M42";
+  h.el("atlas-search-form").dispatch("submit",{preventDefault(){}});
+  assert.equal(h.el("atlas-target-readout").hidden,false);
+  const target=entries.find(item=>item.target.name==="M42");
+  const pos=h.coordinates.position(
+    target.ra.decimal,target.dec.decimal,new Date("2026-10-28T15:40:00Z"),
+    45.2933,-75.8571);
+  assert.equal(h.el("atlas-altitude").textContent,pos.altitudeDeg.toFixed(1)+"°");
+  assert.equal(h.el("atlas-azimuth").textContent,pos.azimuthDeg.toFixed(1)+"°");
+  assert.equal(h.el("atlas-visibility").textContent,pos.altitudeDeg>=0
+    ? "Above geometric horizon" : "Below geometric horizon");
+  const oldAltitude=h.el("atlas-altitude").textContent;
+  h.state.monotonic+=3600000;
+  h.timers.find(t=>t.ms===1000).fn();
+  assert.notEqual(h.el("atlas-altitude").textContent,oldAltitude);
+  assert.equal(h.el("atlas-search").value,"M42");
+  assert.ok(h.requests.every(url=>!url.startsWith("/api/mount/")));
 });

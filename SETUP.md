@@ -217,7 +217,13 @@ chart loads without an Internet connection. The initial view is a
 north/east/south/west horizon map from **45.2933° N, 75.8571° W**.
 Search `M1`, `M31`, `M42`, `M110` (or click a Messier marker) to
 centre the object in detail view, show name/RA/Dec and zoom using +/−
-or mouse wheel. **Horizon view** resets to the all-sky projection.
+or mouse wheel. Confirm the stage-1 readout shows the selected
+object's **altitude**, **azimuth clockwise from true north** and
+**above/below geometric horizon** for the permanent observing site,
+and that the values advance with Pi UTC. This is a planning estimate,
+not verified optical pointing or mechanical clearance. The separate
+**GoTo selected target** button is intentionally **disabled**; selecting
+a marker must never move the mount. **Horizon view** resets to the all-sky projection.
 Try Constellations and RA/Dec grid toggles. Verify Pi UTC advances
 without a mount connection, and no external network requests occur.
 Do not interpret a chart selection as a mount GoTo. Verify camera

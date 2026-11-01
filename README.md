@@ -15,7 +15,7 @@ page or restart hardware sessions.
 | Tab | Available now | Not yet available |
 | --- | --- | --- |
 | **Focus** | Shared live preview and SV705C settings | Digital zoom, star-centred ROI, peaking, HFR/focus graph |
-| **Find** | Full-width offline VirtualSky atlas, 110 Messier targets and target search | Alignment, GoTo, tracking and full NGC/IC search |
+| **Find** | Offline VirtualSky, 110 Messier targets, selection and live calculated Alt/Az/horizon visibility | Alignment, enabled GoTo, tracking and full NGC/IC search |
 | **Fotograph** (default) | Full camera preview/settings, capture formats/counts, USB/host status | Stacking and other deferred imaging tools |
 
 The shared **Mount Controls** button in the sticky status bar slides a
@@ -103,8 +103,16 @@ VirtualSky **v0.7.7** is bundled locally in the persistent **Find** tab.
 The sky is a schematic map (no images or CDN) with horizon/cardinals,
 pan, detail zoom, constellation labels/lines, a toggleable RA/Dec grid,
 stars and planets. Search `M1`–`M110` or click a Messier marker to
-show the object's name, RA and Dec and centre a detail view. **Chart
-selection never sends a mount command.**
+show the object's name, RA and Dec and centre a detail view. **Find stage 1**
+also calculates selected-object **altitude, azimuth (true north = 0°)
+and above/below geometric horizon** from Pi UTC and the fixed site.
+The dedicated `coordinates.js` module precesses catalogue J2000
+RA/Dec to mean equator/equinox of date, then calculates local Alt/Az.
+This is a **planning estimate**: no refraction, local obstructions,
+mount alignment or mechanical clearance. The readout updates with
+the sky clock without querying or controlling the mount. **Chart
+selection never sends a mount command.** A separate GoTo button
+is present but **disabled** until later stages.
 
 The atlas uses the fixed site **45.2933° N, −75.8571° east-positive**
 and Pi UTC from existing `/api/status`, fetched on entering Find and
@@ -113,10 +121,10 @@ is a deliberate operator choice); mount Connect retains its existing
 separate NTP verification. VirtualSky loads its star, planet, line,
 English-label and Messier assets under
 `astropi/static/vendor/virtualsky/`. The adapter is
-`astropi/static/atlas.js`; provenance/permission notes are in
+`astropi/static/atlas.js` and position helper `astropi/static/coordinates.js`; provenance/permission notes are in
 `astropi/static/vendor/virtualsky/PROVENANCE.md`.
 
-**Status:** implemented in Git; GitHub CI exercises offline asset, UTC, chart-interaction and DOM
+**Status:** implemented in Git; GitHub CI exercises offline asset, UTC, geometric coordinate, chart-interaction and DOM
 regressions. Browser appearance/interaction on the **actual Pi** have
 not yet been reverified by the operator. Full OpenNGC, precise pointing
 marker, alignment, GoTo and focus tools remain deferred.

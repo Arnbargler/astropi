@@ -3,7 +3,7 @@
 **Read README → REQUIREMENTS → HARDWARE → DEVELOPMENT → SETUP.**
 Code/tests establish implementation truth; requirements also include future work.
 The user confirmed the three-tab UI works on the Pi on 2026-10-28.
-**Current task: offline VirtualSky in Find is implemented; field-check it on the Pi before advancing to focus aids or GoTo.**
+**Current task: Find stage 1 (catalogue selection and live geometric Alt/Az/visibility) is implemented; verify its browser behaviour on the real Pi. GoTo remains disabled.**
 
 ## Code map
 
@@ -16,7 +16,7 @@ The user confirmed the three-tab UI works on the Pi on 2026-10-28.
 | `astropi/capture/{manager,formats,storage,verify}.py` | Pi-owned jobs, science/quicklook formats, UUID-safe writes, read-only integrity verification |
 | `astropi/mount/worker.py` | Sole AM3N serial worker: telemetry, verified UTC sync, manual jog/Stop/deadman |
 | `astropi/templates/index.html`, `astropi/static/{app.js,style.css}` | Persistent Focus/Find/Fotograph UI |
-| `astropi/static/atlas.js`, `astropi/static/vendor/virtualsky/` | Offline VirtualSky adapter and pinned catalogue/scripts |
+| `astropi/static/atlas.js`, `astropi/static/coordinates.js`, `astropi/static/vendor/virtualsky/` | Offline VirtualSky adapter, J2000→date geometric Alt/Az/visibility and pinned catalogue/scripts |
 | `tests/`, `.github/workflows/tests.yml` | Fake-hardware Python tests and Node 22 browser regressions |
 
 **GET routes:** `/`, `/api/status`, `/api/camera/progress`,
@@ -41,7 +41,7 @@ the JPEG preview stream, or navigate/reload on tab selection.
 
 - **Focus:** camera preview/settings; zoom and star focus measurements
   are not built.
-- **Find:** full-width offline VirtualSky chart, 110 Messier markers/search and read-only target selection. The shared mount controls are *not* in this tab.
+- **Find:** full-width offline VirtualSky chart, 110 Messier markers/search, read-only target selection and live calculated Alt/Az/visibility (stage 1). GoTo button is visible but disabled; the shared mount controls are *not* in this tab.
 - **Fotograph (initial):** camera settings/preview, capture panel, USB and
   host status.
 - **Shared mount overlay drawer:** `#mount-drawer` is one actual AM3N
@@ -161,7 +161,7 @@ required even with a good wireless connection.
    and mount Home do not establish optical sky alignment.
    Never auto-Home, GoTo, slew or track when opening AstroPi.
 
-## Offline VirtualSky v0.1 in Find — now implemented
+## Offline VirtualSky and Find stage 1 — now implemented
 
 The first atlas is **locally packaged**; it does not add Flask `/atlas`
 or any mount command API. All sky rendering is confined to
@@ -192,6 +192,22 @@ alignment, Home/Park or motion API calls**. On Find reveal call
 `resize()`, keeping the chart inside the persistent DOM. Do not clone
 camera preview/settings nodes. Global Stop and jog-on-tab-departure
 Stop remain untouched.
+
+**Find stage 1 (2026-10-31):** `astropi/static/coordinates.js`
+calculates selected Messier coordinates from catalogue J2000 RA/Dec
+using IAU 1976 mean precession to date, mean sidereal time,
+and the permanent fixed site (lat +45.2933, east-positive lon -75.8571).
+The local altitude, true-north azimuth and above/below **geometric**
+horizon readout updates from the same Pi UTC clock as VirtualSky.
+It is approximate, **not** proof that a target clears trees,
+mount travel limits or that an unaligned telescope is pointed at it;
+no atmospheric refraction, proper motion or topocentric effects are
+included. A **disabled**, separate GoTo button makes the eventual
+click-select-then-GoTo workflow explicit. No new mount endpoint,
+serial commands, motion or mount clock behaviour is introduced.
+Next stages: simulate/validate GoTo, then implement physically guarded
+slew and Stop states after indoor hardware checks, and only then
+verify stellar pointing/alignment outdoors.
 
 **Verification:** `tests/test_atlas.py` checks local assets, all 110
 catalogue entries and motion-free adapter. `tests/test_atlas.cjs`

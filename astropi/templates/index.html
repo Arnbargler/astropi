@@ -7,6 +7,7 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
   <script defer src="{{ url_for('static', filename='vendor/virtualsky/stuquery.min.js') }}"></script>
   <script defer src="{{ url_for('static', filename='vendor/virtualsky/virtualsky.min.js') }}"></script>
+  <script defer src="{{ url_for('static', filename='coordinates.js') }}"></script>
   <script defer src="{{ url_for('static', filename='atlas.js') }}"></script>
   <script defer src="{{ url_for('static', filename='app.js') }}"></script>
 </head>
@@ -74,7 +75,16 @@
           <p id="atlas-status" role="status">Open Find to load the offline sky.</p>
           <p id="atlas-time">Pi UTC: waiting for the Pi</p>
           <p id="atlas-selection" aria-live="polite">Select a Messier object for name, RA and Dec.</p>
-          <p class="atlas-disclaimer">Chart selection never moves the mount. The sky view is informational; telescope alignment and GoTo are not installed.</p>
+          <div id="atlas-target-readout" class="atlas-target-readout" aria-label="Selected target geometric position" hidden>
+            <div><span>Altitude</span><strong id="atlas-altitude">—</strong></div>
+            <div><span>Azimuth · true N = 0°</span><strong id="atlas-azimuth">—</strong></div>
+            <div><span>Visibility</span><strong id="atlas-visibility">—</strong></div>
+          </div>
+          <p class="atlas-disclaimer">Calculated from J2000 catalogue coordinates, Pi UTC and the permanent site. Geometric horizon only: no terrain, refraction, telescope alignment or mount clearance is considered.</p>
+          <div class="atlas-goto-row">
+            <button type="button" id="atlas-goto" disabled aria-describedby="atlas-goto-note">GoTo selected target (future stage)</button>
+            <span id="atlas-goto-note">Selection never moves the mount. GoTo remains disabled until alignment and movement controls are developed and tested.</span>
+          </div>
         </article>
       </div>
     </section>

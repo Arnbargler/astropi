@@ -11,6 +11,23 @@
   const piNow = () => utcAnchor === null ? null : new Date(utcAnchor + (now() - monotonicAnchor));
   const note = message => { $("atlas-status").textContent = message; };
 
+  function updateTarget() {
+    if (!selected || !catalogue.has(selected)) return;
+    const utc = piNow();
+    if (!utc) return;
+    const object = catalogue.get(selected);
+    const pos = window.AstroPiCoordinates.position(
+      object.ra.decimal, object.dec.decimal, utc, LAT, LON);
+    $("atlas-target-readout").hidden = false;
+    $("atlas-altitude").textContent = pos.altitudeDeg.toFixed(1) + "°";
+    $("atlas-azimuth").textContent = Math.abs(pos.altitudeDeg) >= 89.9999
+      ? "Undefined (zenith/nadir)" : pos.azimuthDeg.toFixed(1) + "°";
+    const above = pos.altitudeDeg >= 0;
+    $("atlas-visibility").textContent = above
+      ? "Above geometric horizon" : "Below geometric horizon";
+    $("atlas-visibility").className = above ? "atlas-above" : "atlas-below";
+  }
+
   function syncUTC(value) {
     const millis = Date.parse(value);
     if (!Number.isFinite(millis)) return;
@@ -29,6 +46,7 @@
     if (!clock) return;
     $("atlas-time").textContent = "Pi UTC: " + clock.toISOString().replace("T", " ").slice(0, 19);
     if (sky && active) sky.setClock(clock);
+    if (active) updateTarget();
   }
 
   function targetName(text) {
@@ -60,6 +78,7 @@
     sky.selectProjection("gnomic");
     sky.setFOV(45);
     sky.setRADec(object.ra.decimal, object.dec.decimal).draw();
+    updateTarget();
     note(key + " selected. Chart centred; mount unchanged.");
     return true;
   }
@@ -102,6 +121,9 @@
         throw Error("Invalid or duplicate Messier catalogue entry");
       parsed.set(name, item);
     }
+    if (!window.AstroPiCoordinates ||
+        typeof window.AstroPiCoordinates.position !== "function")
+      throw Error("Local coordinate calculations did not load");
     if (!window.S || typeof window.S.virtualsky !== "function")
       throw Error("Local VirtualSky scripts did not load");
     catalogue = parsed;
