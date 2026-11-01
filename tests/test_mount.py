@@ -611,6 +611,9 @@ class ClockSyncFakePort(FakePort):
         self.failed_ack = failed_ack
         self.old_readback = old_readback
         self.bad_site = bad_site
+        if bad_site:
+            # Incorrect location that remains incorrect after accepted ACKs.
+            self.responses[":Gt#"] = "+44*10:00"
 
     def write(self, data):
         cmd = data.decode("ascii")
@@ -874,7 +877,9 @@ def test_goto_real_protocol_sequence_and_reported_completion(tmp_path):
     assert worker.status()["goto_target"] == "M31"
     assert worker.status()["motion_phase"] == "idle"
     assert worker.status()["goto_position_error_deg"] < 0.35
-    assert not any(x.startswith((":St",":Sg",":CM",":hC")) for x in port.commands)
+    assert ":St+45*18#" in port.commands and ":Sg075*51#" in port.commands
+    assert port.commands.index(":Sg075*51#") < pos[0]
+    assert not any(x.startswith((":CM",":hC")) for x in port.commands)
     worker.disconnect()
     worker._thread.join(timeout=3)
 
