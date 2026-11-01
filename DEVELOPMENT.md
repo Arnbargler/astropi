@@ -244,9 +244,23 @@ manually held jog directions. Operator release requests Stop if an
 active GoTo is underway. No mount limits or local obstruction map was
 added; the operator says there are no obstructions at the indoor test
 location. The mount can still reach mechanically unexpected positions.
-**Pending actual Pi test:** verify :Sr/:Sd/:MS acknowledgments, physical
-motion, global Stop and reported completion before declaring stage 2
-hardware-verified. Outdoor star alignment is later.
+**2026-10-31 initial real-Pi GoTo failure:** user reports pressing the
+confirmed GoTo immediately produces "Stop requested" followed by
+"Mount stable" with no physical movement. This means `_service_goto`
+likely handled a command error and queued Stop; there is no evidence
+that the mount accepted :MS or began moving. `/api/mount/status`
+exposes `goto_phase`, `goto_error`, `last_stop_reason`,
+`motion_phase` and `time_sync_phase`. Inspect those **before changing
+the protocol**. The proven ZWO/INDIGO native sequence remains
+:Sr (expect 1), :Sd (expect 1), :MS (expect 0); exact AM3N
+firmware replies need field verification. The browser now keeps the
+precise GoTo error in the global warning and mount motion display even
+after Stop stabilizes. Do not mistake "Axes stable" for "GoTo
+completed", and do not automatically retry rejected commands.
+**Pending actual Pi test:** inspect exact ACK/rejection and investigate
+the mount's configured status; verify physical motion, global Stop
+and reported completion before calling stage 2 hardware-verified.
+Outdoor star alignment is later.
 
 
 **Verification:** `tests/test_atlas.py` checks local assets, all 110

@@ -1008,6 +1008,28 @@ test("capture sequence persists across workspace switches",async()=>{
   assert.equal(h.calls.filter(c=>c.url==="/api/control/release").length,0);
 });
 
+test("failed GoTo remains explicit after Stop confirms stationary axes",async()=>{
+  const h=harness();
+  await h.flush();
+  h.updateMount({phase:"connected",connected:true,motion_phase:"stopping",
+    goto_phase:"error",goto_target:"M76",
+    goto_error:"AM3N rejected :Sr (reply b'E1#')",
+    last_stop_reason:"GoTo command failed",stop_stable:false});
+  await h.intervals.get(1000)();
+  assert.match(h.el("mount-motion").textContent,/GoTo M76 FAILED.*rejected :Sr/);
+  assert.match(h.el("mount-error").textContent,/rejected :Sr/);
+  assert.match(h.el("global-mount-alert").textContent,/GoTo M76 FAILED/);
+  h.updateMount({motion_phase:"idle",stop_stable:true});
+  await h.intervals.get(1000)();
+  assert.match(h.el("mount-motion").textContent,/GoTo M76 FAILED/);
+  assert.match(h.el("global-mount-alert").textContent,/rejected :Sr/);
+  // Next accepted GoTo clears the old, unrelated failure.
+  h.updateMount({goto_phase:"slewing",goto_error:null,
+                 goto_target:"M31",motion_phase:"goto_slewing",stop_stable:false});
+  await h.intervals.get(1000)();
+  assert.doesNotMatch(h.el("mount-motion").textContent,/M76 FAILED/);
+});
+
 test("global mount warning exposes uncertain stop while other tab is visible",async()=>{
   const h=harness();
   await h.flush();

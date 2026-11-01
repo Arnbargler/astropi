@@ -499,6 +499,10 @@ function showMount(data) {
     write(id, env && env[key] ? env[key] : "—");
   write("mount-environment-error", data.environment_error || "");
   write("mount-phase", "Connection: " + mountPhase);
+  const gotoFailure = data.goto_phase === "error"
+    ? "GoTo " + (data.goto_target || "target") + " FAILED: " +
+      (data.goto_error || "mount command rejected; inspect mount status")
+    : null;
   const motionDescription = {
     idle: data.stop_stable ? "Axes stable" : "Idle",
     starting: "Starting jog",
@@ -509,7 +513,11 @@ function showMount(data) {
     uncertain: "STOP NOT CONFIRMED — use physical Cancel/power!",
     disconnecting: "Disconnecting (Stop attempted if necessary)"
   };
-  write("mount-motion", motionDescription[mountMotionPhase] || mountMotionPhase);
+  // A successful Stop/axis-settling check must not hide the original
+  // failed GoTo. Previously we displayed "Axes stable" after rejecting
+  // the command, which looked like an unexplained successful operation.
+  write("mount-motion", gotoFailure ||
+    motionDescription[mountMotionPhase] || mountMotionPhase);
   write("mount-motion-warning", data.motion_warning || "");
   window.AstroPiAtlas?.syncMount?.(data);
   write("mount-model", data.model ?
@@ -530,13 +538,13 @@ function showMount(data) {
   write("mount-raw-status", "Raw :GU#: " + (active ? data.raw_status || "—" : "—"));
   write("mount-update", "Last telemetry: " +
     (active && data.updated_utc ? new Date(data.updated_utc).toLocaleTimeString() : "—"));
-  write("mount-error", data.last_error || "");
+  write("mount-error", gotoFailure || data.last_error || "");
   if (mountMotionPhase === "uncertain") {
     const warning = "Mount not confirmed stopped. USE PHYSICAL CANCEL/POWER.";
     write("mount-error", warning);
     write("global-mount-alert", warning);
-  } else if (data.motion_warning || data.last_error) {
-    write("global-mount-alert", data.motion_warning || data.last_error);
+  } else if (gotoFailure || data.motion_warning || data.last_error) {
+    write("global-mount-alert", gotoFailure || data.motion_warning || data.last_error);
   } else if (mountMotionPhase === "idle" && data.stop_stable) {
     write("global-mount-alert", "");
   }
