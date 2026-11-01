@@ -139,8 +139,8 @@ display UNKNOWN and the diagnostic, not a false tracking state.
 could reach 0°/0° via a near-zenith/wrapped-azimuth path. The app now
 offers explicit **Az Home** (both axes, Alt/Az mode only, tracking OFF):
 serialized `:hC#` without ACK, then `:GU#` Home flag `H` and no-slew
-flag `N` confirmation; global STOP can interrupt. **The new browser
-Az Home workflow has not yet been field-tested.** This is neither
+flag `N` confirmation; global STOP can interrupt. **The AstroPi browser Az Home button was successfully field-tested
+on the real AM3N (operator report, 2026-10-31).** This is neither
 Park (`:hP#`) nor Set Home nor optical alignment. Physical
 North/Level is a separate operator-confirmed tripod/base setup.
 
@@ -155,15 +155,14 @@ revised gain controls. This does not independently test emergency Stop
 under injected faults, telescope pointing, or extended recording after
 the UI refactor. The user subsequently verified VirtualSky target selection and popup
 behaviour, GoTo M40, global STOP during GoTo M45, repeated tracking
-ON/OFF and North/Level confirmation on the real Pi. **Az Home button
-and optical two-star alignment remain unverified/unimplemented,
-respectively.**
+ON/OFF and North/Level confirmation on the real Pi. **Az Home button was subsequently field-tested successfully;
+optical two-star alignment remains unimplemented.**
 
 ## Not verified / future
 
 No true optical star alignment, optical pointing accuracy, Park,
-plate solving, hardware-validated Az Home **browser** workflow, controlled
-forced USB/serial-loss fail-safe test, field battery/buck wiring,
+plate solving, separately field-tested STOP during active Az Home,
+controlled forced USB/serial-loss fail-safe test, field battery/buck wiring,
 mounted-telescope clearance, service auto-start or no-NTP mount recovery.
 Do not treat simulated tests or standalone probes as proof of a
 browser feature's real-hardware behaviour.
