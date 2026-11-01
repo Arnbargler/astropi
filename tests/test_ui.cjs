@@ -1073,6 +1073,6 @@ test("three workspaces retain responsive controls and safety warnings",()=>{
   assert.match(html,/id="atlas-search"/);
   assert.match(html,/vendor\/virtualsky\/virtualsky\.min\.js/);
   assert.match(html,/id="atlas-grid"/);
-  assert.doesNotMatch(html,/id="atlas-goto"/);
+  assert.match(html,/<button type="button" id="atlas-goto" disabled\b/);
   assert.doesNotMatch(html,/id="mount-(?:home|goto|track|park)"/);
 });
