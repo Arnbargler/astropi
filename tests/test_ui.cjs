@@ -673,6 +673,7 @@ test("Az Home is Alt/Az only, STOP-interruptible, and telemetry-verified",async(
   assert.equal(h.el("mount-stop").disabled,false);
   assert.equal(h.el("mount-tracking-on").disabled,true);
   await h.el("mount-stop").dispatch("click");
+  await h.intervals.get(1000)(); // Home status follows the next mount telemetry poll.
   assert.match(h.el("mount-az-home-status").textContent,/interrupted/);
   h.updateMount({home_phase:"completed",motion_phase:"idle",at_home:true,
                  tracking:false,tracking_status_error:null});
