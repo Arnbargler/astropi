@@ -215,7 +215,7 @@ RA/Dec as unaligned.
 Update and restart AstroPi as above, then open **Find** and confirm the
 chart loads without an Internet connection. The initial view is a
 north/east/south/west horizon map from **45.2933° N, 75.8571° W**.
-Search `M1`, `M31`, `M42`, `M110` (or click a Messier marker) to
+Search `M1`, `M31`, `M42`, `M110` (or click its plotted marker **or M-label**) to
 centre the object in detail view, show name/RA/Dec and zoom using +/−
 or mouse wheel. Confirm the stage-1 readout shows the selected
 object's **altitude**, **azimuth clockwise from true north** and

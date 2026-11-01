@@ -24,9 +24,18 @@ function harness({clockAvailable=true}={}) {
   const sky = {
     pointers:[], projection:{id:"polar"}, constellation:{lines:true,labels:true},
     grid:{eq:false},times:{LST:6},clock:null,resizeCount:0,drawCount:0,
+    wide:900,tall:580,d2r:Math.PI/180,polartype:true,
+    ctx:{measureText:text=>({width:text.length*9})},
+    fontsize(){return 14;},
+    isVisible(el){return el > 0;},
+    radec2xy(ra,dec){
+      const p=this.pointers.find(p=>Math.abs(p.ra*this.d2r-ra)<1e-8 &&
+                                     Math.abs(p.dec*this.d2r-dec)<1e-8);
+      return p ? {x:p.x,y:p.y,el:p.el} : {x:NaN,y:NaN,el:-1};
+    },
     addPointer(p){this.pointers.push(p);return this.pointers.length;},
     setClock(d){this.clock=d;return this;},
-    selectProjection(id){this.projection.id=id;return this;},
+    selectProjection(id){this.projection.id=id;this.polartype=id==="polar";return this;},
     setFOV(value){this.fov=value;return this;},
     setRADec(ra,dec){this.center={ra,dec};return this;},
     changeFOV(delta){this.fov += delta > 0 ? -2 : 2;return this;},
@@ -105,6 +114,40 @@ test("search and clicked marker centre detail only; horizon/zoom/grid work",asyn
   h.el("atlas-search-form").dispatch("submit",{preventDefault(){}});
   assert.match(h.el("atlas-status").textContent,/No Messier match/);
   assert.ok(h.requests.every(url=>url.startsWith("/api/status")||url.startsWith("/static/vendor/")));
+});
+
+
+test("mouse clicks on marker and text label select the same Messier details as search",async()=>{
+  const h=harness();
+  await h.api.show();
+  const m42=h.sky.pointers.find(p=>p.label==="M42");
+  m42.x=140;m42.y=180;m42.el=1;
+  // VirtualSky returns matched=-1 for points outside its 5px square.
+  h.state.options.callback.click({matched:-1,x:149,y:184});
+  assert.equal(h.el("atlas-search").value,"M42");
+  assert.match(h.el("atlas-selection").textContent,/M42 · RA/);
+  assert.equal(h.el("atlas-target-readout").hidden,false);
+  assert.match(h.el("atlas-altitude").textContent,/°/);
+  assert.match(h.el("atlas-visibility").textContent,/geometric horizon/);
+  h.el("atlas-allsky").dispatch("click");
+
+  const m1=h.sky.pointers.find(p=>p.label==="M1");
+  m1.x=700;m1.y=200;m1.el=1;
+  // Polar projection writes labels LEFT of markers in the right half.
+  // Clicking visible text (not the tiny marker) must still select M1.
+  h.state.options.callback.click({matched:-1,x:686,y:186});
+  assert.equal(h.el("atlas-search").value,"M1");
+  assert.match(h.el("atlas-selection").textContent,/M1 · RA/);
+  assert.match(h.el("atlas-status").textContent,/mount unchanged/);
+  h.el("atlas-allsky").dispatch("click");
+
+  const m31=h.sky.pointers.find(p=>p.label==="M31");
+  m31.x=500;m31.y=200;m31.el=-1; // off-horizon; do not select stale position
+  h.state.options.callback.click({matched:-1,x:502,y:202});
+  assert.equal(h.el("atlas-search").value,"M1");
+  h.state.options.callback.click({matched:-1,x:450,y:30});
+  assert.equal(h.el("atlas-search").value,"M1");
+  assert.ok(h.requests.every(url=>!url.startsWith("/api/mount/")));
 });
 
 test("without Pi UTC atlas waits rather than substituting browser time",async()=>{

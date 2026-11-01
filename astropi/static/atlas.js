@@ -56,6 +56,45 @@
     return number <= 110 ? "M" + number : null;
   }
 
+  // VirtualSky's whichPointer() only tests a 5px square around the
+  // plotted centre. Its text labels are drawn outside that square.
+  // Hit-test the actual on-screen marker AND the visible label here,
+  // without changing vendored VirtualSky or selecting arbitrary stars.
+  function clickedMessier(event) {
+    if (!sky || !event) return null;
+    const matched = event.matched;
+    if (Number.isInteger(matched) && matched >= 0) {
+      const pointer = sky.pointers[matched];
+      if (pointer && catalogue.has(pointer.label)) return pointer.label;
+    }
+    if (!Number.isFinite(event.x) || !Number.isFinite(event.y)) return null;
+    let nearest = null, best = Infinity;
+    const font = sky.fontsize();
+    for (const pointer of sky.pointers) {
+      if (!catalogue.has(pointer.label)) continue;
+      // Reproject now rather than trust cached x/y from a prior view.
+      const pos = sky.radec2xy(pointer.ra * sky.d2r, pointer.dec * sky.d2r);
+      if (!pos || !sky.isVisible(pos.el) ||
+          !Number.isFinite(pos.x) || !Number.isFinite(pos.y) ||
+          pos.x < 0 || pos.y < 0 || pos.x > sky.wide || pos.y > sky.tall)
+        continue;
+      const distance = Math.hypot(event.x - pos.x, event.y - pos.y);
+      const marker = distance <= 12;
+      // Match VirtualSky drawLabel(): polar labels go left on the
+      // right half of the chart and right elsewhere.
+      const width = sky.ctx.measureText(pointer.label).width;
+      const offset = sky.polartype && pos.x >= sky.wide / 2
+        ? -width - 3 : pointer.d;
+      const labelX = pos.x + offset, baseline = pos.y - (pointer.d + 2);
+      const label = event.x >= labelX - 4 && event.x <= labelX + width + 4 &&
+                    event.y >= baseline - font - 3 && event.y <= baseline + 4;
+      if (!marker && !label) continue;
+      const score = distance + (marker ? 0 : 20);
+      if (score < best) { best = score; nearest = pointer.label; }
+    }
+    return nearest;
+  }
+
   function selectObject(name) {
     const key = targetName(name);
     const object = catalogue.get(key);
@@ -141,9 +180,8 @@
       cardinalpoints:true, gridlines_az:false, gridlines_eq:false,
       gradient:false, background:"#07111e", magnitude:5.5,
       callback: {click: event => {
-        if (Number.isInteger(event.matched) && event.matched >= 0 &&
-            sky.pointers[event.matched])
-          selectObject(sky.pointers[event.matched].label);
+        const name = clickedMessier(event);
+        if (name) selectObject(name);
       }}
     });
     // Explicit text-only HTML prevents VirtualSky's default remote Wikisky images.

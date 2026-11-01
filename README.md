@@ -102,8 +102,11 @@ Home or Park** in the browser.
 VirtualSky **v0.7.7** is bundled locally in the persistent **Find** tab.
 The sky is a schematic map (no images or CDN) with horizon/cardinals,
 pan, detail zoom, constellation labels/lines, a toggleable RA/Dec grid,
-stars and planets. Search `M1`–`M110` or click a Messier marker to
-show the object's name, RA and Dec and centre a detail view. **Find stage 1**
+stars and planets. Search `M1`–`M110` or click a Messier marker **or
+its adjacent M-label** to show the object's name, RA and Dec and centre
+a detail view. Ordinary stars/planets are not selectable targets yet.
+The click handler expands VirtualSky's built-in 5px marker hit box
+without modifying the bundled vendor script. **Find stage 1**
 also calculates selected-object **altitude, azimuth (true north = 0°)
 and above/below geometric horizon** from Pi UTC and the fixed site.
 The dedicated `coordinates.js` module precesses catalogue J2000

@@ -193,6 +193,17 @@ alignment, Home/Park or motion API calls**. On Find reveal call
 camera preview/settings nodes. Global Stop and jog-on-tab-departure
 Stop remain untouched.
 
+**Messier click hit testing (2026-10-31):** VirtualSky's `whichPointer()`
+only detects clicks within five pixels of the marker centre, not its
+visible M-label. `clickedMessier()` first accepts a native pointer
+match, then reprojects the plotted pointers to the current view and
+checks a 12px marker radius or the corresponding on-canvas text bounds.
+Only labelled catalogue Messier pointers may be selected; blank sky,
+ordinary stars and off-horizon markers cannot accidentally select a
+target. Search and mouse clicks both invoke `selectObject()`; neither
+calls the mount. Keep regression tests for missed pointer matches,
+left/right polar labels and empty/off-horizon clicks.
+
 **Find stage 1 (2026-10-31):** `astropi/static/coordinates.js`
 calculates selected Messier coordinates from catalogue J2000 RA/Dec
 using IAU 1976 mean precession to date, mean sidereal time,
