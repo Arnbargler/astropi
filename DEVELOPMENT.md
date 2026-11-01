@@ -172,9 +172,13 @@ are pinned to upstream tree `271c801d6504d1c478bc0c64dce4938399749c69`
 (virtualsky 0.7.7), with provenance/permission notes beside the files.
 The local library loads `stars.json`, `lines_latin.json`, `lang/en.json`
 and the local planet ephemeris plugin. All 110 Messier targets are
-supplied by local `messier.json`; each pointer uses custom **text-only
-HTML**, preventing VirtualSky's default remote Wikisky links/images.
-Do not enable its remote object name-resolution mode.
+supplied by local `messier.json`; each pointer explicitly sets
+`html: ""`. This both suppresses VirtualSky's default remote Wikisky
+links/images **and disables the floating information box that the
+bundled VirtualSky opens on mouse movement**. The latter covered the
+clickable M-label/marker during field testing. Show selected object
+details in AstroPi's persistent readout instead; do not restore
+nonempty pointer HTML. Do not enable remote object name resolution.
 
 **Time/site:** fixed **+45.2933° N / −75.8571° longitude
 east-positive**, including before mount Connect. Fetch existing

@@ -106,7 +106,10 @@ stars and planets. Search `M1`–`M110` or click a Messier marker **or
 its adjacent M-label** to show the object's name, RA and Dec and centre
 a detail view. Ordinary stars/planets are not selectable targets yet.
 The click handler expands VirtualSky's built-in 5px marker hit box
-without modifying the bundled vendor script. **Find stage 1**
+without modifying the bundled vendor script. VirtualSky's floating
+hover information box is disabled for Messier pointers because it
+obscured the marker and prevented reliable clicking; selected-object
+details remain in AstroPi's readout below the chart. **Find stage 1**
 also calculates selected-object **altitude, azimuth (true north = 0°)
 and above/below geometric horizon** from Pi UTC and the fixed site.
 The dedicated `coordinates.js` module precesses catalogue J2000

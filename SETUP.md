@@ -223,7 +223,10 @@ object's **altitude**, **azimuth clockwise from true north** and
 and that the values advance with Pi UTC. This is a planning estimate,
 not verified optical pointing or mechanical clearance. The separate
 **GoTo selected target** button is intentionally **disabled**; selecting
-a marker must never move the mount. **Horizon view** resets to the all-sky projection.
+a marker must never move the mount. Moving the mouse over targets
+must **not** open any floating VirtualSky info box over the label or
+marker; only the permanent AstroPi target readout should change on
+selection. **Horizon view** resets to the all-sky projection.
 Try Constellations and RA/Dec grid toggles. Verify Pi UTC advances
 without a mount connection, and no external network requests occur.
 Do not interpret a chart selection as a mount GoTo. Verify camera

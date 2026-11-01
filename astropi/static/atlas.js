@@ -184,11 +184,14 @@
         if (name) selectObject(name);
       }}
     });
-    // Explicit text-only HTML prevents VirtualSky's default remote Wikisky images.
+    // VirtualSky shows a floating info box during mousemove when a pointer
+    // has nonempty html. It obscures the label/marker, making selection awkward.
+    // An explicit empty string disables that popup AND suppresses VirtualSky's
+    // default remote Wikisky content. Target details live below the chart.
     for (const [key, object] of parsed) {
       sky.addPointer({
         ra:object.ra.decimal, dec:object.dec.decimal, label:key,
-        colour:"#b4c9d5", d:4, html:"<strong>" + key + "</strong>"
+        colour:"#b4c9d5", d:4, html:""
       });
     }
     updateClock();

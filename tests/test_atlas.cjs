@@ -79,7 +79,10 @@ test("opens local atlas from Pi UTC, fixed site and all 110 text-only pointers",
   assert.equal(h.state.options.projection,"polar");
   assert.equal(h.state.options.keyboard,false);
   assert.equal(h.sky.pointers.length,110);
-  assert.ok(h.sky.pointers.every(p=>!p.html.includes("<img")&&!p.html.includes("http")));
+  // The bundled VirtualSky opens pointer.html inside a floating box on
+  // mousemove, right over its marker. Empty HTML suppresses that hover box.
+  assert.ok(h.sky.pointers.every(p=>p.html === ""),
+    "Messier targets must not produce obstructive VirtualSky hover popups");
   assert.equal(h.sky.clock.toISOString(),"2026-10-28T15:40:00.000Z");
   assert.equal(h.el("atlas-messier-options").children.length,110);
   assert.ok(h.sky.resizeCount>0);
