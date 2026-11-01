@@ -228,10 +228,24 @@ the mount reported Tracking ON immediately after Connect.
 
 In the shared **Mount Controls** drawer, set **Tracking OFF** and wait
 until the AM3N reports **Tracking: OFF**. Level the tripod/base, return
-the mount to its **native Home** using the hand controller, and
+the mount to its **native Home** using the hand controller or
+AstroPi's new **Az Home** button, and
 **physically rotate the entire mount/tripod assembly** so the telescope
 at Home faces **true north** (not magnetic north). Do **not** jog the axes
 to redefine mechanical Home.
+
+The **Az Home** button (Alt/Az mode only, with Tracking OFF) sends
+native ZWO `:hC#` to move **both axes** to manufacturer Home.
+This is a motion command: **STOP MOUNT** can interrupt it.
+AstroPi reports `completed` only after telemetry twice explicitly
+reports Home and no slewing; without the Home signal the app requests
+Stop after five minutes rather than pretending arrival.
+If already reporting Home, it avoids a redundant move. Do not confuse
+Az Home with physical tripod levelling or pointing the base true north.
+The new serial-command workflow still needs real AM3N verification.
+A transient `:GAT#` error such as `e5` during a hand-controller
+Home motion does not by itself mean Home failed; tracking becomes
+UNKNOWN until the mount responds normally.
 
 Then press **Confirm North / Level**. AstroPi stores an
 **operator-confirmed, UTC-timestamped physical-setup checkpoint**. This

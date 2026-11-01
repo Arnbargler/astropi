@@ -28,7 +28,7 @@ not been independently calibrated.
 | **#14–17** | Serial Connect, reported coordinates, hold N/S/E/W, five speeds, Stop and deadman | **Implemented**, with field checks |
 | **#18** | GoTo **only after choosing an atlas target and explicitly pressing GoTo**, never manual RA/Dec entry | Implemented and Pi-tested for native motor motion, reported-position completion and Stop; optical alignment pending |
 | **#19** | Tracking control/status; AM3N firmware handles Alt/Az tracking | Implemented and real-Pi verified native :GAT# status and :Te#/:Td# manual ON/OFF |
-| **#20** | Native Home and separate Park, carefully verified | Deferred; earlier standalone Home probe is **not** a UI feature |
+| **#20** | Native Home and separate Park, carefully verified | Explicit Alt/Az **Az Home** with native `:hC#`, reported-Home completion and STOP implemented; real-hardware validation pending. Park deferred |
 | **#21–22, #26** | Initial north/level, manual two-star and optional extra-star alignment | Operator-confirmed physical North/Level/Home checkpoint implemented; two-star and extra-star corrections deferred |
 
 Five existing manual speed presets: **8× / 20× / 60× / 720× /

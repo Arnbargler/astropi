@@ -57,7 +57,7 @@ def create_app(settings: Settings | None = None, camera=None, lease=None, mount=
             return jsonify(error="Not the current operator"), 403
         # A release can never leave an active manual movement authorized.
         try:
-            if mount_worker.status().get("motion_phase") in ("starting", "moving", "goto_queued", "goto_slewing"):
+            if mount_worker.status().get("motion_phase") in ("starting", "moving", "goto_queued", "goto_slewing", "home_queued", "home_slewing"):
                 mount_worker.emergency_stop("Operator released control")
         except RuntimeError:
             pass
@@ -152,6 +152,15 @@ def create_app(settings: Settings | None = None, camera=None, lease=None, mount=
         except RuntimeError as exc:
             return jsonify(error=str(exc)), 409
         return jsonify(ok=True, enabled=enabled, state="queued"), 202
+
+    @app.post("/api/mount/az-home")
+    def mount_az_home():
+        require_operator()
+        try:
+            state = mount_worker.az_home()
+        except RuntimeError as exc:
+            return jsonify(error=str(exc)), 409
+        return jsonify(ok=True, state=state), 202
 
     @app.post("/api/mount/north-level")
     def set_north_level():

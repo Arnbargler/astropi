@@ -3,7 +3,8 @@
 **Read README → REQUIREMENTS → HARDWARE → DEVELOPMENT → SETUP.**
 Code/tests establish implementation truth; requirements also include future work.
 The user confirmed the three-tab UI works on the Pi on 2026-10-28.
-**Current state: AM3N GoTo (M40) and emergency Stop (M45) were field-tested; native tracking ON/OFF and status were field-tested. North/Level physical setup confirmation is implemented as an operator checkpoint; two-star/optical alignment remains unimplemented.**
+**Current state: AM3N GoTo (M40) and emergency Stop (M45) were field-tested; native tracking ON/OFF and status were field-tested. Native **Az Home** (`:hC#`) is implemented
+but awaits real-Pi testing. North/Level physical setup confirmation is implemented as an operator checkpoint; two-star/optical alignment remains unimplemented.**
 
 ## Code map
 
@@ -25,9 +26,9 @@ The user confirmed the three-tab UI works on the Pi on 2026-10-28.
 **POST routes:** `/api/control/{take,heartbeat,release}`,
 `/api/camera/{start,stop,settings,binning,preview-mode,debayer}`,
 `/api/capture`, `/api/capture/{sequence,cancel}`,
-`/api/mount/{connect,disconnect,jog,jog-heartbeat,stop,environment/read,environment/sync,goto,tracking,north-level}`.
+`/api/mount/{connect,disconnect,jog,jog-heartbeat,stop,environment/read,environment/sync,goto,tracking,north-level,az-home}`.
 
-**Absent:** `/atlas`, full OpenNGC search, Home, Park,
+**Absent:** `/atlas`, full OpenNGC search, Park, Home reset/set,
 and arbitrary serial-command endpoints. **No separate atlas time/NTP
 endpoint is needed**; `/api/status` already includes Pi UTC.
 
@@ -307,7 +308,7 @@ transformation. Clear invalidates the checkpoint (e.g. tripod moved);
 disconnect/reconnect or process restart invalidates it automatically.
 Normal jog and GoTo deliberately **do not clear** the initial physical
 reference. The operator procedure is: level tripod/base, return AM3N to
-native Home via hand controller, physically orient mount/tripod to true
+native Home via hand controller or **Az Home**, physically orient mount/tripod to true
 north, turn tracking OFF and press **Confirm North / Level** in the
 Mount Controls drawer. No app Home command, motor jog, electronic mount
 sync, sky model or two-star alignment occurs. GoTo remains available
@@ -315,6 +316,26 @@ without this optional physical checklist until actual star-alignment
 code is implemented. Do not label confirmation 'celestially aligned'.
 Tests cover lease, strict payload, idle/tracking guards, no serial
 commands and session reset. Real-Pi visual verification is pending.
+
+**Az Home (2026-10-31, requires hardware validation):**
+Operator-only `POST /api/mount/az-home` queues the ZWO/INDI/INDIGO
+documented `:hC#` command through the existing single serial owner.
+This is **Go Home**, not `:SOa#` (Set Home), not `:hP#` (Park).
+The command has **no acknowledgement**; the worker reports completion
+only after two `:GU#` polls with explicit `H` (at Home) and `N`
+(not slewing) flags. A missing `H` remains UNKNOWN, never assumed
+success. States are `home_phase=queued/sending/slewing/completed/
+aborted/error`, plus `home_error`, `home_requested_utc`.
+Preconditions: connected, confirmed Alt/Az mode, tracking OFF
+positively reported, idle, no pending operations.
+If already reporting Home, returns `already_home` without moving.
+A 300-second timeout requests Stop and reports failure;
+global viewer STOP and operator release interrupt queued/in-flight Home.
+The North/Level checkpoint remains a physical acknowledgement.
+During native or hand-controller Home, `:GAT#` may transiently return
+`e5` rather than a tracking state: report UNKNOWN/error, not false OFF
+or a failed Home. The user observed exactly this while Home succeeded.
+Tests are simulated; field-verify actual motion, reported Home, and STOP.
 
 **Verification:** `tests/test_atlas.py` checks local assets, all 110
 catalogue entries and motion-free adapter. `tests/test_atlas.cjs`

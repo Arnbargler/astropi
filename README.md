@@ -103,14 +103,18 @@ optical pointing; **Find now supports explicitly requested Messier GoTo**
 via the serial-owning worker, with asynchronous mount-reported progress,
 verified NTP prerequisite, and global Stop. Native tracking status/control
 uses :GAT# and explicit :Te# / :Td# with response verification; this
-new feature is **not yet AM3N hardware-tested**. Tracking is not
+native tracking feature was **field-tested successfully** on AM3N firmware 1.8.8. Tracking is not
 automatically enabled by AstroPi after GoTo. The reported-coordinate
 GoTo and its emergency Stop have passed user field tests (M40/M45).
 Mount Controls also includes an **operator-confirmed physical North/Level/Home
 checkpoint**; this is a timestamped session-local acknowledgement, not a
 mount alignment/sync command. It requires tracking OFF and an idle mount,
 and clears on disconnect or by explicit Clear. No optical/two-star alignment,
-automatic Home or Park has been implemented.
+automatic Home or Park has been implemented. A new explicit **Az Home** button
+uses ZWO `:hC#` to slew both axes to manufacturer Home, with STOP and
+telemetry-based completion. It requires tracking OFF and Alt/Az mode
+and still needs an AM3N hardware test. It does not redefine Home or
+perform optical alignment.
 
 ## Offline VirtualSky atlas in Find — implemented in code
 

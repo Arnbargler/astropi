@@ -27,6 +27,7 @@ function harness() {
     jog_speed:"slow",tracking:null,tracking_phase:"idle",tracking_target:null,
     tracking_error:null,tracking_status_error:null,
     north_level_confirmed:false,north_level_confirmed_utc:null,
+    home_phase:"idle",home_error:null,home_requested_utc:null,
     altitude_text:null,azimuth_text:null,ra_text:null,dec_text:null,
     raw_status:null,updated_utc:null,last_error:null};
   let camera = {
@@ -88,6 +89,11 @@ function harness() {
       mount = {...mount,time_sync_phase:"checking",site_sync_phase:"checking"};
       return {ok:true,json:async()=>({ok:true,state:"queued"})};
     }
+    if (url === "/api/mount/az-home") {
+      mount={...mount,home_phase:"queued",motion_phase:"home_queued",
+             home_error:null,home_requested_utc:"2026-10-31T22:55:00Z"};
+      return {ok:true,json:async()=>({ok:true,state:"queued"})};
+    }
     if (url === "/api/mount/north-level") {
       mount={...mount,north_level_confirmed:payload.confirmed,
         north_level_confirmed_utc:payload.confirmed ? "2026-10-31T23:55:00Z" : null};
@@ -110,12 +116,14 @@ function harness() {
     if (url === "/api/mount/jog-heartbeat")
       return {ok:true,json:async()=>({ok:true})};
     if (url === "/api/mount/stop") {
-      mount={...mount,motion_armed:false,motion_phase:"stopping",motion_direction:null};
+      mount={...mount,motion_armed:false,motion_phase:"stopping",motion_direction:null,
+        home_phase:["queued","sending","slewing"].includes(mount.home_phase) ? "aborted" : mount.home_phase};
       return {ok:true,json:async()=>({ok:true,state:"stop_requested"})};
     }
     if (url === "/api/mount/connect") {
       mount = {...mount,phase:"connected",connected:true,model:"AM3N",
         north_level_confirmed:false,north_level_confirmed_utc:null,
+        home_phase:"idle",home_error:null,home_requested_utc:null,
         firmware:"1.8.8",altitude_text:"+01*30:50",azimuth_text:"013*43:10",
         ra_text:"12:34:56",dec_text:"-22*15:30",
         tracking:false,tracking_phase:"idle",tracking_target:null,
@@ -637,6 +645,41 @@ test("tracking ON/OFF requires control and verified time/site; mount readback dr
   await h.intervals.get(1000)();
   assert.equal(h.el("mount-tracking-on").disabled,true);
   assert.equal(h.el("mount-tracking-off").disabled,true);
+});
+
+test("Az Home is Alt/Az only, STOP-interruptible, and telemetry-verified",async()=>{
+  const h=harness();
+  await h.flush();
+  assert.equal(h.el("mount-az-home").disabled,true);
+  await h.el("take-control").dispatch("click");
+  await h.el("mount-connect").dispatch("click");
+  h.updateMount({tracking:true,at_home:null});
+  await h.intervals.get(1000)();
+  assert.equal(h.el("mount-az-home").disabled,true,"Tracking ON blocks Home");
+  h.updateMount({tracking:false,altaz_mode:null});
+  await h.intervals.get(1000)();
+  assert.equal(h.el("mount-az-home").disabled,true,"Unknown mode blocks Az Home");
+  h.updateMount({altaz_mode:true});
+  await h.intervals.get(1000)();
+  assert.equal(h.el("mount-az-home").disabled,false);
+  await h.el("mount-az-home").dispatch("click");
+  assert.equal(h.calls.filter(c=>c.url==="/api/mount/az-home").length,1);
+  assert.equal(h.el("mount-az-home").disabled,true);
+  assert.match(h.el("mount-az-home-status").textContent,/queued/);
+  h.updateMount({home_phase:"slewing",motion_phase:"home_slewing",
+                 tracking:null,tracking_status_error:"Unexpected :GAT# reply: 'e5'"});
+  await h.intervals.get(1000)();
+  assert.match(h.el("mount-az-home-status").textContent,/moving/);
+  assert.equal(h.el("mount-stop").disabled,false);
+  assert.equal(h.el("mount-tracking-on").disabled,true);
+  await h.el("mount-stop").dispatch("click");
+  assert.match(h.el("mount-az-home-status").textContent,/interrupted/);
+  h.updateMount({home_phase:"completed",motion_phase:"idle",at_home:true,
+                 tracking:false,tracking_status_error:null});
+  await h.intervals.get(1000)();
+  assert.match(h.el("mount-az-home-status").textContent,/completed/);
+  assert.equal(h.el("mount-az-home").disabled,false);
+  assert.equal(h.calls.filter(c=>c.url==="/api/mount/tracking").length,0);
 });
 
 test("North / Level is a manual physical checkpoint, never a Home command",async()=>{
@@ -1213,6 +1256,7 @@ test("three workspaces retain responsive controls and safety warnings",()=>{
     "mount-tracking-on","mount-tracking-off","mount-tracking-status","mount-tracking-error",
     "mount-north-level-confirm","mount-north-level-clear","mount-north-level-status",
     "mount-north-level-home","mount-north-level-error",
+    "mount-az-home","mount-az-home-status","mount-az-home-error",
     "mount-speed-slow","mount-speed-max",
     "mount-north","mount-south","mount-west","mount-east",
     "mount-env-time","mount-env-latitude","mount-raw-status",

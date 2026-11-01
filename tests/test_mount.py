@@ -1261,3 +1261,180 @@ def test_north_level_rejects_tracking_on_unknown_and_pending_ops(tmp_path):
     assert worker.confirm_north_level(False) is False
     worker.disconnect()
     worker._thread.join(timeout=3)
+
+
+# --- Native Alt/Az Home: ZWO :hC# (no ACK), :GU# H confirmation and STOP ---
+
+class AzHomeFakePort(TrackingFakePort):
+    def __init__(self, *, arrive=True, refuse=False):
+        super().__init__()
+        self.responses[":GU#"] = "nNZM000000880"  # moving/no H initially
+        self.arrive = arrive
+        self.refuse = refuse
+        self.home_started = False
+        self.home_polls = 0
+
+    def write(self, data):
+        cmd = data.decode("ascii")
+        if cmd == ":hC#":
+            self.commands.append(cmd)
+            self.last = cmd
+            if self.refuse:
+                raise OSError("simulated Home serial failure")
+            self.home_started = True
+            return  # ZWO Home intentionally sends no ACK
+        super().write(data)
+
+    def read_until(self, expected, size):
+        if self.last == ":GU#" and self.home_started:
+            self.home_polls += 1
+            if self.arrive and self.home_polls >= 4:
+                self.responses[":GU#"] = "nNHZM000000880"
+        if self.last == ":GAT#" and self.home_started:
+            # Firmware may report e5 while externally returning Home.
+            self.responses[":GAT#"] = (
+                "0" if self.responses[":GU#"].startswith("nNH") else "e5"
+            )
+        return super().read_until(expected, size)
+
+
+class AzHomeFactory(FakeFactory):
+    def __init__(self, **options):
+        super().__init__()
+        self.options = options
+
+    def __call__(self, **kwargs):
+        port = AzHomeFakePort(**self.options)
+        self.ports.append(port)
+        return port
+
+
+def test_az_home_native_command_verifies_reported_home_without_ack(tmp_path):
+    from datetime import datetime, timezone
+    alias=tmp_path/"am3"
+    alias.touch()
+    factory=AzHomeFactory()
+    worker=MountWorker(alias,serial_factory=factory,poll_interval=0.04,
+        ntp_checker=lambda:True,
+        utc_clock=lambda:datetime(2026,10,31,22,tzinfo=timezone.utc))
+    client=create_app(settings=Settings(tmp_path,"expected",alias,tmp_path/"usb"),
+        mount=worker).test_client()
+    assert client.post("/api/mount/az-home").status_code == 403
+    token=client.post("/api/control/take").get_json()["token"]
+    headers={"X-AstroPi-Control":token}
+    assert client.post("/api/mount/az-home",headers=headers).status_code == 409
+    client.post("/api/mount/connect",headers=headers)
+    wait_until(lambda:worker.status()["connected"] and
+               worker.status()["tracking"] is False and
+               worker.status()["altaz_mode"] is True)
+    assert client.post("/api/mount/az-home",headers=headers).status_code == 202
+    assert client.post("/api/mount/az-home",headers=headers).status_code == 409
+    wait_until(lambda:worker.status()["home_phase"]=="completed",timeout=5)
+    status=worker.status()
+    assert status["at_home"] is True
+    assert status["motion_phase"]=="idle"
+    assert status["home_error"] is None
+    assert factory.ports[0].commands.count(":hC#")==1
+    assert status["home_requested_utc"].endswith("+00:00")
+    # At Home is idempotent: do not start another movement.
+    assert client.post("/api/mount/az-home",headers=headers).get_json()["state"]=="already_home"
+    assert factory.ports[0].commands.count(":hC#")==1
+    # :GAT# e5 during Home must NOT cause a false Home failure.
+    worker.disconnect()
+    worker._thread.join(timeout=3)
+
+
+def test_az_home_stop_interrupts_without_claiming_arrival(tmp_path):
+    from datetime import datetime, timezone
+    alias=tmp_path/"am3"
+    alias.touch()
+    factory=AzHomeFactory(arrive=False)
+    worker=MountWorker(alias,serial_factory=factory,poll_interval=0.04,
+        ntp_checker=lambda:True,
+        utc_clock=lambda:datetime(2026,10,31,22,tzinfo=timezone.utc))
+    client=create_app(settings=Settings(tmp_path,"expected",alias,tmp_path/"usb"),
+        mount=worker).test_client()
+    token=client.post("/api/control/take").get_json()["token"]
+    headers={"X-AstroPi-Control":token}
+    client.post("/api/mount/connect",headers=headers)
+    wait_until(lambda:worker.status()["connected"] and worker.status()["tracking"] is False)
+    client.post("/api/mount/az-home",headers=headers)
+    wait_until(lambda:worker.status()["home_phase"]=="slewing")
+    assert ":hC#" in factory.ports[0].commands
+    assert client.post("/api/mount/az-home",headers=headers).status_code==409
+    with pytest.raises(RuntimeError):
+        worker.goto("M31")
+    with pytest.raises(RuntimeError):
+        worker.jog("west")
+    assert client.post("/api/mount/stop").status_code==202
+    wait_until(lambda:":Q#" in factory.ports[0].commands)
+    wait_until(lambda:worker.status()["stop_stable"],timeout=5)
+    assert worker.status()["home_phase"]=="aborted"
+    assert worker.status()["at_home"] is not True
+    worker.disconnect()
+    worker._thread.join(timeout=3)
+
+
+def test_az_home_guard_against_tracking_and_non_altaz_mode(tmp_path):
+    from datetime import datetime, timezone
+    alias=tmp_path/"am3"
+    alias.touch()
+    factory=AzHomeFactory(arrive=False)
+    worker=MountWorker(alias,serial_factory=factory,poll_interval=0.04,
+        ntp_checker=lambda:True,
+        utc_clock=lambda:datetime(2026,10,31,22,tzinfo=timezone.utc))
+    worker.connect()
+    wait_until(lambda:worker.status()["connected"] and worker.status()["tracking"] is False)
+    worker.request_tracking(True)
+    wait_until(lambda:worker.status()["tracking"] is True)
+    with pytest.raises(RuntimeError,match="Tracking OFF"):
+        worker.az_home()
+    worker.request_tracking(False)
+    wait_until(lambda:worker.status()["tracking"] is False and
+               worker.status()["tracking_phase"] == "verified")
+    with worker._lock:
+        worker._state["altaz_mode"] = None
+    with pytest.raises(RuntimeError,match="Alt/Az"):
+        worker.az_home()
+    assert ":hC#" not in factory.ports[0].commands
+    worker.disconnect()
+    worker._thread.join(timeout=3)
+
+
+def test_az_home_timeout_fails_closed_and_requests_stop(tmp_path):
+    from datetime import datetime, timezone
+    alias=tmp_path/"am3"
+    alias.touch()
+    factory=AzHomeFactory(arrive=False)
+    worker=MountWorker(alias,serial_factory=factory,poll_interval=0.04,
+        ntp_checker=lambda:True,
+        utc_clock=lambda:datetime(2026,10,31,22,tzinfo=timezone.utc))
+    worker.connect()
+    wait_until(lambda:worker.status()["connected"] and worker.status()["tracking"] is False)
+    worker.az_home()
+    wait_until(lambda:worker.status()["home_phase"]=="slewing")
+    with worker._lock:
+        worker._home_started_at = worker._clock() - 301
+    wait_until(lambda:worker.status()["home_phase"]=="error")
+    wait_until(lambda:":Q#" in factory.ports[0].commands)
+    assert "not confirmed" in worker.status()["home_error"]
+    worker.disconnect()
+    worker._thread.join(timeout=3)
+
+
+def test_az_home_serial_write_failure_requests_stop(tmp_path):
+    from datetime import datetime, timezone
+    alias=tmp_path/"am3"
+    alias.touch()
+    factory=AzHomeFactory(refuse=True)
+    worker=MountWorker(alias,serial_factory=factory,poll_interval=0.04,
+        ntp_checker=lambda:True,
+        utc_clock=lambda:datetime(2026,10,31,22,tzinfo=timezone.utc))
+    worker.connect()
+    wait_until(lambda:worker.status()["connected"] and worker.status()["tracking"] is False)
+    worker.az_home()
+    wait_until(lambda:worker.status()["home_phase"]=="error")
+    wait_until(lambda:":Q#" in factory.ports[0].commands)
+    assert "simulated Home serial failure" in worker.status()["home_error"]
+    worker.disconnect()
+    worker._thread.join(timeout=3)

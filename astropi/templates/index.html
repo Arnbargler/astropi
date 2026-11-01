@@ -274,6 +274,12 @@
         <div class="mount-north-level-panel" aria-label="Physical North Level setup">
           <h4>North / Level · physical setup</h4>
           <p class="mount-small">Level the tripod/base. Put the AM3N in its native Home position using the hand controller. Physically rotate the mount/tripod assembly until the telescope at Home faces <strong>true north</strong>. Do not jog the axes to redefine Home.</p>
+          <div class="button-row">
+            <button type="button" id="mount-az-home" disabled>Az Home</button>
+          </div>
+          <p id="mount-az-home-status" role="status" aria-live="polite">Az Home: idle</p>
+          <p id="mount-az-home-error" role="alert" class="mount-error"></p>
+          <p class="mount-small">Az Home returns both mount axes to native Home. Tracking must be OFF. STOP MOUNT can interrupt it. This does not level or orient the tripod.</p>
           <p id="mount-north-level-home" class="mount-small">Home signal: not checked</p>
           <p id="mount-north-level-status" role="status" aria-live="polite">Physical setup: not confirmed</p>
           <div class="button-row">

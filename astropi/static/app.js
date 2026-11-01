@@ -54,6 +54,9 @@ let mountTrackingPhase = "idle";
 let mountTrackingRequestPending = false;
 let mountNorthLevelConfirmed = false;
 let mountNorthLevelRequestPending = false;
+let mountAzHomeRequestPending = false;
+let mountHomePhase = "idle";
+let mountAltAzMode = false;
 const mountSpeeds = ["slow", "medium", "fast", "slew", "max"];
 let selectedMountSpeed = "slow";
 function showMountSpeed(speed) {
@@ -120,6 +123,11 @@ function updateButtons() {
   $("mount-tracking-off").disabled = !canTrack || mountTrackingReported === false;
   const setupReady = canTrack && mountTrackingReported === false &&
     !mountNorthLevelRequestPending;
+  $("mount-az-home").disabled = !owner || !mountIdle ||
+    !mountAltAzMode || mountTrackingReported !== false ||
+    mountAzHomeRequestPending || trackingBusy || environmentBusy ||
+    mountSyncRequestPending || ["checking","syncing"].includes(mountSyncPhase) ||
+    ["queued","sending","slewing"].includes(mountHomePhase);
   $("mount-north-level-confirm").disabled = !setupReady || mountNorthLevelConfirmed;
   $("mount-north-level-clear").disabled = !owner ||
     mountPhase !== "connected" || mountNorthLevelRequestPending ||
@@ -513,6 +521,30 @@ async function requestMountTracking(enabled) {
 }
 $("mount-tracking-on").addEventListener("click", () => requestMountTracking(true));
 $("mount-tracking-off").addEventListener("click", () => requestMountTracking(false));
+async function requestAzHome() {
+  if (!token || mountAzHomeRequestPending || mountPhase !== "connected" ||
+      mountMotionPhase !== "idle" || !mountAltAzMode ||
+      mountTrackingReported !== false || heldMountDirection ||
+      ["queued","sending","slewing"].includes(mountHomePhase)) return;
+  mountAzHomeRequestPending = true;
+  mountMotionPhase = "home_queued";
+  mountHomePhase = "queued";
+  updateButtons();
+  try {
+    await post("/api/mount/az-home");
+    write("mount-az-home-error", "");
+    await refreshMount();
+  } catch(error) {
+    write("mount-az-home-error", error.message);
+    mountMotionPhase = "idle";
+    mountHomePhase = "error";
+  } finally {
+    mountAzHomeRequestPending = false;
+    updateButtons();
+  }
+}
+$("mount-az-home").addEventListener("click", requestAzHome);
+
 async function setNorthLevelConfirmation(confirmed) {
   if (!token || mountNorthLevelRequestPending || mountPhase !== "connected") return;
   if (confirmed && (mountMotionPhase !== "idle" || heldMountDirection ||
@@ -574,6 +606,19 @@ function showMount(data) {
   mountTrackingReported = data.tracking === true ? true :
     data.tracking === false ? false : null;
   mountTrackingPhase = data.tracking_phase || "idle";
+  mountHomePhase = data.home_phase || "idle";
+  mountAltAzMode = data.altaz_mode === true;
+  const homeDescriptions = {
+    idle: "Az Home: idle",
+    queued: "Az Home: queued…",
+    sending: "Az Home: sending command…",
+    slewing: "Az Home: moving toward native Home…",
+    completed: "Az Home: completed (mount-reported Home)",
+    aborted: "Az Home: interrupted by STOP",
+    error: "Az Home: FAILED"
+  };
+  write("mount-az-home-status", homeDescriptions[mountHomePhase] || "Az Home: " + mountHomePhase);
+  write("mount-az-home-error", data.home_error || "");
   const liveTracking = mountPhase === "connected" ? mountTrackingReported : null;
   write("mount-tracking-status", "Tracking: " +
     (liveTracking === true ? "ON" : liveTracking === false ? "OFF" : "UNKNOWN"));
@@ -648,6 +693,8 @@ function showMount(data) {
     moving: "Jog " + (data.jog_speed || "slow") + " active",
     goto_queued: "GoTo queued: " + (data.goto_target || "target"),
     goto_slewing: "GoTo slewing: " + (data.goto_target || "target"),
+    home_queued: "Az Home queued",
+    home_slewing: "Az Home moving · STOP available",
     stopping: "Stop requested · checking position stability…",
     uncertain: "STOP NOT CONFIRMED — use physical Cancel/power!",
     disconnecting: "Disconnecting (Stop attempted if necessary)"

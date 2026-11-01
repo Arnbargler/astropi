@@ -48,6 +48,8 @@ OBSERVING_LATITUDE = 45.2933
 OBSERVING_LONGITUDE_EAST = -75.8571
 SITE_VERIFY_TOLERANCE_DEG = 1 / 120 + 1 / 3600 + 0.00001
 GOTO_TIMEOUT_SECONDS = 300
+HOME_TIMEOUT_SECONDS = 300
+HOME_COMMAND = ":hC#"  # ZWO native Home: no ACK, not Park
 TRACKING_VERIFY_TIMEOUT_SECONDS = 4
 _CLOCK_DATE = re.compile(r"^(\d{2})/(\d{2})/(\d{2})$")
 _CLOCK_TIME = re.compile(r"^(\d{2}):(\d{2}):(\d{2})$")
@@ -209,6 +211,9 @@ class MountWorker:
         self._ever_moved = False
         self._stop_sent_at = None
         self._stop_attempts = 0
+        self._home_pending = False
+        self._home_started_at = None
+        self._home_confirm_count = 0
         self._goto_pending = None
         self._tracking_pending = None
         self._tracking_started_at = None
@@ -237,6 +242,8 @@ class MountWorker:
             "site_sync_phase": "idle", "site_sync_error": None,
             "site_sync_verified_utc": None,
             "goto_phase": "idle", "goto_target": None, "goto_error": None,
+            "home_phase": "idle", "home_error": None,
+            "home_requested_utc": None,
             "tracking_phase": "idle", "tracking_target": None,
             "tracking_error": None, "tracking_status_error": None,
             # Operator attestation only; NOT a serial mount alignment/sync.
@@ -266,6 +273,9 @@ class MountWorker:
             self._ever_moved = False
             self._stop_sent_at = None
             self._stop_attempts = 0
+            self._home_pending = False
+            self._home_started_at = None
+            self._home_confirm_count = 0
             self._goto_pending = None
             self._tracking_pending = None
             self._tracking_started_at = None
@@ -289,6 +299,7 @@ class MountWorker:
                 tracking_phase="idle", tracking_target=None,
                 tracking_error=None, tracking_status_error=None,
                 north_level_confirmed=False, north_level_confirmed_utc=None,
+                home_phase="idle", home_error=None, home_requested_utc=None,
                 goto_position_error_deg=None, **_TELEMETRY
             )
             self._thread = threading.Thread(
@@ -370,6 +381,40 @@ class MountWorker:
                 motion_phase="goto_queued", stop_stable=False)
             return target
 
+    def az_home(self):
+        """Queue native Alt/Az Home without redefining manufacturer Home.
+
+        ZWO :hC# moves both axes to Home and has no ACK.
+        Only mount :GU# Home+stopped telemetry confirms actual arrival.
+        """
+        with self._lock:
+            if not self._state["connected"] or self._state["phase"] != "connected":
+                raise RuntimeError("Connect the AM3N before Az Home")
+            if self._state["altaz_mode"] is not True:
+                raise RuntimeError("Az Home requires confirmed Alt/Az mount mode")
+            if self._state["tracking"] is not False:
+                raise RuntimeError("Turn Tracking OFF before Az Home")
+            if (self._stop.is_set() or self._stop_pending or
+                    self._state["motion_phase"] != "idle" or
+                    self._armed or self._pending_direction is not None or
+                    self._goto_pending is not None or self._home_pending or
+                    self._tracking_pending is not None or
+                    self._state["tracking_phase"] in ("queued", "sending", "verifying") or
+                    self._environment_pending or self._environment_in_progress or
+                    self._resync_pending or self._resync_in_progress):
+                raise RuntimeError("Mount must be idle before Az Home")
+            if self._state["at_home"] is True:
+                self._state.update(home_phase="completed", home_error=None,
+                                   home_requested_utc=datetime.now(timezone.utc).isoformat())
+                return "already_home"
+            self._home_pending = True
+            self._home_started_at = None
+            self._home_confirm_count = 0
+            self._state.update(home_phase="queued", home_error=None,
+                               home_requested_utc=datetime.now(timezone.utc).isoformat(),
+                               motion_phase="home_queued", stop_stable=False)
+            return "queued"
+
     def confirm_north_level(self, confirmed):
         """Operator records or clears a PHYSICAL north/level/Home checklist.
 
@@ -389,7 +434,7 @@ class MountWorker:
                 raise RuntimeError("Connect the mount before confirming North/Level")
             if (self._state["motion_phase"] != "idle" or self._stop_pending or
                     self._armed or self._pending_direction is not None or
-                    self._goto_pending is not None or
+                    self._goto_pending is not None or self._home_pending or
                     self._tracking_pending is not None or
                     self._state["tracking_phase"] in ("queued", "sending", "verifying") or
                     self._environment_pending or self._environment_in_progress or
@@ -447,6 +492,11 @@ class MountWorker:
         self._motion_deadline = 0.0
         self._stop_pending = True
         self._goto_pending = None
+        self._home_pending = False
+        self._home_started_at = None
+        self._home_confirm_count = 0
+        if self._state["home_phase"] in ("queued", "sending", "slewing"):
+            self._state["home_phase"] = "aborted"
         self._tracking_pending = None
         self._tracking_started_at = None
         if self._state["tracking_phase"] in ("queued", "sending", "verifying"):
@@ -597,6 +647,47 @@ class MountWorker:
         ack = port.read_until(b"#", size=12)
         if ack not in (expected.encode("ascii"), (expected + "#").encode("ascii")):
             raise MountProtocolError(f"AM3N rejected {command[:3]} (reply {ack!r})")
+
+    def _service_home(self, port):
+        """Fire-and-forget native Home, serialized against emergency Stop."""
+        with self._lock:
+            if not self._home_pending or self._stop_pending or self._stop.is_set():
+                return
+            self._home_pending = False
+            self._state["home_phase"] = "sending"
+            try:
+                self._ever_moved = True
+                port.write(HOME_COMMAND.encode("ascii"))
+                port.flush()
+                # No ACK for :hC#: require actual Home telemetry.
+                self._home_started_at = self._clock()
+                self._home_confirm_count = 0
+                self._state.update(home_phase="slewing", motion_phase="home_slewing")
+            except (OSError, serial.SerialException) as exc:
+                self._queue_stop_locked("Az Home command failed")
+                self._state.update(home_phase="error", home_error=str(exc))
+
+    def _check_home(self, parsed):
+        """Never infer arrival from lack of motion or a missing H flag."""
+        with self._lock:
+            if self._state["home_phase"] != "slewing":
+                return
+            if parsed["at_home"] is True and parsed["slewing"] is False:
+                self._home_confirm_count += 1
+            else:
+                self._home_confirm_count = 0
+            if self._home_confirm_count >= 2:
+                self._home_started_at = None
+                self._ever_moved = False
+                self._state.update(home_phase="completed", motion_phase="idle",
+                                   home_error=None)
+            elif (self._home_started_at is not None and
+                  self._clock() - self._home_started_at >= HOME_TIMEOUT_SECONDS):
+                self._queue_stop_locked("Az Home timeout")
+                self._state.update(
+                    home_phase="error",
+                    home_error="Home not confirmed by :GU# within five minutes"
+                )
 
     def _service_goto(self, port):
         """Sole serial owner; pending GoTo may be cancelled by Stop."""
@@ -870,6 +961,7 @@ class MountWorker:
                 self._state.update(parsed, phase="connected", connected=True)
         self._check_stopped(parsed["altitude_deg"], parsed["azimuth_deg"])
         self._check_goto(parsed)
+        self._check_home(parsed)
         self._check_tracking(tracking_state, tracking_error)
 
     def _run(self):
@@ -897,11 +989,12 @@ class MountWorker:
             while not self._stop.is_set():
                 self._service_motion(port)
                 self._service_goto(port)
+                self._service_home(port)
                 self._service_tracking(port)
                 now = self._clock()
                 with self._lock:
                     phase = self._state["motion_phase"]
-                interval = min(self._interval, 0.35) if phase in ("moving", "starting", "stopping", "goto_queued", "goto_slewing") else self._interval
+                interval = min(self._interval, 0.35) if phase in ("moving", "starting", "stopping", "goto_queued", "goto_slewing", "home_queued", "home_slewing") else self._interval
                 if now - last_poll >= interval:
                     self._poll(port)
                     last_poll = self._clock()
@@ -920,7 +1013,7 @@ class MountWorker:
             # the motor controller is unresponsive, physical Stop is mandatory.
             with self._lock:
                 needs_stop = (self._ever_moved or self._stop_pending or
-                              self._state["motion_phase"] in ("moving","starting","stopping","goto_queued","goto_slewing"))
+                              self._state["motion_phase"] in ("moving","starting","stopping","goto_queued","goto_slewing","home_queued","home_slewing"))
                 self._armed = False
                 self._pending_direction = self._direction = None
             if port is not None:
@@ -948,6 +1041,7 @@ class MountWorker:
                     site_sync_verified_utc=None, goto_phase="idle", goto_target=None, goto_error=None,
                     tracking_phase="idle", tracking_target=None, tracking_error=None,
                     tracking_status_error=None,
+                    home_phase="idle", home_error=None, home_requested_utc=None,
                     north_level_confirmed=False, north_level_confirmed_utc=None,
                     goto_requested_utc=None, goto_position_error_deg=None,
                     **_TELEMETRY,
