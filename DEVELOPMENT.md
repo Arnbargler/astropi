@@ -3,8 +3,8 @@
 **Start with HANDOFF → README → REQUIREMENTS → HARDWARE → DEVELOPMENT → SETUP.**
 Code/tests establish implementation truth; requirements also include future work.
 The user confirmed the three-tab UI works on the Pi on 2026-10-28.
-**Current state: AM3N GoTo (M40) and emergency Stop (M45) were field-tested; native tracking ON/OFF and status were field-tested. Native **Az Home** (`:hC#`) is implemented
-but awaits real-Pi testing. North/Level physical setup confirmation is implemented as an operator checkpoint; two-star/optical alignment remains unimplemented.**
+**Current state: AM3N GoTo (M40) and emergency Stop (M45) were field-tested; native tracking ON/OFF and status were field-tested. Native **Az Home** (`:hC#`) is implemented and was successfully field-tested
+through AstroPi's mount controls on the real AM3N (2026-10-31). North/Level physical setup confirmation is implemented as an operator checkpoint; two-star/optical alignment remains unimplemented.**
 
 ## Code map
 
@@ -305,7 +305,7 @@ Tests cover lease, strict payload, idle/tracking guards, no serial
 commands and session reset. The user subsequently confirmed that the
 North/Level UI appears to function correctly on the real Pi.
 
-**Az Home (2026-10-31, requires hardware validation):**
+**Az Home (2026-10-31, successful real-mount field test):**
 Operator-only `POST /api/mount/az-home` queues the ZWO/INDI/INDIGO
 documented `:hC#` command through the existing single serial owner.
 This is **Go Home**, not `:SOa#` (Set Home), not `:hP#` (Park).
@@ -323,7 +323,9 @@ The North/Level checkpoint remains a physical acknowledgement.
 During native or hand-controller Home, `:GAT#` may transiently return
 `e5` rather than a tracking state: report UNKNOWN/error, not false OFF
 or a failed Home. The user observed exactly this while Home succeeded.
-Tests are simulated; field-verify actual motion, reported Home, and STOP.
+Automated tests are simulated; the operator subsequently confirmed that
+AstroPi's Az Home button works on the real mount. A dedicated field test
+of STOP interrupting active Home motion has not yet been reported.
 
 **Verification:** `tests/test_atlas.py` checks local assets, all 110
 catalogue entries and motion-free adapter. `tests/test_atlas.cjs`
