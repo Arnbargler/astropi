@@ -6,7 +6,7 @@ Flask serves a trusted-LAN browser application on port **8080** (Pi Wi-Fi
 IP or `astropi.local`). The Pi owns camera acquisition, mount serial
 I/O and captures; the desktop/browser is only a client.
 
-## Working state — 2026-10-29
+## Working state — 2026-10-31
 
 **Previously implemented and operator-tested on the Pi:** the persistent
 **Focus / Find / Fotograph** three-tab interface. Tabs do not reload the
@@ -36,29 +36,28 @@ successful frame visible, skip superseded frames and avoid concurrent
 image loads. Browser-side request ordering ignores stale camera status
 responses. These correctness fixes remain in the code.
 
-**Field networking (2026-10-29):** The Pi now uses a
-**BrosTrend AC5L USB Wi-Fi adapter** (Realtek `0bda:c811`,
-in-kernel `rtw88_8821cu` driver) with a stronger external antenna.
-The saved NetworkManager profile `Bazingas-Minions-USB` autoconnects
-with route metric **100**, ahead of the internal radio's old **600**.
-The dongle survived multiple reboots and worked for SSH and live
-preview (last observed DHCP IP: `192.168.0.98`, **not static**).
-Its signal improved from about **−59 dBm** (internal Pi Wi-Fi)
-to **−44 dBm**, with fewer reported preview stutters but not zero.
-The operator has requested disabling the **onboard Wi-Fi** with
-`dtoverlay=disable-wifi` for power/heat saving; *post-change reboot
-verification has not yet been supplied*. This is a Pi boot setting,
-not application code. See [SETUP.md](SETUP.md) for verification/recovery.
+**Field networking — resolved 2026-10-31:** AstroPi remains in
+**Station Mode** on the existing 5 GHz home Wi-Fi. The Pi uses its
+BrosTrend AC5L USB adapter (Realtek `0bda:c811`, built-in
+`rtw88_8821cu` driver), with the MAC-bound NetworkManager profile
+`Bazingas-Minions-USB` set to autoconnect and route metric **100**.
+The operator replaced the n100 development client with an
+**HP EliteDesk 800 G5 Mini**, using another external BrosTrend
+Wi-Fi adapter. **Live preview is now visually indistinguishable
+from direct Ethernet**, with no camera-code change. The earlier
+~0.5–1 s pauses were associated with the old wireless path;
+individual contributions from the old PC, radios and access point
+were not separately measured. See [HARDWARE.md](HARDWARE.md).
 
-**Preview delays:** The original ~0.5–1 s pauses vanished when Pi
-and Mint were joined by temporary direct Ethernet, strongly pointing
-to the Wi-Fi/AP path rather than the Pi camera pipeline. Field
-observing **will remain wireless**: no permanent LAN cable is wanted,
-and occasional focusing delay is accepted. Science FITS/RAW capture
-and USB saves operate on the Pi, independently of browser JPEG delivery
-(although recording during the exact Wi-Fi stalls was not separately
-field-tested). Old timing probes were removed; browser JPEG
-serialization and stale-response protection remain.
+The Pi's onboard Wi-Fi was slated for disabling using
+`dtoverlay=disable-wifi` to save power; **a post-change interface
+listing has not been provided**, so do not assume this has been
+verified. See [SETUP.md](SETUP.md) for how to check or recover via
+Ethernet. IP addresses are DHCP-assigned. Keep functional browser
+preview safeguards (two JPEG buffers, stale-response ordering);
+remove/reintroduce no temporary network timing probes. Pi-owned
+RAW/FITS science captures and USB recording are independent of
+browser image delivery.
 
 ### Camera and recording
 

@@ -72,53 +72,52 @@ request start, so delayed older camera state cannot reset a newer
 preview. **Keep the regression tests** for these correctness fixes.
 No WebSockets; the Pi camera/capture and mount safety code are separate.
 
-## Wireless preview findings and current field setup
+## Network and preview handoff — 2026-10-31
 
-**Diagnosis (2026-10-29):** Pi SDK/JPEG completion intervals stayed
-~109/133 ms maximum in a sample taken through the freezes, while
-browser and independent Mint-to-Pi Wi-Fi HTTP had occasional ~0.5–1 s
-delays. Pi-local HTTP was ~2–10 ms. Disabling Wi-Fi power saving and
-using a numeric IP did not eliminate pauses. **Temporary direct
-Ethernet made the preview silky smooth** with unchanged application
-code: wireless delivery is the main identified contributor, though
-the exact adapter/AP fault remains unknown. History of the
-investigation is preserved before cleanup commit `57e0e4f`.
-There is **no plan to install permanent Ethernet or re-engineer the
-preview for this minor focusing annoyance**.
+**Solved in practice:** The old n100/Pi wireless arrangement produced
+intermittent 0.5–1 s browser preview pauses; Pi-local camera acquisition,
+JPEG processing and HTTP responded normally in sampled diagnostics.
+Temporary direct Ethernet made the preview smooth. Replacing the
+n100 with an **HP EliteDesk 800 G5 Mini** and using **external
+BrosTrend Wi-Fi adapters on both ends** now makes the preview
+**visually indistinguishable from direct Ethernet** according to the
+operator. This is a field-observed result, not a formal latency
+benchmark. The experiment did not isolate whether the old PC's
+Wi-Fi, its antenna, the Pi radio, or the access point caused the
+specific delays. No preview performance work is planned.
 
-**New Pi Wi-Fi (2026-10-29):** BrosTrend AC5L USB `0bda:c811`,
-`rtw88_8821cu` on Pi kernel `6.18.39+rpt-rpi-v8`, firmware
-`24.11.0`; `wlan1` while onboard was present. Its saved
-NetworkManager profile `Bazingas-Minions-USB` is autoconnect=yes,
-MAC-bound to `74:19:f8:17:b1:f5` (not interface-name bound),
-priority=50 and IPv4/IPv6 metric=100. Internal profile
-`Bazingas-Minions` had priority=0, metric=600. USB adapter
-tested across multiple reboots, associated at 5 GHz with signal
-as strong as −44 dBm, and live preview worked with fewer—but
-persistent—brief pauses. Client Mint's second AC5L was **ordered,
-not yet installed or tested**.
+**Keep Station Mode:** AstroPi connects to the existing home
+Wi-Fi; there is no AP/hotspot mode or offline browser-clock-sync
+implementation. These were discussed as future possibilities
+and explicitly deferred. AM3N Connect still requires verified
+Pi NTP synchronization.
 
-**Onboard-radio change:** The operator requested the Raspberry Pi
-boot overlay `dtoverlay=disable-wifi` to reduce power/heat. We
-provided commands to add it to `/boot/firmware/config.txt` and
-to restore the radio via Ethernet if USB networking fails. **No
-post-overlay reboot output was received**; do not claim verified
-absence of the onboard interface. After disabling it, the USB
-adapter may be renamed from `wlan1` to `wlan0`; use the
-MAC-bound NetworkManager profile, `nmcli`, and `iw dev`,
-not a hardcoded interface name. See SETUP.md.
+**Pi radio:** BrosTrend AC5L USB RTL8821CU (`0bda:c811`),
+in-kernel `rtw88_8821cu`, with `Bazingas-Minions-USB`
+autoconnect enabled, priority **50**, route metric **100**, and
+MAC binding `74:19:f8:17:b1:f5` rather than a fixed `wlan`
+name. Pi onboard radio previously used `Bazingas-Minions`
+metric **600**. The operator requested `dtoverlay=disable-wifi`
+in `/boot/firmware/config.txt`; no post-overlay `iw dev`
+output has been provided. Only one Wi-Fi radio should appear
+if the overlay took effect; a USB-only adapter can become
+`wlan0`. Recovery commands are in SETUP.md.
 
-**Architecture:** Pi-owned RAW/FITS science acquisitions, sequence
-scheduling and local USB storage do not wait for browser JPEG
-loads. This does not imply the exact wireless hiccups were tested
-during a saved science run. Wi-Fi may delay manual mount control;
-retain server-side 600 ms deadman and physical Cancel/power fallback.
+**No temporary debugging code:** Timing probes, a
+`/api/camera/diagnostics` endpoint and per-frame diagnostic
+counters were deleted in commit `57e0e4f`. This cleanup removes
+the stale camera-settings `queue.Full` HTTP handler (settings
+are coalesced, not enqueued) and unused CSS selectors.
+The **normal FPS/preview-processing/sensor-signal readouts,
+alternating JPEG loader, stale-response ordering and tests
+are intentional working features**, not remaining experiments.
+Do not regress them just because network transport is now smooth.
 
-**Clean state:** Temporary browser probe, server camera-timing API
-and per-frame diagnostic event counters were already removed in
-`57e0e4f`. Live preview processing/FPS fields, alternating JPEG
-loader, stale-response guard and regression tests are intentional
-features. Do not resurrect old troubleshooting code without evidence.
+Full previous investigations are available in Git history,
+not needed for a fresh development instance. Pi-owned RAW/FITS
+recording is isolated from browser timing; mount Stop's
+600 ms watchdog and physical Cancel/power backup are still
+required even with a good wireless connection.
 
 ## Must-preserve invariants
 

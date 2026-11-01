@@ -1,5 +1,4 @@
 """Flask API. Requests never call the camera SDK directly."""
-from queue import Full
 from flask import Flask, abort, jsonify, make_response, render_template, request
 from .camera.worker import CameraWorker
 from .capture.manager import CaptureManager, CaptureBusy
@@ -149,8 +148,6 @@ def create_app(settings: Settings | None = None, camera=None, lease=None, mount=
             return jsonify(error=str(exc)), 400
         except RuntimeError as exc:
             return jsonify(error=str(exc)), 409
-        except Full:
-            return jsonify(error="Camera command queue is full"), 429
         return jsonify(ok=True, request_id=request_id), 202
 
     @app.post("/api/camera/binning")

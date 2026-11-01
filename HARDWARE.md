@@ -1,6 +1,6 @@
 # AstroPi hardware reference
 
-Current verified hardware and protocol facts (updated 2026-10-29). Older detailed probe logs are in [Git history](https://github.com/Arnbargler/astropi/blob/f01ae019f9ba840f90b5bb5e566d0fc17dab41b7/HARDWARE.md); they are not current setup instructions.
+Current verified hardware and protocol facts (updated 2026-10-31). Older detailed probe logs are in [Git history](https://github.com/Arnbargler/astropi/blob/f01ae019f9ba840f90b5bb5e566d0fc17dab41b7/HARDWARE.md); they are not current setup instructions.
 
 ## Devices and installation
 
@@ -14,49 +14,43 @@ Current verified hardware and protocol facts (updated 2026-10-29). Older detaile
 
 AM3N stable serial alias: `/dev/serial/by-id/usb-ZWO_Systems_ZWO_Device_123456-if00`; Pi user belongs to `dialout`. Do not depend on shifting `/dev/ttyACM*` numbers. SVBONY SDK 1.13.4 at `/home/arn/svbony-sdk/SVBCameraSDK/lib/armv8/libSVBCameraSDK.so` (or `ASTROPI_SVB_SDK`). Camera USB permissions: `/etc/udev/rules.d/90-ckusb.rules`. Vendor binaries are not in Git.
 
-## Network hardware and field decision (2026-10-29)
+## Wireless network (field result 2026-10-31)
 
-- **Pi onboard:** Broadcom Wi-Fi, initially `wlan0`, around
-  −59 dBm to the upstairs 5 GHz access point.
-- **BrosTrend AC5L USB external antenna:** USB ID `0bda:c811`
-  (RTL8821CU), `rtw88_8821cu` in-kernel driver on
-  `6.18.39+rpt-rpi-v8`, firmware `24.11.0`, USB 2.0
-  480 Mbps. Appeared as `wlan1` with the onboard radio active.
-  No vendor/DKMS installer was needed. MAC address
-  `74:19:f8:17:b1:f5` binds the autoconnect NetworkManager
-  profile `Bazingas-Minions-USB`. Metric **100** wins over the
-  onboard connection's metric **600**. After removing onboard
-  Wi-Fi, the USB interface may become `wlan0`.
-- **Observed AC5L results:** At the same 5180 MHz AP,
-  −48 dBm immediately and −44 dBm after reboot, with link
-  RX ~390 Mbps / TX ~433 Mbps at best observed. SSH and
-  AstroPi browser preview worked. USB profile survived
-  several reboots; Wi-Fi preview stutters continued, reportedly
-  less frequently.
-- **Client:** Linux Mint n100 uses its built-in Wi-Fi,
-  approximately −58 dBm in this test. Another AC5L has been
-  **ordered for Mint but not received/tested**.
-- **Onboard shutdown:** User requested `dtoverlay=disable-wifi`
-  under `[all]` in Pi `/boot/firmware/config.txt` to
-  save power/heat. Instructions were provided, including an
-  Ethernet rollback; **the result of rebooting after applying
-  that overlay has not yet been reported**. Do not claim
-  it is confirmed disabled. See SETUP.md.
+- **AstroPi radio:** BrosTrend AC5L USB (`0bda:c811`,
+  Realtek RTL8821CU, `rtw88_8821cu` in-kernel driver on
+  `6.18.39+rpt-rpi-v8`, firmware `24.11.0`).
+  Uses USB 2.0 and needed no vendor DKMS installation.
+  Its NetworkManager profile `Bazingas-Minions-USB` is
+  autoconnect enabled, MAC-bound to `74:19:f8:17:b1:f5`,
+  with route metric **100**. Earlier 5 GHz signal was
+  −44 dBm through the upstairs AP; the Pi's internal
+  Wi-Fi was about −59 dBm and had metric **600**.
+- **Internal Pi radio:** Operator requested boot option
+  `dtoverlay=disable-wifi` to save energy; **a verifying
+  post-overlay reboot/interface report is still missing**.
+  It could leave the USB interface named `wlan0` instead
+  of `wlan1`. Verify/recover as detailed in SETUP.md.
+- **Desktop client:** **HP EliteDesk 800 G5 Mini**
+  (i5-9500T, 16 GB RAM), replacing the previous n100;
+  using a second external BrosTrend Wi-Fi adapter.
+  Exact desktop Wi-Fi driver, link rates and OS version
+  were not supplied for this observation.
+- **Preview result:** Original internal-wireless setup
+  suffered intermittent ~0.5–1 s browser JPEG pauses,
+  whereas direct Ethernet was smooth. With the
+  EliteDesk and external adapters on both ends, the
+  operator describes Wi-Fi preview as **indistinguishable
+  from direct Ethernet**. No change to the camera,
+  Flask or JPEG delivery code was required; this does
+  **not independently identify the faulty older component**
+  or prove future performance at all outdoor distances.
+  AstroPi remains in **Station Mode**, not hotspot/AP
+  mode, and no permanent Ethernet is planned.
 
-**Wireless pause isolation:** Browser JPEG preview paused
-~0.5–1 s over Wi-Fi while camera SDK/JPEG production and
-Pi-local HTTP remained fast in sampled measurements.
-Independent Mint-to-Pi Wi-Fi HTTP occasionally took ~1 s.
-Turning off Wi-Fi power saving did not solve it; numeric IP
-access was already used. Direct Pi-to-Mint Ethernet made
-the unchanged application's preview silky smooth. This
-identifies the wireless/AP delivery path as the primary
-contributor, not a particular adapter or Wi-Fi mechanism.
-The operator **does not want permanent Ethernet** at an
-outdoor telescope and accepts occasional focusing stutter.
-RAW/FITS capture/storage operates on the Pi, independent of
-browser JPEG delivery; simultaneous captured science data
-under this exact stall pattern was not re-verified.
+The camera SDK and USB RAW/FITS recording operate on the
+Pi independently of browser JPEG receipt. Network latency
+can still affect operator mount commands; keep the backend
+deadman and physical hand-controller/power fallback.
 
 ## SV705C integration quirks
 

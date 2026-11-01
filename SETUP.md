@@ -113,26 +113,25 @@ has not been rechecked. Do not replace the entire boot file unless
 necessary. **No Wi-Fi password or boot firmware settings are stored
 in this repository.**
 
-### Known preview behaviour
+### Client PC and preview (2026-10-31)
 
-Occasional ~0.5–1 s preview freezes over Wi-Fi were isolated to
-the wireless/network delivery path: direct Pi-to-Mint Ethernet
-made preview silky smooth without changing AstroPi code. With
-the AC5L, signal improved from ~−59 dBm onboard to as strong as
-~−44 dBm, and stutters seemed less frequent but **did not disappear**.
-The Mint n100 still had its internal Wi-Fi; a **second AC5L has been
-ordered for Mint**, not installed/tested as of this handoff. Its
-future results should not be assumed. Permanent Ethernet is *not*
-wanted at the telescope. For now, brief focusing-preview pauses
-are acceptable; no more performance work is planned.
+The former n100 client was replaced with an **HP EliteDesk 800 G5
+Mini** using an external BrosTrend Wi-Fi adapter; the Pi also uses
+a BrosTrend AC5L. The operator reports the live preview is now
+**indistinguishable from direct Ethernet**. No network probe,
+special startup flag, Flask configuration or camera patch is
+required. Both devices still use the home router in **Station Mode**;
+AP/hotspot mode and offline browser time synchronization were
+discussed but **not implemented or requested now**. The Pi/mount
+still relies on Internet NTP to verify the mount clock on Connect.
 
-Pi SDK acquisition, science RAW/FITS capture and USB writes are
-independent of browser JPEG timing; the actual saving of science
-exposures during these network stalls was not separately verified.
-A laggy Wi-Fi connection can also delay mount jog commands: retain
-the mount's backend 600 ms deadman and physical hand-controller
-Cancel/power fallback. Previous temporary browser/server timing
-probes were removed; no special launch flags are needed.
+Earlier wireless freezes were isolated to network delivery by
+direct-Ethernet comparison, without proving which old client,
+radio or AP component was at fault. Leave current JPEG
+double-buffer and request-ordering safeguards in place.
+The Pi handles science RAW/FITS and USB captures independently
+of browser frame delivery. Physical mount Cancel/power remains
+the final fallback if network control is interrupted.
 
 ## Camera, recording and verification
 

@@ -110,18 +110,25 @@ separate later milestones.
   accessible Stop stays above the overlay and visible in all tabs;
   ownership and Pi recording survive tab changes.
 
-## Field connectivity (operator decision, 2026-10-29)
+## Field connectivity (operator decision, 2026-10-31)
 
-- **Wi-Fi only in normal outdoor operation:** No fixed LAN link or
-  permanent direct-Ethernet configuration is wanted.
-- **Pi radio:** Prefer the tested BrosTrend AC5L external USB Wi-Fi
-  adapter using its built-in Linux driver. The operator requested
-  disabling internal Pi Wi-Fi at boot for modest power/heat savings;
-  the resulting reboot has not yet been confirmed. See SETUP.md.
-- **Live preview:** Brief Wi-Fi JPEG delays are acceptable during
-  focusing. Do not change the Pi's independent science capture
-  scheduling to match browser frame delivery. The remaining
-  stutters need not be solved before further astronomy features.
+- **Station Mode only for now:** Pi connects to the
+  existing Wi-Fi; no AP/hotspot switching or browser-based
+  offline time sync is required. Mount Connect retains
+  its Pi NTP verification.
+- **Wi-Fi hardware:** Use the Pi's BrosTrend AC5L USB
+  adapter, with a second external BrosTrend on the
+  HP EliteDesk 800 G5 Mini client. Operator reports
+  preview now as smooth as direct Ethernet; no further
+  stutter remediation is planned. Avoid a permanent
+  field Ethernet tether.
+- **Pi internal Wi-Fi:** Operator requested disabling
+  its radio at boot for modest power/heat savings;
+  confirmation after reboot is pending (SETUP.md).
+- **Preview isolation:** Keep Pi-owned RAW/FITS
+  acquisition/recording separate from browser JPEG
+  transport. Retain the frame loader and stale-response
+  fixes, and do not add back temporary timing probes.
 
 ## Explicit exclusions
 
