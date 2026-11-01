@@ -50,8 +50,10 @@ requests Stop; an idle transition does not. A closed drawer cannot
 begin a jog. The top-bar **STOP MOUNT** always remains available to
 viewers, including when the drawer is open.
 The operator token and Pi-owned exposures persist across tabs.
-The original three-tab shell was Pi-checked on 2026-10-28; **the drawer
-still needs a real-Pi browser check**.
+The original three-tab shell was Pi-checked on 2026-10-28.
+Subsequent real-Pi checks verified GoTo, STOP, tracking status/ON/OFF
+and the North/Level checkpoint. The newly added **Az Home** button
+still needs an app-driven real-mount field test.
 
 ## Field network — BrosTrend AC5L USB Wi-Fi
 
@@ -178,7 +180,7 @@ Read-only integrity check on a capture with FITS and RAW16:
 python -m astropi.capture.verify   /media/astropi-data/captures/<capture-folder>
 ```
 
-## AM3N manual movement and NTP clock
+## AM3N movement, tracking, Home and NTP clock
 
 Power the mount, click **Take Control**, open **Mount Controls** from
 any tab, then click **Connect Mount**. Connection initializes the serial
@@ -289,9 +291,10 @@ not verified optical pointing or mechanical clearance. The separate
 verified Pi NTP→AM3N clock and idle axes. Selecting a marker alone never
 moves the mount; pressing the separate GoTo button and confirming may
 start a real slew. Use global STOP MOUNT to abort. The current mount
-coordinates are **reported**, not optically calibrated. Test on the real
-AM3N with ample clearance and physical Cancel/power available; only
-simulated serial tests have passed so far. Moving the mouse over targets
+coordinates are **reported**, not optically calibrated. The user has verified actual GoTo M40, STOP during M45 and native
+tracking ON/OFF on the AM3N. Newly implemented Az Home still needs
+a cautious app-driven field test with ample clearance and physical
+Cancel/power available. Moving the mouse over targets
 must **not** open any floating VirtualSky info box over the label or
 marker; only the permanent AstroPi target readout should change on
 selection. **Horizon view** resets to the all-sky projection.

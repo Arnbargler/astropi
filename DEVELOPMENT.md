@@ -1,6 +1,6 @@
 # AstroPi — development handoff
 
-**Read README → REQUIREMENTS → HARDWARE → DEVELOPMENT → SETUP.**
+**Start with HANDOFF → README → REQUIREMENTS → HARDWARE → DEVELOPMENT → SETUP.**
 Code/tests establish implementation truth; requirements also include future work.
 The user confirmed the three-tab UI works on the Pi on 2026-10-28.
 **Current state: AM3N GoTo (M40) and emergency Stop (M45) were field-tested; native tracking ON/OFF and status were field-tested. Native **Az Home** (`:hC#`) is implemented
@@ -232,8 +232,8 @@ independently reads that catalogue and precesses J2000 RA/Dec to the mean
 equator/equinox of date (IAU 1976, matching `coordinates.js`).
 The sole serial worker sends validated `:SrHH:MM:SS#`,
 `:Sd±DD*MM:SS#` setters (each expects 1), then `:MS#` (expects 0);
-reply may include `#`. This follows the INDIGO AM driver protocol,
-not yet tested on this actual AM3N firmware. **Never permit raw serial
+reply may include `#`. This follows the INDIGO AM driver protocol; real AM3N firmware 1.8.8
+has since completed a GoTo M40 and an interrupted M45 GoTo. **Never permit raw serial
 command or browser-provided RA/Dec.** Preconditions: connected, idle,
 no conflicting job, **both** `time_sync_phase=verified` and
 `site_sync_phase=verified` from Connect or manual Sync.
@@ -249,29 +249,14 @@ manually held jog directions. Operator release requests Stop if an
 active GoTo is underway. No mount limits or local obstruction map was
 added; the operator says there are no obstructions at the indoor test
 location. The mount can still reach mechanically unexpected positions.
-**2026-10-31 initial real-Pi GoTo failure:** user reports pressing the
-confirmed GoTo immediately produces "Stop requested" followed by
-"Mount stable" with no physical movement. This means `_service_goto`
-likely handled a command error and queued Stop; there is no evidence
-that the mount accepted :MS or began moving. `/api/mount/status`
-exposes `goto_phase`, `goto_error`, `last_stop_reason`,
-`motion_phase` and `time_sync_phase`. Inspect those **before changing
-the protocol**. The proven ZWO/INDIGO native sequence remains
-:Sr (expect 1), :Sd (expect 1), :MS (expect 0); exact AM3N
-firmware replies need field verification. The browser now keeps the
-precise GoTo error in the global warning and mount motion display even
-after Stop stabilizes. Do not mistake "Axes stable" for "GoTo
-completed", and do not automatically retry rejected commands.
-**Real AM3N diagnosis:** `/api/mount/status` returned
-`goto_error="AM3N rejected :MS (reply b'e7#')"` on M39, mount
-firmware 1.8.8. The INDIGO ZWO driver maps **e7 = time and location
-are not set**. The old Connect set only UTC; it never sent site
-setters despite a readable stored location. The new auto time/site
-sync sends both and verifies each, and manual Sync is provided. **Next
-field test:** confirm new site/clock readback, repeat GoTo, verify
-physical motor movement and global Stop. No hardware confirmation yet.
-Outdoor star alignment is later.
-
+**Resolved historical `e7` issue:** the first M39 GoTo was
+rejected by `:MS#` with `e7` (firmware: time/location not set).
+Previous Connect wrote UTC but not site. AstroPi now reasserts and
+verifies the permanent site and UTC on every Connect (or explicit
+Sync Time / Site), which allowed real AM3N GoTo M40 to complete.
+Emergency STOP was then field-tested during GoTo M45.
+Keep the original rejected-command diagnostics; do not silently
+retry GoTo. Optical pointing accuracy is still unverified.
 
 **Tracking stage (2026-10-31):** native operator-only
 `POST /api/mount/tracking` with strict boolean `{"enabled":true|false}`
@@ -310,12 +295,15 @@ Normal jog and GoTo deliberately **do not clear** the initial physical
 reference. The operator procedure is: level tripod/base, return AM3N to
 native Home via hand controller or **Az Home**, physically orient mount/tripod to true
 north, turn tracking OFF and press **Confirm North / Level** in the
-Mount Controls drawer. No app Home command, motor jog, electronic mount
-sync, sky model or two-star alignment occurs. GoTo remains available
+Mount Controls drawer. The **Confirm North / Level** action itself
+sends no Home command, motor jog, electronic mount sync or sky-model
+update. The separate Az Home button does move to native Home; neither
+operation performs two-star alignment. GoTo remains available
 without this optional physical checklist until actual star-alignment
 code is implemented. Do not label confirmation 'celestially aligned'.
 Tests cover lease, strict payload, idle/tracking guards, no serial
-commands and session reset. Real-Pi visual verification is pending.
+commands and session reset. The user subsequently confirmed that the
+North/Level UI appears to function correctly on the real Pi.
 
 **Az Home (2026-10-31, requires hardware validation):**
 Operator-only `POST /api/mount/az-home` queues the ZWO/INDI/INDIGO
@@ -347,7 +335,7 @@ Stop, and unbroken capture/lease continuity on the actual Pi.
 
 **Deferred:** OpenNGC NGC/IC catalogue and filter-independent search,
 read-only mount marker, two-star alignment,
-optical GoTo accuracy, focus zoom/HFR, plate solving, stacking,
+optical GoTo accuracy, focus zoom/ROI, plate solving, stacking,
 manual time/site override.
 
 ## Testing / open verification

@@ -743,13 +743,14 @@ test("lost mount data is never shown as fresh pointing",async()=>{
   assert.equal(h.el("mount-connect").disabled,false);
 });
 
-test("mount UI has native tracking controls but no Home or Park",()=>{
+test("mount UI has tracking and Az Home without Set Home or Park",()=>{
   const html=fs.readFileSync(path.join(__dirname,"../astropi/templates/index.html"),"utf8");
   assert.match(html,/id="mount-connect"/);
   assert.match(html,/id="mount-disconnect"/);
   assert.doesNotMatch(html,/id="mount-(?:home|goto|park)(?:["-])/);
   assert.match(html,/id="mount-tracking-on"/);
   assert.match(html,/id="mount-tracking-off"/);
+  assert.match(html,/id="mount-az-home"/);
   assert.match(html,/id="mount-stop"/);
   assert.doesNotMatch(html,/id="mount-arm"/);
   assert.match(html,/id="mount-speed-slew"/);

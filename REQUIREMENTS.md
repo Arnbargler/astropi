@@ -13,7 +13,7 @@ IDs correspond to the original 70-item feature menu.
 | **#6** | Supported ROI/resolution/binning | **1×1 and 2×2 binning implemented/field-tested**; arbitrary ROI deferred |
 | **#8** | Display-only colour/debayer and white balance; preserve RAW | **Debayer On/Off implemented**; separate white-balance adjustment deferred |
 | **#9** | Histogram and display stretching | **Auto/Fixed stretch + raw statistics implemented**; histogram deferred |
-| **#10–12** | Peaking, star sharpness metric/graph (FWHM/HFD/HFR) and simple zoom | **Deferred** until after Find/VirtualSky |
+| **#10–12** | Digital focus zoom/ROI; peaking and star-sharpness metrics were exploratory | **Zoom deferred**; peaking/metrics removed from current UI, do not reintroduce without user request |
 
 Exposure presets run 1 ms–30 s. Gain presets are
 **0/50/100/260/350/450/550/650**, deliberately selected by the
@@ -52,12 +52,14 @@ of the atlas's intentionally relaxed NTP policy. Pi has **no RTC**. Neither moun
 proves optical sky alignment. Catalogue GoTo can be tested indoors,
 but is **not confirmed accurately pointed** until aligned against stars.
 
-## Offline atlas — Find tab (v0.1 and stage 1 implemented, Pi verification pending)
+## Offline atlas — Find tab (stage 1 and native GoTo implemented)
 
 **#28–30, #32** are selected long-term requirements. VirtualSky v0.1,
 110-object Messier search and live selected-target geometric Alt/Az/visibility
 are now in code; full OpenNGC/NGC/IC remains deferred.
-Real-Pi atlas verification is pending.
+Operator verified chart selection and popup behaviour on the Pi.
+Native M40 GoTo and M45 emergency Stop were also field-tested.
+Optical pointing accuracy and broader outdoor atlas checks remain pending.
 
 **VirtualSky v0.1 (implemented in Git):**
 - Embed locally packaged VirtualSky and its own JS/JSON assets in the
@@ -69,8 +71,9 @@ Real-Pi atlas verification is pending.
   already supplied by `/api/status` when Find opens and on subsequent
   status updates. Accept the Pi's time as-is: **no atlas NTP status field,
   time-accuracy check, or unsynchronized-clock warning** is required,
-  now or as a planned follow-up. A mount-site mismatch may still be shown
-  when the AM3N is connected; never overwrite the stored site.
+  now or as a planned follow-up. On explicit Connect or Sync, **write and verify** the operator-approved
+  permanent site in the AM3N, with whole-arcminute rounding; never write
+  arbitrary user-supplied coordinates. The atlas keeps the precise site.
 - Horizon view and pan; centred detail view/zoom; stars/planets,
   horizon/cardinal directions, constellation lines/labels and RA/Dec grid.
 - Bundle all **110 Messier objects** for basic `M1`–`M110` search,
@@ -80,8 +83,9 @@ Real-Pi atlas verification is pending.
   horizon using J2000-to-date precession and Pi UTC. The separate GoTo
   button enables only when operator, connected idle AM3N and verified
   clock are available; confirmation sends an actual catalogue GoTo.
-  Physical test and stellar alignment are pending. Local obstructions, mount limits and
-  alignment are not inferred from these coordinates.
+  Native motor movement and STOP were field-tested, but optical pointing
+  and stellar alignment are still pending. Local obstructions and
+  mount clearance are not inferred from these coordinates.
 
 **Later:** full local **OpenNGC NGC/IC** catalogue (#28), full catalogue
 search independent of plot filters (#30), and a carefully labelled

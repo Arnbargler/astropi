@@ -8,20 +8,26 @@ I/O and captures; the desktop/browser is only a client.
 
 ## Working state — 2026-10-31
 
+**For a fresh chat, start with [HANDOFF.md](HANDOFF.md).**
+It contains the concise verified state, current limits, next field test,
+commands and safe development workflow. This README is the overview;
+HARDWARE, REQUIREMENTS, DEVELOPMENT and SETUP hold the detail.
+
 **Previously implemented and operator-tested on the Pi:** the persistent
 **Focus / Find / Fotograph** three-tab interface. Tabs do not reload the
 page or restart hardware sessions.
 
 | Tab | Available now | Not yet available |
 | --- | --- | --- |
-| **Focus** | Shared live preview and SV705C settings | Digital zoom, star-centred ROI, peaking, HFR/focus graph |
+| **Focus** | Shared live preview and SV705C settings | Future click-centred digital zoom/ROI; star metrics and peaking are not active |
 | **Find** | Offline VirtualSky, 110 Messier targets, live Alt/Az/visibility and explicitly commanded catalogue GoTo | Two-star/optical alignment, verified sky pointing and full NGC/IC search |
 | **Fotograph** (default) | Full camera preview/settings, capture formats/counts, USB/host status | Stacking and other deferred imaging tools |
 
 The shared **Mount Controls** button in the sticky status bar slides a
 single **right-side overlay drawer** in/out from *any* tab. The drawer
 contains the AM3N Connect, telemetry, manual jog, clock/site, native
-tracking ON/OFF, physical North/Level confirmation and speed controls. It does **not resize** the camera preview or atlas, and
+tracking ON/OFF, physical North/Level confirmation, Az Home and speed
+controls. It does **not resize** the camera preview or atlas, and
 remains open when changing tabs. No pin/dock mode yet. **STOP MOUNT** and
 global camera/mount/capture status remain visible above the drawer,
 including to viewers. Closing the drawer or changing tabs during a held
@@ -153,11 +159,14 @@ English-label and Messier assets under
 `astropi/static/atlas.js` and position helper `astropi/static/coordinates.js`; provenance/permission notes are in
 `astropi/static/vendor/virtualsky/PROVENANCE.md`.
 
-**Status:** implemented in Git; GitHub CI exercises offline asset, UTC, geometric coordinate, chart-interaction and DOM
-regressions. Operator confirmed chart selection and the popup fix on
-real hardware. **Actual GoTo motor movement on the real AM3N is not yet
-verified**; only the fake-serial CI tests are complete. Full OpenNGC,
-precise pointing marker, optical alignment and focus tools remain deferred.
+**Status:** GitHub CI covers offline assets, UTC, geometric coordinates,
+chart interactions and DOM regressions. On the actual Pi the operator
+confirmed chart selection/popup behaviour, GoTo M40 physical movement
+and reported completion, emergency STOP during an M45 slew, native
+tracking ON/OFF, and the North/Level checkpoint. **Az Home** is
+implemented with fake-serial tests but awaits the first app-driven
+hardware test. No optical sky alignment or verified pointing accuracy
+yet. Full OpenNGC, mount marker and focus ROI remain deferred.
 
 ## Operate and continue development
 
@@ -175,13 +184,11 @@ The Flask development server is **trusted LAN only**, not Internet-facing.
 No systemd auto-start service is installed. No camera or mount operation
 starts merely because the page loads.
 
-**Read in order for a new AI instance:**
-
-1. **README.md** — verified current state and the immediate next task.
-2. **REQUIREMENTS.md** — selected scope, including deferred features.
-3. **HARDWARE.md** — real devices, SDK/protocol quirks and field evidence.
-4. **DEVELOPMENT.md** — file ownership, invariants, VirtualSky plan/tests.
-5. **SETUP.md** — Pi operation and diagnostics.
+**New chat entry:** [HANDOFF.md](HANDOFF.md) first, then
+[REQUIREMENTS.md](REQUIREMENTS.md) for scope,
+[HARDWARE.md](HARDWARE.md) for tested device/protocol facts,
+[DEVELOPMENT.md](DEVELOPMENT.md) for architecture/invariants,
+and [SETUP.md](SETUP.md) for operation and diagnostics.
 
 Git history holds old experiments. Do not resurrect superseded behaviour
 (such as the old camera stop/restart workaround or mount jog time limits)
