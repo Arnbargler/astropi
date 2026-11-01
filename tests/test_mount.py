@@ -602,7 +602,7 @@ def test_stop_pending_blocks_direct_jog_before_axes_stabilize(tmp_path):
 
 class ClockSyncFakePort(FakePort):
     """Simulate AM3N's single-byte setter ACK plus #-terminated getters."""
-    def __init__(self, *, failed_ack=None, old_readback=False):
+    def __init__(self, *, failed_ack=None, old_readback=False, bad_site=False):
         super().__init__({
             **RESPONSES,
             ":GG#": "+00:00", ":GC#": "01/01/00", ":GL#": "01:12:54",
@@ -610,10 +610,11 @@ class ClockSyncFakePort(FakePort):
         })
         self.failed_ack = failed_ack
         self.old_readback = old_readback
+        self.bad_site = bad_site
 
     def write(self, data):
         cmd = data.decode("ascii")
-        if cmd.startswith((":SG", ":SC", ":SL")):
+        if cmd.startswith((":SG", ":SC", ":SL", ":St", ":Sg")):
             self.commands.append(cmd)
             self.last = cmd
             if not self.old_readback:
@@ -621,8 +622,12 @@ class ClockSyncFakePort(FakePort):
                     self.responses[":GG#"] = cmd[3:-1]
                 elif cmd.startswith(":SC"):
                     self.responses[":GC#"] = cmd[3:-1]
-                else:
+                elif cmd.startswith(":SL"):
                     self.responses[":GL#"] = cmd[3:-1]
+                elif cmd.startswith(":St") and not self.bad_site:
+                    self.responses[":Gt#"] = cmd[3:-1] + ":00"
+                elif cmd.startswith(":Sg") and not self.bad_site:
+                    self.responses[":Gg#"] = "+" + cmd[3:-1] + ":00"
             return
         super().write(data)
 
@@ -680,21 +685,26 @@ def test_clock_sync_automatically_on_connect_and_populates_site_snapshot(tmp_pat
     wait_until(lambda: mount.status()["environment_phase"] == "ready")
     assert mount.status()["connected"]
     assert mount.status()["time_sync_verified_utc"] == moment.isoformat()
+    assert mount.status()["site_sync_phase"] == "verified"
+    assert mount.status()["site_sync_verified_utc"] == moment.isoformat()
     port = factory.ports[0]
     cmds = port.commands
     setters = [c for c in cmds if c.startswith((":SG", ":SC", ":SL"))]
     assert setters == [":SG+00:00#", ":SC10/28/26#", ":SL08:33:07#"]
-    assert cmds.index(":GL#") > cmds.index(":SL08:33:07#")
+    assert cmds.index(":St+45*18#") > cmds.index(":SL08:33:07#")
+    assert cmds.index(":Sg075*51#") > cmds.index(":St+45*18#")
+    assert cmds.index(":GL#") > cmds.index(":Sg075*51#")
     assert mount.status()["environment"]["date"] == "10/28/26"
     assert mount.status()["environment"]["local_time"] == "08:33:07"
-    assert mount.status()["environment"]["latitude"] == "+45*17:36"
-    assert mount.status()["environment"]["longitude_west"] == "+075*51:26"
-    assert not any(c.startswith((":St", ":Sg", ":hC", ":MS")) for c in cmds)
+    assert mount.status()["environment"]["latitude"] == "+45*18:00"
+    assert mount.status()["environment"]["longitude_west"] == "+075*51:00"
+    assert not any(c.startswith((":hC", ":MS")) for c in cmds)
     mount.disconnect()
     mount._thread.join(timeout=3)
     assert port.closed
     assert mount.status()["time_sync_phase"] == "idle"
-    # A NEW connection sets and verifies live clock again.
+    assert mount.status()["site_sync_phase"] == "idle"
+    # A NEW connection sets and verifies live clock and site again.
     mount.connect()
     wait_until(lambda: mount.status()["time_sync_phase"] == "verified")
     assert len(factory.ports) == 2
@@ -714,14 +724,17 @@ def test_clock_sync_fails_closed_when_pi_ntp_not_synchronized(tmp_path):
     assert state["time_sync_phase"] == "error"
     assert state["time_sync_verified_utc"] is None
     assert "not confirmed NTP" in state["time_sync_error"]
-    assert not any(c.startswith((":SG", ":SC", ":SL")) for c in factory.ports[0].commands)
+    assert not any(c.startswith((":SG", ":SC", ":SL", ":St", ":Sg")) for c in factory.ports[0].commands)
     mount.disconnect()
     mount._thread.join(timeout=3)
 
 
 @pytest.mark.parametrize("port_args, message", [
     ({"failed_ack":":SC"}, "rejected"),
+    ({"failed_ack":":St"}, "rejected"),
+    ({"failed_ack":":Sg"}, "rejected"),
     ({"old_readback":True}, "verification failed"),
+    ({"bad_site":True}, "site verification failed"),
 ])
 def test_clock_sync_does_not_claim_success_on_rejected_or_stale_readback(
     tmp_path, port_args, message
@@ -738,7 +751,9 @@ def test_clock_sync_does_not_claim_success_on_rejected_or_stale_readback(
     assert mount.status()["time_sync_phase"] == "error"
     assert message in mount.status()["time_sync_error"]
     assert mount.status()["time_sync_verified_utc"] is None
-    # Manually jogging is independent, but no clock VERIFIED status is invented.
+    assert mount.status()["site_sync_phase"] == "error"
+    assert mount.status()["site_sync_verified_utc"] is None
+    # Manually jogging is independent, but no clock/site VERIFIED status is invented.
     mount.disconnect()
     mount._thread.join(timeout=3)
 
@@ -928,3 +943,68 @@ def test_goto_requires_verified_mount_clock(tmp_path):
     assert not any(cmd.startswith((":Sr",":Sd",":MS")) for cmd in factory.ports[0].commands)
     worker.disconnect()
     worker._thread.join(timeout=3)
+
+
+def test_permanent_site_command_format_and_tolerant_readback():
+    from astropi.mount.worker import (
+        permanent_site_commands, verify_permanent_site, ClockSyncError)
+    assert permanent_site_commands() == (":St+45*18#", ":Sg075*51#")
+    assert verify_permanent_site("+45*18:00", "+075*51:00")
+    assert verify_permanent_site("+45*17:36", "+075*51:26")
+    for latitude, longitude in (
+        ("+44*59:00", "+075*51:00"),
+        ("+45*18:00", "+076*10:00"),
+        ("-45*18:00", "+075*51:00"),
+    ):
+        with pytest.raises(ClockSyncError):
+            verify_permanent_site(latitude, longitude)
+
+
+def test_manual_time_site_resync_endpoint_and_idle_lock(tmp_path):
+    from datetime import datetime, timezone
+    alias = tmp_path / "am3"
+    alias.touch()
+    moment = datetime(2026, 10, 31, 20, 5, 6, tzinfo=timezone.utc)
+    factory = ClockSyncFactory()
+    worker = MountWorker(alias, serial_factory=factory, poll_interval=0.04,
+                         ntp_checker=lambda: True, utc_clock=lambda: moment)
+    client = create_app(settings=Settings(tmp_path,"expected",alias,tmp_path/"usb"),
+                        mount=worker).test_client()
+    assert client.post("/api/mount/environment/sync").status_code == 403
+    token = client.post("/api/control/take").get_json()["token"]
+    headers = {"X-AstroPi-Control": token}
+    assert client.post("/api/mount/environment/sync", headers=headers).status_code == 409
+    assert client.post("/api/mount/connect", headers=headers).status_code == 202
+    wait_until(lambda: worker.status()["site_sync_phase"] == "verified")
+    wait_until(lambda: worker.status()["environment_phase"] == "ready")
+    old_count = factory.ports[0].commands.count(":St+45*18#")
+    assert old_count == 1
+    assert client.post("/api/mount/environment/sync", headers=headers).status_code == 202
+    assert client.post("/api/mount/environment/sync", headers=headers).status_code == 409
+    assert client.post("/api/mount/jog", headers=headers,
+                       json={"direction":"east"}).status_code == 409
+    wait_until(lambda: factory.ports[0].commands.count(":St+45*18#") == 2)
+    wait_until(lambda: worker.status()["environment_phase"] == "ready" and
+               worker.status()["site_sync_phase"] == "verified")
+    assert worker.status()["site_sync_error"] is None
+    assert worker.status()["environment"]["longitude_west"] == "+075*51:00"
+    worker.disconnect()
+    worker._thread.join(timeout=3)
+
+
+def test_site_failure_blocks_goto_but_allows_jog(tmp_path):
+    from datetime import datetime, timezone
+    alias = tmp_path / "am3"
+    alias.touch()
+    factory = ClockSyncFactory(bad_site=True)
+    mount = MountWorker(alias, serial_factory=factory, poll_interval=0.04,
+                        ntp_checker=lambda: True,
+                        utc_clock=lambda: datetime(2026,10,31,22,tzinfo=timezone.utc))
+    mount.connect()
+    wait_until(lambda: mount.status()["site_sync_phase"] == "error")
+    wait_until(lambda: mount.status()["connected"])
+    with pytest.raises(RuntimeError, match="permanent site"):
+        mount.goto("M31")
+    assert ":MS#" not in factory.ports[0].commands
+    mount.disconnect()
+    mount._thread.join(timeout=3)

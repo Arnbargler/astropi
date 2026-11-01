@@ -184,11 +184,16 @@ Power the mount, click **Take Control**, open **Mount Controls** from
 any tab, then click **Connect Mount**. Connection initializes the serial
 session, verifies model/firmware and checks `timedatectl` NTP status.
 If synchronized, Pi sends UTC offset `+00:00`, current UTC date/time,
-requires ACKs, then checks mount readbacks against Pi UTC. UI says
-**Pi NTP → mount clock: VERIFIED** only after success. The stored site is
-read and displayed, **not automatically overwritten**. The mount's displayed
+then fixed site **45.2933° N, 75.8571° W**, requires setter ACKs,
+and checks both UTC and site readbacks. UI shows **Pi NTP → mount
+clock: VERIFIED** and **Permanent site: VERIFIED** only after successful
+verification. The mount rounds setters to whole arcminutes, so expect
+stored readback around **+45*18:00**, **+075*51:00** (west-positive);
+the atlas continues to use precise site coordinates. The mount's
 **Mount time (UTC)** is intentionally not local Ontario time.
-If NTP is unavailable, clock remains unverified; reconnect after Pi sync.
+If NTP is unavailable, neither time nor site initializes and GoTo
+remains disabled; manual jog still works. Retry with **Sync Time / Site**
+once NTP returns, without reconnecting.
 
 Choose a mount speed **Slow 8×, Medium 20×, Fast 60×, Slew 720× or Max
 1440×**; hold N/S/E/W immediately to move and **release to Stop**. No separate
@@ -200,16 +205,19 @@ software Stop. Use the physical hand-controller Cancel/power if necessary.
 **Find now includes explicit Messier GoTo; no automatic Home, Park,
 tracking control or automatic mount alignment is implemented.**
 
-The on-demand **Refresh Clock / Site** button shows date, time, UTC
-offset, sidereal time, and persistent site latitude/longitude (west-positive
-in the mount protocol). The operator confirms the stored site is the
-**permanent observing location: +45.2933° N, −75.8571° east-positive**.
+The on-demand **Refresh Clock / Site** button reads date/time/offset,
+sidereal time and mount-reported site without writing anything.
+The separate **Sync Time / Site** button resends current Pi UTC and
+permanent location, verifies them and refreshes the readout. It
+requires an idle, connected AM3N and operator control. The operator
+approved these fixed coordinates as the **permanent observing site:
++45.2933° N, −75.8571° east-positive**.
 The offline atlas uses this site and Pi UTC time already
 returned by `/api/status`, without an atlas NTP test or clock-accuracy
 warning. This is a deliberate permanent scope decision; it does not
 affect the AM3N's existing Connect-time NTP verification. The atlas
-must not modify the mount's site. AstroPi still treats reported
-RA/Dec as unaligned.
+must retain this permanent site; only Connect or an explicit Sync
+button may reassert it. AstroPi still treats reported RA/Dec as unaligned.
 
 ## Offline Find atlas field check
 

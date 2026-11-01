@@ -14,7 +14,7 @@ The user confirmed the three-tab UI works on the Pi on 2026-10-28.
 | `astropi/camera/sdk.py`, `worker.py` | SVBONY ctypes; sole SDK thread, acquisition, settings, binning session restart, one-slot preview mailbox |
 | `astropi/camera/preview.py` | JPEG colour/mono, stretches, sparse raw statistics |
 | `astropi/capture/{manager,formats,storage,verify}.py` | Pi-owned jobs, science/quicklook formats, UUID-safe writes, read-only integrity verification |
-| `astropi/mount/{worker,goto}.py` | Sole AM3N serial worker: telemetry, UTC sync, jog/deadman, catalogue-only native GoTo, Stop and coordinate precession |
+| `astropi/mount/{worker,goto}.py` | Sole AM3N serial worker: telemetry, verified UTC+permanent site sync, jog/deadman, catalogue-only native GoTo, Stop and coordinate precession |
 | `astropi/templates/index.html`, `astropi/static/{app.js,style.css}` | Persistent Focus/Find/Fotograph UI |
 | `astropi/static/atlas.js`, `astropi/static/coordinates.js`, `astropi/static/vendor/virtualsky/` | Offline VirtualSky adapter, J2000→date geometric Alt/Az/visibility and pinned catalogue/scripts |
 | `tests/`, `.github/workflows/tests.yml` | Fake-hardware Python tests and Node 22 browser regressions |
@@ -25,7 +25,7 @@ The user confirmed the three-tab UI works on the Pi on 2026-10-28.
 **POST routes:** `/api/control/{take,heartbeat,release}`,
 `/api/camera/{start,stop,settings,binning,preview-mode,debayer}`,
 `/api/capture`, `/api/capture/{sequence,cancel}`,
-`/api/mount/{connect,disconnect,jog,jog-heartbeat,stop,environment/read,goto}`.
+`/api/mount/{connect,disconnect,jog,jog-heartbeat,stop,environment/read,environment/sync,goto}`.
 
 **Absent:** `/atlas`, full OpenNGC search, Home, Park, tracking
 and arbitrary serial-command endpoints. **No separate atlas time/NTP
@@ -152,12 +152,15 @@ required even with a good wireless connection.
    A sent `:Q#` is not proof motors stopped; physical Cancel/power
    is the final fallback.
 5. **Time and site:** explicit AM3N Connect requires verified Pi NTP
-   to sync UTC offset/date/time with ACKs/readback; failure is honestly
-   displayed and does not forbid *manual* jogging. **Do not change this
-   existing mount behaviour while implementing the atlas**; the decision
-   to skip atlas clock validation is separate. The mount-stored
-   permanent site is **+45.2933° N, −75.8571° east-positive**.
-   **Never silently overwrite it.** The Pi has no RTC. Reported RA/Dec
+   to sync UTC offset/date/time **and initialize the permanent site**
+   using fixed **+45.2933° N, −75.8571° east-positive** (approved by the
+   operator). AM3N setters round to arcminutes **:St+45*18# /
+   :Sg075*51#**, followed by :Gt/:Gg and UTC readback verification.
+   The site/clock remain marked unverified if an ACK/readback fails;
+   manual jogging is unaffected and GoTo is blocked. The same routine
+   is accessible on the idle mount using **Sync Time / Site**; separate
+   **Refresh Clock / Site** remains read-only. The atlas still deliberately
+   skips NTP checking, independently of mount control. The Pi has no RTC. Reported RA/Dec
    and mount Home do not establish optical sky alignment.
    Never auto-Home, GoTo, slew or track when opening AstroPi.
 
@@ -231,7 +234,8 @@ The sole serial worker sends validated `:SrHH:MM:SS#`,
 reply may include `#`. This follows the INDIGO AM driver protocol,
 not yet tested on this actual AM3N firmware. **Never permit raw serial
 command or browser-provided RA/Dec.** Preconditions: connected, idle,
-no conflicting job, `time_sync_phase=verified` from existing Connect.
+no conflicting job, **both** `time_sync_phase=verified` and
+`site_sync_phase=verified` from Connect or manual Sync.
 One confirmation click starts motion. Status includes goto_phase,
 goto_target, goto_error and reported angular difference; a pair of
 N/not-slewing telemetry samples within 0.35° marks reported completion,
@@ -257,9 +261,14 @@ firmware replies need field verification. The browser now keeps the
 precise GoTo error in the global warning and mount motion display even
 after Stop stabilizes. Do not mistake "Axes stable" for "GoTo
 completed", and do not automatically retry rejected commands.
-**Pending actual Pi test:** inspect exact ACK/rejection and investigate
-the mount's configured status; verify physical motion, global Stop
-and reported completion before calling stage 2 hardware-verified.
+**Real AM3N diagnosis:** `/api/mount/status` returned
+`goto_error="AM3N rejected :MS (reply b'e7#')"` on M39, mount
+firmware 1.8.8. The INDIGO ZWO driver maps **e7 = time and location
+are not set**. The old Connect set only UTC; it never sent site
+setters despite a readable stored location. The new auto time/site
+sync sends both and verifies each, and manual Sync is provided. **Next
+field test:** confirm new site/clock readback, repeat GoTo, verify
+physical motor movement and global Stop. No hardware confirmation yet.
 Outdoor star alignment is later.
 
 

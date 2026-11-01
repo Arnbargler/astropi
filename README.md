@@ -89,11 +89,16 @@ lost-heartbeat Stop and motion-settling checks. No arbitrary jog
 duration limit. A viewer can request emergency Stop without the operator
 token. Mount serial is owned by one backend worker.
 
-On explicit Connect, the Pi requires NTP synchronization before sending
-UTC date/time to the mount; ACKs and readback are checked. Failure is
-reported, not disguised. The mount-stored **permanent observing site**
-is **+45.2933° N, −75.8571° east-positive** (75.8571° W).
-It is **read-only** in AstroPi. Reported RA/Dec are *not* verified
+On explicit Connect, AstroPi uses verified Pi NTP time to set **both
+UTC date/time and the permanent observing site**, verifies setter ACKs
+and readbacks, then enables GoTo. The precise fixed site is
+**+45.2933° N, −75.8571° east-positive** (75.8571° W);
+the AM3N's location setters quantize to whole arcminutes, so its
+readback is approximately **+45*18:00 / +075*51:00 (west-positive)**.
+The atlas retains the precise coordinates. The Mount Controls drawer
+also has separate **Refresh Clock / Site** (read only) and **Sync Time /
+Site** (reinitialize while idle) buttons. Initialization failures
+are shown, not disguised; manual jogging still works. Reported RA/Dec are *not* verified
 optical pointing; **Find now supports explicitly requested Messier GoTo**
 via the serial-owning worker, with asynchronous mount-reported progress,
 verified NTP prerequisite, and global Stop. No optical alignment,

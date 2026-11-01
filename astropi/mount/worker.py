@@ -2,7 +2,7 @@
 
 Each explicit serial Connect automatically sets the mount clock from the Pi
 ONLY after systemd reports NTP synchronization, and verifies date/time from
-mount readback. No site changes, Home, Park, tracking, manual time entry or arbitrary
+mount and verified permanent-site readback. No Home, Park, tracking, manual time entry or arbitrary
 serial commands. Catalogue-only GoTo is operator-triggered;
 manual jogging retains its 600ms lost-heartbeat Stop.
 """
@@ -44,6 +44,10 @@ STOP_COMMAND = ":Q#"
 DEADMAN_SECONDS = 0.6
 STILL_TOLERANCE_DEG = 0.0006  # ~2 arcsec
 CLOCK_VERIFY_TOLERANCE_SECONDS = 6
+# Permanent site; longitude east-positive. Serial setter uses whole arcminutes.
+OBSERVING_LATITUDE = 45.2933
+OBSERVING_LONGITUDE_EAST = -75.8571
+SITE_VERIFY_TOLERANCE_DEG = 1 / 120 + 1 / 3600 + 0.00001
 GOTO_TIMEOUT_SECONDS = 300
 _CLOCK_DATE = re.compile(r"^(\d{2})/(\d{2})/(\d{2})$")
 _CLOCK_TIME = re.compile(r"^(\d{2}):(\d{2}):(\d{2})$")
@@ -103,6 +107,30 @@ def utc_sync_commands(moment):
         f":SC{utc.month:02d}/{utc.day:02d}/{utc.year % 100:02d}#",
         f":SL{utc.hour:02d}:{utc.minute:02d}:{utc.second:02d}#",
     )
+
+
+def permanent_site_commands():
+    """Set fixed site in AM3N whole-arcminute format, longitude WEST-positive."""
+    lat_min = round(abs(OBSERVING_LATITUDE) * 60)
+    west_min = round((-OBSERVING_LONGITUDE_EAST % 360) * 60) % (360 * 60)
+    lat_sign = "+" if OBSERVING_LATITUDE >= 0 else "-"
+    return (f":St{lat_sign}{lat_min // 60:02d}*{lat_min % 60:02d}#",
+            f":Sg{west_min // 60:03d}*{west_min % 60:02d}#")
+
+
+def verify_permanent_site(latitude_reply, longitude_reply):
+    """Verify mount readback against exact site within protocol rounding."""
+    latitude = angle_degrees(latitude_reply, signed=True, limit=90)
+    west = angle_degrees(longitude_reply, limit=360)
+    expected_west = (-OBSERVING_LONGITUDE_EAST) % 360
+    west_difference = abs((west - expected_west + 180) % 360 - 180)
+    if (abs(latitude - OBSERVING_LATITUDE) > SITE_VERIFY_TOLERANCE_DEG or
+            west_difference > SITE_VERIFY_TOLERANCE_DEG):
+        raise ClockSyncError(
+            "Mount site verification failed: "
+            f"latitude {latitude_reply!r}, west longitude {longitude_reply!r}"
+        )
+    return True
 
 
 def angle_degrees(value, *, signed=False, limit=90):
@@ -176,6 +204,8 @@ class MountWorker:
         self._stop_pending = False
         self._environment_pending = False
         self._environment_in_progress = False
+        self._resync_pending = False
+        self._resync_in_progress = False
         self._ever_moved = False
         self._stop_sent_at = None
         self._stop_attempts = 0
@@ -202,6 +232,8 @@ class MountWorker:
             "environment": None,
             "time_sync_phase": "idle", "time_sync_error": None,
             "time_sync_verified_utc": None, "time_sync_source": "Pi NTP (UTC)",
+            "site_sync_phase": "idle", "site_sync_error": None,
+            "site_sync_verified_utc": None,
             "goto_phase": "idle", "goto_target": None, "goto_error": None,
             "goto_requested_utc": None, "goto_position_error_deg": None,
             **_TELEMETRY,
@@ -223,6 +255,8 @@ class MountWorker:
             self._stop_pending = False
             self._environment_pending = False
             self._environment_in_progress = False
+            self._resync_pending = False
+            self._resync_in_progress = False
             self._ever_moved = False
             self._stop_sent_at = None
             self._stop_attempts = 0
@@ -241,7 +275,8 @@ class MountWorker:
                 environment_phase="idle", environment_updated_utc=None,
                 environment_error=None, environment=None,
                 time_sync_phase="checking", time_sync_error=None,
-                time_sync_verified_utc=None, goto_phase="idle",
+                time_sync_verified_utc=None, site_sync_phase="idle",
+                site_sync_error=None, site_sync_verified_utc=None, goto_phase="idle",
                 goto_target=None, goto_error=None, goto_requested_utc=None,
                 goto_position_error_deg=None, **_TELEMETRY
             )
@@ -277,7 +312,8 @@ class MountWorker:
             if self._state["motion_phase"] != "idle":
                 raise RuntimeError("Only one direction at a time")
             if (self._stop_pending or self._stop.is_set() or
-                    self._environment_pending or self._environment_in_progress):
+                    self._environment_pending or self._environment_in_progress or
+                    self._resync_pending or self._resync_in_progress):
                 raise RuntimeError("Stop, disconnect or clock/site read pending")
             # Internal motion token: only a valid active jog may renew
             # its heartbeat. No separate browser-side arm action.
@@ -301,11 +337,13 @@ class MountWorker:
         with self._lock:
             if not self._state["connected"] or self._state["phase"] != "connected":
                 raise RuntimeError("Connect the AM3N before GoTo")
-            if self._state["time_sync_phase"] != "verified":
-                raise RuntimeError("Verified Pi NTP → mount clock required before GoTo")
+            if (self._state["time_sync_phase"] != "verified" or
+                    self._state["site_sync_phase"] != "verified"):
+                raise RuntimeError("Verified Pi NTP clock and permanent site required before GoTo")
             if (self._state["motion_phase"] != "idle" or self._stop_pending or
                 self._stop.is_set() or self._environment_pending or
-                self._environment_in_progress):
+                self._environment_in_progress or self._resync_pending or
+                self._resync_in_progress):
                 raise RuntimeError("Mount must be idle before GoTo")
             self._goto_pending = (target, ra, dec)
             self._goto_coords = (ra, dec)
@@ -342,20 +380,50 @@ class MountWorker:
             last_stop_reason=reason, stop_stable=False, motion_warning=None
         )
 
+    def request_time_site_sync(self):
+        """Queue a voluntary full clock/site initialization on the serial owner."""
+        with self._lock:
+            if not self._state["connected"] or self._state["phase"] != "connected" or self._stop.is_set():
+                raise RuntimeError("Connect the mount before synchronizing time/site")
+            if (self._state["motion_phase"] != "idle" or self._stop_pending or
+                    self._environment_pending or self._environment_in_progress or
+                    self._resync_pending or self._resync_in_progress):
+                raise RuntimeError("Mount must be idle before clock/site synchronization")
+            self._resync_pending = True
+            self._state.update(
+                time_sync_phase="checking", site_sync_phase="checking",
+                time_sync_error=None, site_sync_error=None,
+                time_sync_verified_utc=None, site_sync_verified_utc=None
+            )
+            return True
+
     def request_environment_read(self):
         """Queue six read-only AM3N queries; no time/site setter commands."""
         with self._lock:
             if not self._state["connected"] or self._stop.is_set():
                 raise RuntimeError("Connect the mount to read its stored clock/site")
             if (self._armed or self._state["motion_phase"] != "idle" or
-                    self._environment_pending or self._environment_in_progress):
+                    self._environment_pending or self._environment_in_progress or
+                    self._resync_pending or self._resync_in_progress):
                 raise RuntimeError("Mount must be idle and not already reading clock/site")
             self._environment_pending = True
             self._state.update(environment_phase="queued", environment_error=None)
             return True
 
     def _service_environment(self, port):
-        """Called only by the serial-owner thread when no jog is active."""
+        """Serial owner: manual resync or read-only clock/site snapshot."""
+        with self._lock:
+            resync = self._resync_pending and self._state["motion_phase"] == "idle"
+            if resync:
+                self._resync_pending = False
+                self._resync_in_progress = True
+        if resync:
+            try:
+                self._sync_clock_on_connect(port)
+            finally:
+                with self._lock:
+                    self._resync_in_progress = False
+            return
         with self._lock:
             if not self._environment_pending or self._state["motion_phase"] != "idle":
                 return
@@ -549,12 +617,23 @@ class MountWorker:
         if ack != b"1":
             raise ClockSyncError(f"Mount rejected {command[:3]} clock setter")
 
-    def _sync_clock_on_connect(self, port):
-        """Attempt automatic UTC sync ONCE, on the serial owner.
+    def _write_site(self, port, command):
+        """Only fixed-site internally generated setter commands are allowed."""
+        if command not in permanent_site_commands():
+            raise ClockSyncError("Refusing unapproved mount location setter")
+        if self._stop.is_set():
+            raise InterruptedError("Mount disconnect requested")
+        port.write(command.encode("ascii"))
+        port.flush()
+        ack = port.read(1)
+        if ack != b"1":
+            raise ClockSyncError(f"Mount rejected {command[:3]} site setter (reply {ack!r})")
 
-        Failure is visible in status but does not disable manual mount use.
-        No GoTo/tracking is available, so unverified time never causes a
-        celestial slew. Operators can reconnect once Pi NTP becomes ready.
+    def _sync_clock_on_connect(self, port):
+        """Set UTC and permanent site, verify both, then unlock GoTo.
+
+        Called by serial owner on Connect or explicit operator Sync; manual
+        jog stays available if initialization fails, but GoTo stays locked.
         """
         try:
             if not self._ntp_checker():
@@ -565,12 +644,17 @@ class MountWorker:
             moment = self._utc_clock()
             commands = utc_sync_commands(moment)
             with self._lock:
-                self._state["time_sync_phase"] = "syncing"
+                self._state.update(time_sync_phase="syncing", site_sync_phase="syncing",
+                                   time_sync_error=None, site_sync_error=None)
             for command in commands:
                 self._write_clock(port, command)
+            for command in permanent_site_commands():
+                self._write_site(port, command)
             offset = self._query(port, ":GG#")
             date = self._query(port, ":GC#")
             clock = self._query(port, ":GL#")
+            latitude = self._query(port, ":Gt#")
+            longitude_west = self._query(port, ":Gg#")
             if offset != "+00:00":
                 raise ClockSyncError(f"Mount UTC offset readback mismatch: {offset!r}")
             mount_time = parse_mount_utc(date, clock)
@@ -580,20 +664,25 @@ class MountWorker:
                 raise ClockSyncError(
                     f"Mount clock verification failed: offset {delta:.1f}s"
                 )
+            verify_permanent_site(latitude, longitude_west)
             with self._lock:
                 if not self._stop.is_set():
                     self._state.update(
                         time_sync_phase="verified", time_sync_error=None,
                         time_sync_verified_utc=now.isoformat(),
+                        site_sync_phase="verified", site_sync_error=None,
+                        site_sync_verified_utc=now.isoformat(),
                         environment_phase="queued",
                     )
                     self._environment_pending = True
-        except (ClockSyncError, OSError, serial.SerialException, ValueError) as exc:
+        except (ClockSyncError, MountProtocolError, OSError, serial.SerialException, ValueError) as exc:
             with self._lock:
                 if not self._stop.is_set():
                     self._state.update(
                         time_sync_phase="error", time_sync_error=str(exc),
                         time_sync_verified_utc=None,
+                        site_sync_phase="error", site_sync_error=str(exc),
+                        site_sync_verified_utc=None,
                     )
 
     def _query(self, port, command):
@@ -711,7 +800,8 @@ class MountWorker:
                     environment=None, environment_updated_utc=None,
                     environment_error=None, time_sync_phase="idle",
                     time_sync_error=None, time_sync_verified_utc=None,
-                    goto_phase="idle", goto_target=None, goto_error=None,
+                    site_sync_phase="idle", site_sync_error=None,
+                    site_sync_verified_utc=None, goto_phase="idle", goto_target=None, goto_error=None,
                     goto_requested_utc=None, goto_position_error_deg=None,
                     **_TELEMETRY,
                 )

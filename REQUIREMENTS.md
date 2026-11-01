@@ -40,11 +40,15 @@ verification. Software Stop cannot guarantee physical motor stopping.
 **Permanent site:** user confirms the AM3N-stored latitude
 **+45.2933° N** and east-positive longitude **−75.8571°** are the
 real permanent observing location (AM3N serial encoding is
-**west-positive**). App reads these values; **do not overwrite them**.
-On explicit mount Connect, only if Pi NTP is synchronized, set and
-verify AM3N UTC date/time and offset zero; fail visibly on bad ACK or
-readback. **This existing mount-control safety condition remains unchanged
-and is independent of the atlas.** Pi has **no RTC**. Neither mount RA/Dec nor native Home
+**west-positive**). The operator explicitly approved reasserting these
+fixed coordinates at every mount Connect and with the new **Sync Time /
+Site** button. AM3N setters accept whole arcminutes, so these
+serialize to **:St+45*18# / :Sg075*51#**, with readback verified within
+half an arcminute plus a second; the precise values remain in AstroPi's
+atlas/planning code. Only if Pi NTP is synchronized, set and verify
+AM3N UTC date/time, offset zero **and site**; failed ACK or readback
+blocks automatic GoTo, but not manual jogging. This is independent
+of the atlas's intentionally relaxed NTP policy. Pi has **no RTC**. Neither mount RA/Dec nor native Home
 proves optical sky alignment. Catalogue GoTo can be tested indoors,
 but is **not confirmed accurately pointed** until aligned against stars.
 

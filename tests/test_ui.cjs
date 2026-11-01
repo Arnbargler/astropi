@@ -23,6 +23,7 @@ function harness() {
     motion_phase:"idle",motion_armed:false,stop_stable:false,motion_warning:null,
     environment_phase:"idle",environment:null,environment_error:null,
     time_sync_phase:"idle",time_sync_error:null,time_sync_verified_utc:null,
+    site_sync_phase:"idle",site_sync_error:null,site_sync_verified_utc:null,
     jog_speed:"slow",
     altitude_text:null,azimuth_text:null,ra_text:null,dec_text:null,
     raw_status:null,updated_utc:null,last_error:null};
@@ -81,6 +82,10 @@ function harness() {
     }
     if (url === "/api/camera/progress") return {ok:true,json:async()=>({...camera,capture:{...capture}})};
     if (url === "/api/mount/status") return {ok:true,json:async()=>({...mount})};
+    if (url === "/api/mount/environment/sync") {
+      mount = {...mount,time_sync_phase:"checking",site_sync_phase:"checking"};
+      return {ok:true,json:async()=>({ok:true,state:"queued"})};
+    }
     if (url === "/api/mount/environment/read") {
       mount = {...mount,environment_phase:"queued"};
       return {ok:true,json:async()=>({ok:true,state:"queued"})};
@@ -1030,6 +1035,29 @@ test("failed GoTo remains explicit after Stop confirms stationary axes",async()=
   assert.doesNotMatch(h.el("mount-motion").textContent,/M76 FAILED/);
 });
 
+test("manual time and permanent-site synchronization requires idle controlled mount",async()=>{
+  const h=harness();
+  await h.flush();
+  assert.equal(h.el("mount-sync-environment").disabled,true);
+  await h.el("take-control").dispatch("click");
+  await h.el("mount-connect").dispatch("click");
+  await h.intervals.get(1000)();
+  assert.equal(h.el("mount-sync-environment").disabled,false);
+  await h.el("mount-sync-environment").dispatch("click");
+  assert.equal(h.calls.filter(c=>c.url==="/api/mount/environment/sync").length,1);
+  h.updateMount({time_sync_phase:"verified",site_sync_phase:"verified",
+                 site_sync_error:null,site_sync_verified_utc:"2026-10-31T22:00:00Z"});
+  await h.intervals.get(1000)();
+  assert.match(h.el("mount-site-sync").textContent,/VERIFIED/);
+  h.updateMount({motion_phase:"moving"});
+  await h.intervals.get(1000)();
+  assert.equal(h.el("mount-sync-environment").disabled,true);
+  h.updateMount({motion_phase:"idle",site_sync_phase:"error",
+                 site_sync_error:"Site readback mismatch"});
+  await h.intervals.get(1000)();
+  assert.match(h.el("mount-environment-error").textContent,/Site readback mismatch/);
+});
+
 test("global mount warning exposes uncertain stop while other tab is visible",async()=>{
   const h=harness();
   await h.flush();
@@ -1071,7 +1099,7 @@ test("three workspaces retain responsive controls and safety warnings",()=>{
     "capture-fits","capture-raw","capture-jpg","capture-png","capture-1",
     "capture-5","capture-50","capture-100","capture-150","capture-200",
     "cancel-sequence","capture-results","mount-connect",
-    "mount-disconnect","mount-stop","mount-speed-slow","mount-speed-max",
+    "mount-disconnect","mount-stop","mount-sync-environment","mount-site-sync","mount-speed-slow","mount-speed-max",
     "mount-north","mount-south","mount-west","mount-east",
     "mount-env-time","mount-env-latitude","mount-raw-status",
     "storage-state","storage-free","pi-temp","pi-uptime",

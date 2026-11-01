@@ -44,6 +44,9 @@ let heldMountDirection = null;
 let mountStopPending = false;
 let mountHeartbeatBusy = false;
 let mountEnvironmentPhase = "idle";
+let mountSiteVerified = false;
+let mountSyncPhase = "idle";
+let mountSyncRequestPending = false;
 let mountClockVerified = false;
 let mountGotoPending = false;
 const mountSpeeds = ["slow", "medium", "fast", "slew", "max"];
@@ -91,9 +94,15 @@ function updateButtons() {
   $("mount-disconnect").disabled = !owner || mountRequestPending ||
     !["connecting", "connected"].includes(mountPhase);
   $("mount-stop").disabled = mountPhase !== "connected" || mountStopPending;
+  const environmentBusy = ["queued","reading"].includes(mountEnvironmentPhase);
   $("mount-read-environment").disabled = !owner || mountPhase !== "connected" ||
     mountRequestPending || mountMotionPhase !== "idle" || Boolean(heldMountDirection) ||
-    mountEnvironmentPhase === "queued" || mountEnvironmentPhase === "reading";
+    environmentBusy || mountSyncRequestPending ||
+    ["checking","syncing"].includes(mountSyncPhase);
+  $("mount-sync-environment").disabled = !owner || mountPhase !== "connected" ||
+    mountRequestPending || mountMotionPhase !== "idle" || Boolean(heldMountDirection) ||
+    environmentBusy || mountSyncRequestPending ||
+    ["checking","syncing"].includes(mountSyncPhase);
   for (const speed of mountSpeeds) {
     $("mount-speed-" + speed).disabled = !owner || mountPhase !== "connected" ||
       mountMotionPhase !== "idle" || mountRequestPending ||
@@ -440,6 +449,28 @@ $("mount-read-environment").addEventListener("click", async () => {
     updateButtons();
   }
 });
+$("mount-sync-environment").addEventListener("click", async () => {
+  if (!token || mountPhase !== "connected" || mountMotionPhase !== "idle" ||
+      heldMountDirection || mountSyncRequestPending ||
+      ["queued","reading"].includes(mountEnvironmentPhase) ||
+      ["checking","syncing"].includes(mountSyncPhase)) return;
+  mountSyncRequestPending = true;
+  mountSiteVerified = false;
+  mountClockVerified = false;
+  mountSyncPhase = "checking";
+  updateButtons();
+  try {
+    await post("/api/mount/environment/sync");
+    write("mount-environment-error", "");
+    write("mount-site-sync", "Permanent site: synchronizing from the Pi…");
+    await refreshMount();
+  } catch(error) {
+    write("mount-environment-error", error.message);
+  } finally {
+    mountSyncRequestPending = false;
+    updateButtons();
+  }
+});
 $("mount-connect").addEventListener("click", () => mountAction("/api/mount/connect"));
 $("mount-disconnect").addEventListener("click", () => mountAction("/api/mount/disconnect"));
 async function mountAction(url) {
@@ -471,6 +502,9 @@ function showMount(data) {
   mountEnvironmentPhase = data.environment_phase || "idle";
   const syncPhase = data.time_sync_phase || "idle";
   mountClockVerified = syncPhase === "verified";
+  const sitePhase = data.site_sync_phase || "idle";
+  mountSyncPhase = ["checking","syncing"].includes(syncPhase) ? syncPhase : sitePhase;
+  mountSiteVerified = sitePhase === "verified";
   const syncLabels = {
     idle: "Pi NTP → mount clock: not synchronized",
     checking: "Pi NTP → mount clock: checking NTP synchronization…",
@@ -482,6 +516,18 @@ function showMount(data) {
   };
   write("mount-time-sync", syncLabels[syncPhase] || ("Clock sync: " + syncPhase));
   write("mount-time-sync-error", data.time_sync_error || "");
+  const siteMessage = {
+    idle: "Permanent site: not synchronized",
+    checking: "Permanent site: waiting to initialize…",
+    syncing: "Permanent site: setting and verifying…",
+    verified: "Permanent site: VERIFIED (45.2933° N, 75.8571° W)",
+    error: "Permanent site: NOT synchronized"
+  };
+  write("mount-site-sync", siteMessage[sitePhase] || "Permanent site: " + sitePhase);
+  if (sitePhase === "error")
+    write("mount-environment-error", data.site_sync_error || "Site verification failed");
+  else if (!data.environment_error)
+    write("mount-environment-error", "");
   if (mountPhase !== "connected") heldMountDirection = null;
   const env = mountPhase === "connected" ? data.environment : null;
   write("mount-environment-state", env ?
@@ -497,7 +543,7 @@ function showMount(data) {
   };
   for (const [id, key] of Object.entries(fields))
     write(id, env && env[key] ? env[key] : "—");
-  write("mount-environment-error", data.environment_error || "");
+  write("mount-environment-error", data.site_sync_error || data.environment_error || "");
   write("mount-phase", "Connection: " + mountPhase);
   const gotoFailure = data.goto_phase === "error"
     ? "GoTo " + (data.goto_target || "target") + " FAILED: " +
@@ -555,12 +601,12 @@ function showMount(data) {
  // never arbitrary coordinates or raw mount serial commands.
 window.AstroPiGoto = {
   ready: () => Boolean(token) && mountPhase === "connected" &&
-    mountClockVerified && mountMotionPhase === "idle" &&
+    mountClockVerified && mountSiteVerified && mountMotionPhase === "idle" &&
     !mountRequestPending && !mountGotoPending && !heldMountDirection &&
     !["queued","reading"].includes(mountEnvironmentPhase),
   request: async target => {
     if (!window.AstroPiGoto.ready()) throw Error(
-      "Take Control, connect the mount and verify its UTC clock before GoTo");
+      "Take Control, connect the mount and verify both UTC clock and site before GoTo");
     mountGotoPending = true;
     mountMotionPhase = "goto_queued";
     updateButtons();
