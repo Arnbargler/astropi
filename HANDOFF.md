@@ -51,28 +51,27 @@ experiments, **not** instructions to restore old features.
   correctly. It is a UTC-stamped **operator acknowledgment**, not mount
   coordinate alignment. Resets on disconnect/process restart. Jog/GoTo
   do not clear the checkpoint.
-- **Az Home browser button: implemented and CI-tested, not yet tested
-  on the real mount from AstroPi.** It uses native `:hC#` (both axes),
+- **Az Home browser button: successfully field-tested on the real
+  AM3N from AstroPi's Mount Controls (operator confirmation 2026-10-31).** It uses native `:hC#` (both axes),
   requires Alt/Az and Tracking OFF, and watches `:GU#` for H + N across
   two polls. Native Home itself was previously proven in a standalone
   serial probe. Software STOP must remain usable during Homing.
 
-## Most useful next hardware check
+## Most useful next development step
 
-1. Stop current Flask, pull `main`, restart, hard-refresh.
-2. With clear mechanical travel and physical Cancel/power available,
-   take control, Connect, **Tracking OFF**, jog a little away from
-   native Home, press **Az Home**. Check actual movement and reported
-   completion. Test STOP during a second Home motion if safe.
-3. Report the exact `home_phase`, `home_error`, `at_home`,
-   `motion_phase` from `/api/mount/status` if behaviour differs.
-   During hand-controller Home the firmware temporarily returned
-   tracking query error `e5` but reached Home successfully. The app
-   shows tracking **UNKNOWN** for this reply; don't equate it with
-   Home failure.
-4. Then plan **two-star alignment** in Find. Don't claim optical
-   alignment based on native Home, operator North/Level confirmation,
-   or the mount's reported RA/Dec alone.
+1. **Az Home has passed the real-mount field test** using AstroPi's
+   Mount Controls; do not treat basic app-driven Home as untested.
+2. If safely practical later, separately field-test **global STOP
+   during an active Az Home motion**; this specific interrupt scenario
+   has not been confirmed by the reported successful Home test.
+3. Plan **two-star alignment** in Find. Don't claim optical alignment
+   based on native Home, operator North/Level confirmation, or the
+   mount's reported RA/Dec alone.
+4. If Home behaviour ever differs, inspect `home_phase`, `home_error`,
+   `at_home` and `motion_phase` from `/api/mount/status`. The firmware
+   previously returned transient tracking query error `e5` during
+   hand-controller Home despite successful movement; the app reports
+   tracking **UNKNOWN** rather than treating it as Home failure.
 
 ## Boundaries and unfinished work
 
@@ -121,5 +120,5 @@ node --test tests/test_ui.cjs tests/test_atlas.cjs
 ```
 
 **Best immediate next chat prompt:** "Read `HANDOFF.md` in
-`Arnbargler/astropi`; review current main. Let's test Az Home on the
-real AM3N and then design two-star alignment." 
+`Arnbargler/astropi`; review current main. Az Home is field-tested;
+let's design two-star alignment." 
