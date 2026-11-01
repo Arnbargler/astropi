@@ -119,7 +119,8 @@ and clears on disconnect or by explicit Clear. No optical/two-star alignment,
 automatic Home or Park has been implemented. A new explicit **Az Home** button
 uses ZWO `:hC#` to slew both axes to manufacturer Home, with STOP and
 telemetry-based completion. It requires tracking OFF and Alt/Az mode
-and still needs an AM3N hardware test. It does not redefine Home or
+and has been successfully field-tested on the real AM3N (2026-10-31).
+It does not redefine Home or
 perform optical alignment.
 
 ## Offline VirtualSky atlas in Find — implemented in code
@@ -164,8 +165,9 @@ chart interactions and DOM regressions. On the actual Pi the operator
 confirmed chart selection/popup behaviour, GoTo M40 physical movement
 and reported completion, emergency STOP during an M45 slew, native
 tracking ON/OFF, and the North/Level checkpoint. **Az Home** is
-implemented with fake-serial tests but awaits the first app-driven
-hardware test. No optical sky alignment or verified pointing accuracy
+implemented with fake-serial tests and successfully field-tested
+through the app on the real AM3N. A dedicated STOP-during-Home test
+remains outstanding. No optical sky alignment or verified pointing accuracy
 yet. Full OpenNGC, mount marker and focus ROI remain deferred.
 
 ## Operate and continue development
