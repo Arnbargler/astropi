@@ -206,7 +206,7 @@ software Stop. Use the physical hand-controller Cancel/power if necessary.
 and an emergency Stop field-tested on M40/M45.** No automatic Home,
 Park, celestial alignment or tracking activation is implemented.
 
-### Native tracking control (needs first AM3N hardware test)
+### Native tracking control (verified on AM3N)
 
 The Mount Controls drawer now shows live **Tracking: ON/OFF/UNKNOWN**,
 queried from firmware `:GAT#`. After taking control, **Tracking ON**
@@ -221,7 +221,29 @@ The mount may change tracking state itself after GoTo; the live indicator
 will reveal that. **STOP MOUNT** remains the proven `:Q#` for jog and
 slew; use **Tracking OFF** separately to end tracking. Tracking is
 not automatically switched on at Connect or startup. Native firmware
-tracking behaviour has not yet been tested on the user's AM3N.
+tracking ON/OFF and verified readback were tested on the user's AM3N;
+the mount reported Tracking ON immediately after Connect.
+
+### North / Level — physical setup confirmation
+
+In the shared **Mount Controls** drawer, set **Tracking OFF** and wait
+until the AM3N reports **Tracking: OFF**. Level the tripod/base, return
+the mount to its **native Home** using the hand controller, and
+**physically rotate the entire mount/tripod assembly** so the telescope
+at Home faces **true north** (not magnetic north). Do **not** jog the axes
+to redefine mechanical Home.
+
+Then press **Confirm North / Level**. AstroPi stores an
+**operator-confirmed, UTC-timestamped physical-setup checkpoint**. This
+button sends **no serial commands**, changes no mount position or Home
+definition, and does not perform optical alignment. Native Home telemetry
+is advisory; a missing Home flag is not proof the mount is elsewhere.
+Confirmation requires a connected, idle mount reporting tracking OFF;
+if Tracking is ON, turn it off first. The state persists through normal
+manual jogs and GoTo and resets on serial Disconnect/Connect or process
+restart. If the tripod is moved, press **Clear Confirmation**.
+The button does not yet gate GoTo; accurate celestial pointing will
+require the later two-star alignment in Find.
 
 The on-demand **Refresh Clock / Site** button reads date/time/offset,
 sidereal time and mount-reported site without writing anything.

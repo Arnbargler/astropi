@@ -52,6 +52,8 @@ let mountGotoPending = false;
 let mountTrackingReported = null;
 let mountTrackingPhase = "idle";
 let mountTrackingRequestPending = false;
+let mountNorthLevelConfirmed = false;
+let mountNorthLevelRequestPending = false;
 const mountSpeeds = ["slow", "medium", "fast", "slew", "max"];
 let selectedMountSpeed = "slow";
 function showMountSpeed(speed) {
@@ -116,6 +118,12 @@ function updateButtons() {
   $("mount-tracking-on").disabled = !canTrack || !mountClockVerified ||
     !mountSiteVerified || mountTrackingReported === true;
   $("mount-tracking-off").disabled = !canTrack || mountTrackingReported === false;
+  const setupReady = canTrack && mountTrackingReported === false &&
+    !mountNorthLevelRequestPending;
+  $("mount-north-level-confirm").disabled = !setupReady || mountNorthLevelConfirmed;
+  $("mount-north-level-clear").disabled = !owner ||
+    mountPhase !== "connected" || mountNorthLevelRequestPending ||
+    !mountNorthLevelConfirmed;
   for (const speed of mountSpeeds) {
     $("mount-speed-" + speed).disabled = !owner || mountPhase !== "connected" ||
       mountMotionPhase !== "idle" || mountRequestPending ||
@@ -505,6 +513,30 @@ async function requestMountTracking(enabled) {
 }
 $("mount-tracking-on").addEventListener("click", () => requestMountTracking(true));
 $("mount-tracking-off").addEventListener("click", () => requestMountTracking(false));
+async function setNorthLevelConfirmation(confirmed) {
+  if (!token || mountNorthLevelRequestPending || mountPhase !== "connected") return;
+  if (confirmed && (mountMotionPhase !== "idle" || heldMountDirection ||
+      mountTrackingReported !== false || mountNorthLevelConfirmed ||
+      ["queued","sending","verifying"].includes(mountTrackingPhase) ||
+      ["queued","reading"].includes(mountEnvironmentPhase) ||
+      ["checking","syncing"].includes(mountSyncPhase))) return;
+  mountNorthLevelRequestPending = true;
+  updateButtons();
+  try {
+    await post("/api/mount/north-level", {confirmed});
+    write("mount-north-level-error", "");
+    await refreshMount();
+  } catch(error) {
+    write("mount-north-level-error", error.message);
+  } finally {
+    mountNorthLevelRequestPending = false;
+    updateButtons();
+  }
+}
+$("mount-north-level-confirm").addEventListener("click",
+  () => setNorthLevelConfirmation(true));
+$("mount-north-level-clear").addEventListener("click",
+  () => setNorthLevelConfirmation(false));
 $("mount-connect").addEventListener("click", () => mountAction("/api/mount/connect"));
 $("mount-disconnect").addEventListener("click", () => mountAction("/api/mount/disconnect"));
 async function mountAction(url) {
@@ -556,6 +588,16 @@ function showMount(data) {
   };
   write("mount-tracking-action", trackingMessages[mountTrackingPhase] || mountTrackingPhase);
   write("mount-tracking-error", data.tracking_error || data.tracking_status_error || "");
+  mountNorthLevelConfirmed = mountPhase === "connected" &&
+    data.north_level_confirmed === true;
+  write("mount-north-level-status", mountNorthLevelConfirmed ?
+    "Physical setup: CONFIRMED" +
+      (data.north_level_confirmed_utc ? " (" +
+       new Date(data.north_level_confirmed_utc).toLocaleTimeString() + ")" : "") :
+    "Physical setup: not confirmed");
+  write("mount-north-level-home", data.at_home === true && mountPhase === "connected" ?
+    "Home signal: mount reports Home" :
+    "Home signal: not confirmed by telemetry — verify native Home manually");
   const syncLabels = {
     idle: "Pi NTP → mount clock: not synchronized",
     checking: "Pi NTP → mount clock: checking NTP synchronization…",

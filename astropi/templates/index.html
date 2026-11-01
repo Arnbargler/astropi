@@ -271,6 +271,18 @@
           <p id="mount-tracking-error" role="alert" class="mount-error"></p>
           <p class="mount-small">GoTo does not automatically enable tracking in AstroPi. Use Tracking OFF to end tracking; STOP is for mount slews/jogs.</p>
         </div>
+        <div class="mount-north-level-panel" aria-label="Physical North Level setup">
+          <h4>North / Level · physical setup</h4>
+          <p class="mount-small">Level the tripod/base. Put the AM3N in its native Home position using the hand controller. Physically rotate the mount/tripod assembly until the telescope at Home faces <strong>true north</strong>. Do not jog the axes to redefine Home.</p>
+          <p id="mount-north-level-home" class="mount-small">Home signal: not checked</p>
+          <p id="mount-north-level-status" role="status" aria-live="polite">Physical setup: not confirmed</p>
+          <div class="button-row">
+            <button type="button" id="mount-north-level-confirm" disabled>Confirm North / Level</button>
+            <button type="button" id="mount-north-level-clear" disabled>Clear Confirmation</button>
+          </div>
+          <p id="mount-north-level-error" role="alert" class="mount-error"></p>
+          <p class="mount-small">Requires Tracking OFF. This records your physical setup only; it does not command Home or perform star alignment. Confirmation resets on mount disconnect.</p>
+        </div>
         <div class="mount-jog-panel">
           <p class="mount-caution">Software Stop is not fail-safe; keep physical Cancel/power accessible.</p>
           <div class="mount-speed" role="group" aria-label="Manual mount jog speed">

@@ -1169,3 +1169,95 @@ def test_unverified_mount_cannot_enable_tracking_but_can_disable(tmp_path):
     assert ":Td#" in factory.ports[0].commands
     worker.disconnect()
     worker._thread.join(timeout=3)
+
+
+# --- Operator-confirmed physical North / Level / native Home checkpoint ---
+
+def test_north_level_confirmation_requires_operator_idle_and_tracking_off(tmp_path):
+    from datetime import datetime, timezone
+    alias = tmp_path / "am3"
+    alias.touch()
+    factory = TrackingFactory()
+    worker = MountWorker(alias, serial_factory=factory, poll_interval=0.04,
+                         ntp_checker=lambda: True,
+                         utc_clock=lambda: datetime(2026,10,31,23,tzinfo=timezone.utc))
+    client = create_app(settings=Settings(tmp_path,"expected",alias,tmp_path/"usb"),
+                        mount=worker).test_client()
+    endpoint = "/api/mount/north-level"
+    assert client.post(endpoint,json={"confirmed":True}).status_code == 403
+    token = client.post("/api/control/take").get_json()["token"]
+    headers = {"X-AstroPi-Control":token}
+    for invalid in (None, 1, "yes", {}, [], {"confirmed":1}, {"confirmed":"true"}):
+        resp = client.post(endpoint,headers=headers,json=invalid)
+        assert resp.status_code == 400
+    assert client.post(endpoint,headers=headers,json={"confirmed":True}).status_code == 409
+    assert client.post("/api/mount/connect",headers=headers).status_code == 202
+    wait_until(lambda: worker.status()["connected"] and
+               worker.status()["tracking"] is False and
+               worker.status()["site_sync_phase"] == "verified")
+    # AM3N's H flag is optional; don't claim or demand sensor proof of Home.
+    factory.ports[0].responses[":GU#"] = "nNZM000000880"
+    wait_until(lambda: worker.status()["at_home"] is None)
+    commands_before = [x for x in factory.ports[0].commands
+                       if x.startswith((":St", ":Sg", ":Te", ":Td", ":hC", ":CM"))]
+    assert client.post(endpoint,headers=headers,json={"confirmed":True}).status_code == 200
+    status = client.get("/api/mount/status").get_json()
+    assert status["north_level_confirmed"] is True
+    assert status["north_level_confirmed_utc"].endswith("+00:00")
+    # No servo command, Home command, sync or change in mount coordinates.
+    assert [x for x in factory.ports[0].commands
+            if x.startswith((":St", ":Sg", ":Te", ":Td", ":hC", ":CM"))] == commands_before
+    # A subsequent jog must NOT clear the previously acknowledged setup.
+    worker.jog("east")
+    wait_until(lambda: worker.status()["motion_phase"] == "moving")
+    assert client.post(endpoint,headers=headers,json={"confirmed":True}).status_code == 409
+    assert worker.status()["north_level_confirmed"] is True
+    worker.emergency_stop()
+    wait_until(lambda: worker.status()["stop_stable"],timeout=5)
+    assert worker.status()["north_level_confirmed"] is True
+    # Moving the tripod is a human action: Clear invalidates the record.
+    assert client.post(endpoint,headers=headers,json={"confirmed":False}).status_code == 200
+    assert client.get("/api/mount/status").get_json()["north_level_confirmed"] is False
+    assert worker.status()["north_level_confirmed_utc"] is None
+    assert worker.confirm_north_level(True) is True
+    assert worker.disconnect()
+    assert worker.status()["north_level_confirmed"] is False
+    worker._thread.join(timeout=3)
+    # Confirmation does not persist across serial sessions.
+    assert worker.status()["north_level_confirmed"] is False
+    worker.connect()
+    wait_until(lambda: worker.status()["connected"])
+    assert worker.status()["north_level_confirmed"] is False
+    worker.disconnect()
+    worker._thread.join(timeout=3)
+
+
+def test_north_level_rejects_tracking_on_unknown_and_pending_ops(tmp_path):
+    from datetime import datetime, timezone
+    alias=tmp_path/"am3"
+    alias.touch()
+    factory=TrackingFactory()
+    worker=MountWorker(alias,serial_factory=factory,poll_interval=0.04,
+                       ntp_checker=lambda:True,
+                       utc_clock=lambda:datetime(2026,10,31,23,tzinfo=timezone.utc))
+    worker.connect()
+    wait_until(lambda:worker.status()["tracking"] is False and
+               worker.status()["site_sync_phase"]=="verified")
+    worker.request_tracking(True)
+    with pytest.raises(RuntimeError,match="idle"):
+        worker.confirm_north_level(True)
+    wait_until(lambda:worker.status()["tracking"] is True and
+               worker.status()["tracking_phase"]=="verified")
+    with pytest.raises(RuntimeError,match="Tracking OFF"):
+        worker.confirm_north_level(True)
+    worker.request_tracking(False)
+    wait_until(lambda:worker.status()["tracking"] is False and
+               worker.status()["tracking_phase"]=="verified")
+    with worker._lock:
+        worker._state["tracking"] = None
+    with pytest.raises(RuntimeError,match="Tracking OFF"):
+        worker.confirm_north_level(True)
+    # Clearing never requires stopped tracking or a motor command.
+    assert worker.confirm_north_level(False) is False
+    worker.disconnect()
+    worker._thread.join(timeout=3)

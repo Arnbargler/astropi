@@ -239,6 +239,8 @@ class MountWorker:
             "goto_phase": "idle", "goto_target": None, "goto_error": None,
             "tracking_phase": "idle", "tracking_target": None,
             "tracking_error": None, "tracking_status_error": None,
+            # Operator attestation only; NOT a serial mount alignment/sync.
+            "north_level_confirmed": False, "north_level_confirmed_utc": None,
             "goto_requested_utc": None, "goto_position_error_deg": None,
             **_TELEMETRY,
         }
@@ -286,6 +288,7 @@ class MountWorker:
                 goto_target=None, goto_error=None, goto_requested_utc=None,
                 tracking_phase="idle", tracking_target=None,
                 tracking_error=None, tracking_status_error=None,
+                north_level_confirmed=False, north_level_confirmed_utc=None,
                 goto_position_error_deg=None, **_TELEMETRY
             )
             self._thread = threading.Thread(
@@ -305,7 +308,9 @@ class MountWorker:
             # BEFORE closing if any jog or stop has been requested.
             self._state.update(
                 phase="disconnecting", connected=False, motion_armed=False,
-                motion_phase="disconnecting", **_TELEMETRY
+                motion_phase="disconnecting",
+                north_level_confirmed=False, north_level_confirmed_utc=None,
+                **_TELEMETRY
             )
             return True
 
@@ -364,6 +369,39 @@ class MountWorker:
                 goto_requested_utc=self._utc_clock().isoformat(),
                 motion_phase="goto_queued", stop_stable=False)
             return target
+
+    def confirm_north_level(self, confirmed):
+        """Operator records or clears a PHYSICAL north/level/Home checklist.
+
+        This does not send a serial command, change mount Home, calibrate a
+        pointing model, or claim optical alignment. It is a session-local
+        starting-reference checkpoint for future star-alignment work.
+        """
+        if type(confirmed) is not bool:
+            raise ValueError("North/Level confirmation must be true or false")
+        with self._lock:
+            if not confirmed:
+                self._state.update(north_level_confirmed=False,
+                                   north_level_confirmed_utc=None)
+                return False
+            if (not self._state["connected"] or
+                    self._state["phase"] != "connected" or self._stop.is_set()):
+                raise RuntimeError("Connect the mount before confirming North/Level")
+            if (self._state["motion_phase"] != "idle" or self._stop_pending or
+                    self._armed or self._pending_direction is not None or
+                    self._goto_pending is not None or
+                    self._tracking_pending is not None or
+                    self._state["tracking_phase"] in ("queued", "sending", "verifying") or
+                    self._environment_pending or self._environment_in_progress or
+                    self._resync_pending or self._resync_in_progress):
+                raise RuntimeError("Mount must be idle before confirming North/Level")
+            if self._state["tracking"] is not False:
+                raise RuntimeError("Turn Tracking OFF and verify OFF before North/Level")
+            self._state.update(
+                north_level_confirmed=True,
+                north_level_confirmed_utc=datetime.now(timezone.utc).isoformat()
+            )
+            return True
 
     def request_tracking(self, enabled):
         """Queue an explicit tracking command on the single serial owner.
@@ -910,6 +948,7 @@ class MountWorker:
                     site_sync_verified_utc=None, goto_phase="idle", goto_target=None, goto_error=None,
                     tracking_phase="idle", tracking_target=None, tracking_error=None,
                     tracking_status_error=None,
+                    north_level_confirmed=False, north_level_confirmed_utc=None,
                     goto_requested_utc=None, goto_position_error_deg=None,
                     **_TELEMETRY,
                 )

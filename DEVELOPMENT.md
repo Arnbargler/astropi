@@ -3,7 +3,7 @@
 **Read README → REQUIREMENTS → HARDWARE → DEVELOPMENT → SETUP.**
 Code/tests establish implementation truth; requirements also include future work.
 The user confirmed the three-tab UI works on the Pi on 2026-10-28.
-**Current task: stage-2 catalogue GoTo is implemented in code; field-test native AM3N slew/Stop and report any protocol differences before adding alignment. No verified optical pointing yet.**
+**Current state: AM3N GoTo (M40) and emergency Stop (M45) were field-tested; native tracking ON/OFF and status were field-tested. North/Level physical setup confirmation is implemented as an operator checkpoint; two-star/optical alignment remains unimplemented.**
 
 ## Code map
 
@@ -25,7 +25,7 @@ The user confirmed the three-tab UI works on the Pi on 2026-10-28.
 **POST routes:** `/api/control/{take,heartbeat,release}`,
 `/api/camera/{start,stop,settings,binning,preview-mode,debayer}`,
 `/api/capture`, `/api/capture/{sequence,cancel}`,
-`/api/mount/{connect,disconnect,jog,jog-heartbeat,stop,environment/read,environment/sync,goto,tracking}`.
+`/api/mount/{connect,disconnect,jog,jog-heartbeat,stop,environment/read,environment/sync,goto,tracking,north-level}`.
 
 **Absent:** `/atlas`, full OpenNGC search, Home, Park,
 and arbitrary serial-command endpoints. **No separate atlas time/NTP
@@ -284,13 +284,37 @@ clock/site; OFF is allowed without. Both require connected/idle,
 nonconflicting mount. No implicit tracking toggle on GoTo, Connect,
 startup or target selection. Site/time re-sync requires tracking OFF.
 Global STOP retains the proven :Q# slew/jog semantics; use explicit
-Tracking OFF to stop tracking. CI simulated; actual firmware 1.8.8
-tracking commands and any GoTo auto-tracking behaviour **await Pi test**.
+Tracking OFF to stop tracking. CI simulated; operator subsequently **field-tested ON/OFF and readback**
+on firmware 1.8.8. Mount initially reported Tracking ON after Connect.
+Any automatic tracking transition specifically caused by GoTo remains
+unverified; app leaves Connect and GoTo tracking unchanged.
 
 **Real-hardware milestone (2026-10-31):** M40 GoTo produced correct
 Alt/Az and reported completion; emergency STOP interrupted M45 GoTo.
 Those tests establish motor response and reported-position behaviour,
 **not optical celestial alignment**.
+
+**North/Level physical setup checkpoint (2026-10-31):**
+`POST /api/mount/north-level` accepts only an operator-held strict JSON
+boolean `{"confirmed":true|false}`. Confirmation is accepted only if
+serial Connect is active, mount `motion_phase=idle`, tracking is
+**positively reported OFF**, and no queued/pending serial operation
+exists. Absence of the AM3N `H` Home flag is *unknown*, so native Home
+is confirmed by the operator physically, not inferred by the Pi.
+Confirmation updates status fields `north_level_confirmed` and
+`north_level_confirmed_utc`, with no serial command or mount coordinate
+transformation. Clear invalidates the checkpoint (e.g. tripod moved);
+disconnect/reconnect or process restart invalidates it automatically.
+Normal jog and GoTo deliberately **do not clear** the initial physical
+reference. The operator procedure is: level tripod/base, return AM3N to
+native Home via hand controller, physically orient mount/tripod to true
+north, turn tracking OFF and press **Confirm North / Level** in the
+Mount Controls drawer. No app Home command, motor jog, electronic mount
+sync, sky model or two-star alignment occurs. GoTo remains available
+without this optional physical checklist until actual star-alignment
+code is implemented. Do not label confirmation 'celestially aligned'.
+Tests cover lease, strict payload, idle/tracking guards, no serial
+commands and session reset. Real-Pi visual verification is pending.
 
 **Verification:** `tests/test_atlas.py` checks local assets, all 110
 catalogue entries and motion-free adapter. `tests/test_atlas.cjs`
@@ -301,7 +325,7 @@ M1/M31/M42/M110, no remote requests, UTC, responsive layout, mount
 Stop, and unbroken capture/lease continuity on the actual Pi.
 
 **Deferred:** OpenNGC NGC/IC catalogue and filter-independent search,
-read-only mount marker, north/level and two-star alignment,
+read-only mount marker, two-star alignment,
 optical GoTo accuracy, focus zoom/HFR, plate solving, stacking,
 manual time/site override.
 

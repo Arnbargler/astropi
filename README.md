@@ -15,13 +15,13 @@ page or restart hardware sessions.
 | Tab | Available now | Not yet available |
 | --- | --- | --- |
 | **Focus** | Shared live preview and SV705C settings | Digital zoom, star-centred ROI, peaking, HFR/focus graph |
-| **Find** | Offline VirtualSky, 110 Messier targets, live Alt/Az/visibility and explicitly commanded catalogue GoTo | Optical alignment, verified sky pointing and full NGC/IC search |
+| **Find** | Offline VirtualSky, 110 Messier targets, live Alt/Az/visibility and explicitly commanded catalogue GoTo | Two-star/optical alignment, verified sky pointing and full NGC/IC search |
 | **Fotograph** (default) | Full camera preview/settings, capture formats/counts, USB/host status | Stacking and other deferred imaging tools |
 
 The shared **Mount Controls** button in the sticky status bar slides a
 single **right-side overlay drawer** in/out from *any* tab. The drawer
 contains the AM3N Connect, telemetry, manual jog, clock/site, native
-tracking ON/OFF and speed controls. It does **not resize** the camera preview or atlas, and
+tracking ON/OFF, physical North/Level confirmation and speed controls. It does **not resize** the camera preview or atlas, and
 remains open when changing tabs. No pin/dock mode yet. **STOP MOUNT** and
 global camera/mount/capture status remain visible above the drawer,
 including to viewers. Closing the drawer or changing tabs during a held
@@ -106,7 +106,11 @@ uses :GAT# and explicit :Te# / :Td# with response verification; this
 new feature is **not yet AM3N hardware-tested**. Tracking is not
 automatically enabled by AstroPi after GoTo. The reported-coordinate
 GoTo and its emergency Stop have passed user field tests (M40/M45).
-No optical alignment, Home or Park has been implemented.
+Mount Controls also includes an **operator-confirmed physical North/Level/Home
+checkpoint**; this is a timestamped session-local acknowledgement, not a
+mount alignment/sync command. It requires tracking OFF and an idle mount,
+and clears on disconnect or by explicit Clear. No optical/two-star alignment,
+automatic Home or Park has been implemented.
 
 ## Offline VirtualSky atlas in Find — implemented in code
 

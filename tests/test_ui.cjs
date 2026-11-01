@@ -26,6 +26,7 @@ function harness() {
     site_sync_phase:"idle",site_sync_error:null,site_sync_verified_utc:null,
     jog_speed:"slow",tracking:null,tracking_phase:"idle",tracking_target:null,
     tracking_error:null,tracking_status_error:null,
+    north_level_confirmed:false,north_level_confirmed_utc:null,
     altitude_text:null,azimuth_text:null,ra_text:null,dec_text:null,
     raw_status:null,updated_utc:null,last_error:null};
   let camera = {
@@ -87,6 +88,11 @@ function harness() {
       mount = {...mount,time_sync_phase:"checking",site_sync_phase:"checking"};
       return {ok:true,json:async()=>({ok:true,state:"queued"})};
     }
+    if (url === "/api/mount/north-level") {
+      mount={...mount,north_level_confirmed:payload.confirmed,
+        north_level_confirmed_utc:payload.confirmed ? "2026-10-31T23:55:00Z" : null};
+      return {ok:true,json:async()=>({ok:true,confirmed:payload.confirmed})};
+    }
     if (url === "/api/mount/tracking") {
       mount = {...mount,tracking_phase:"queued",tracking_target:payload.enabled,
         tracking_error:null};
@@ -109,6 +115,7 @@ function harness() {
     }
     if (url === "/api/mount/connect") {
       mount = {...mount,phase:"connected",connected:true,model:"AM3N",
+        north_level_confirmed:false,north_level_confirmed_utc:null,
         firmware:"1.8.8",altitude_text:"+01*30:50",azimuth_text:"013*43:10",
         ra_text:"12:34:56",dec_text:"-22*15:30",
         tracking:false,tracking_phase:"idle",tracking_target:null,
@@ -118,6 +125,7 @@ function harness() {
     }
     if (url === "/api/mount/disconnect") {
       mount = {...mount,phase:"disconnected",connected:false,
+        north_level_confirmed:false,north_level_confirmed_utc:null,
         tracking:null,tracking_phase:"idle",tracking_target:null,
         motion_phase:"idle",motion_armed:false,
         altitude_text:null,azimuth_text:null,ra_text:null,dec_text:null,
@@ -629,6 +637,52 @@ test("tracking ON/OFF requires control and verified time/site; mount readback dr
   await h.intervals.get(1000)();
   assert.equal(h.el("mount-tracking-on").disabled,true);
   assert.equal(h.el("mount-tracking-off").disabled,true);
+});
+
+test("North / Level is a manual physical checkpoint, never a Home command",async()=>{
+  const h=harness();
+  await h.flush();
+  assert.equal(h.el("mount-north-level-confirm").disabled,true);
+  assert.match(h.el("mount-north-level-status").textContent,/not confirmed/);
+  await h.el("take-control").dispatch("click");
+  await h.el("mount-connect").dispatch("click");
+  assert.equal(h.el("mount-north-level-confirm").disabled,false);
+  h.updateMount({tracking:true});
+  await h.intervals.get(1000)();
+  assert.equal(h.el("mount-north-level-confirm").disabled,true,
+    "Tracking ON must prevent physical setup confirmation");
+  h.updateMount({tracking:null,at_home:null});
+  await h.intervals.get(1000)();
+  assert.equal(h.el("mount-north-level-confirm").disabled,true);
+  assert.match(h.el("mount-north-level-home").textContent,/verify native Home manually/);
+  h.updateMount({tracking:false,at_home:null});
+  await h.intervals.get(1000)();
+  assert.equal(h.el("mount-north-level-confirm").disabled,false,
+    "Absent Home flag is UNKNOWN, not a blocker for manual confirmation");
+  await h.el("mount-north-level-confirm").dispatch("click");
+  const requests=h.calls.filter(c=>c.url==="/api/mount/north-level");
+  assert.equal(requests.length,1);
+  assert.equal(requests[0].payload.confirmed,true);
+  assert.match(h.el("mount-north-level-status").textContent,/CONFIRMED/);
+  assert.equal(h.el("mount-north-level-confirm").disabled,true);
+  assert.equal(h.el("mount-north-level-clear").disabled,false);
+  h.updateMount({motion_phase:"goto_slewing"});
+  await h.intervals.get(1000)();
+  assert.match(h.el("mount-north-level-status").textContent,/CONFIRMED/,
+    "GoTo does not invalidate the physical starting reference");
+  await h.el("mount-north-level-clear").dispatch("click");
+  assert.equal(h.calls.filter(c=>c.url==="/api/mount/north-level").length,2);
+  assert.equal(h.calls.filter(c=>c.url==="/api/mount/north-level")[1].payload.confirmed,false);
+  assert.match(h.el("mount-north-level-status").textContent,/not confirmed/);
+  h.updateMount({motion_phase:"idle"});
+  await h.intervals.get(1000)();
+  await h.el("mount-north-level-confirm").dispatch("click");
+  await h.el("mount-disconnect").dispatch("click");
+  assert.match(h.el("mount-north-level-status").textContent,/not confirmed/);
+  assert.equal(h.el("mount-north-level-confirm").disabled,true);
+  assert.equal(h.el("mount-north-level-clear").disabled,true);
+  assert.equal(h.calls.filter(c=>/mount\/(?:home|sync|align)/.test(c.url)).length,0,
+    "Physical confirmation must never send mount motor/coordinate commands");
 });
 
 test("lost mount data is never shown as fresh pointing",async()=>{
@@ -1157,6 +1211,8 @@ test("three workspaces retain responsive controls and safety warnings",()=>{
     "cancel-sequence","capture-results","mount-connect",
     "mount-disconnect","mount-stop","mount-sync-environment","mount-site-sync",
     "mount-tracking-on","mount-tracking-off","mount-tracking-status","mount-tracking-error",
+    "mount-north-level-confirm","mount-north-level-clear","mount-north-level-status",
+    "mount-north-level-home","mount-north-level-error",
     "mount-speed-slow","mount-speed-max",
     "mount-north","mount-south","mount-west","mount-east",
     "mount-env-time","mount-env-latitude","mount-raw-status",

@@ -153,6 +153,21 @@ def create_app(settings: Settings | None = None, camera=None, lease=None, mount=
             return jsonify(error=str(exc)), 409
         return jsonify(ok=True, enabled=enabled, state="queued"), 202
 
+    @app.post("/api/mount/north-level")
+    def set_north_level():
+        """Record operator-confirmed physical setup; never move or sync mount."""
+        require_operator()
+        payload = request.get_json(silent=True)
+        if not isinstance(payload, dict):
+            return jsonify(error="Expected JSON object with confirmed boolean"), 400
+        try:
+            confirmed = mount_worker.confirm_north_level(payload.get("confirmed"))
+        except ValueError as exc:
+            return jsonify(error=str(exc)), 400
+        except RuntimeError as exc:
+            return jsonify(error=str(exc)), 409
+        return jsonify(ok=True, confirmed=confirmed), 200
+
     @app.get("/api/mount/status")
     def mount_status():
         return jsonify(mount_worker.status())
