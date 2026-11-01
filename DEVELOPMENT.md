@@ -25,9 +25,9 @@ The user confirmed the three-tab UI works on the Pi on 2026-10-28.
 **POST routes:** `/api/control/{take,heartbeat,release}`,
 `/api/camera/{start,stop,settings,binning,preview-mode,debayer}`,
 `/api/capture`, `/api/capture/{sequence,cancel}`,
-`/api/mount/{connect,disconnect,jog,jog-heartbeat,stop,environment/read,environment/sync,goto}`.
+`/api/mount/{connect,disconnect,jog,jog-heartbeat,stop,environment/read,environment/sync,goto,tracking}`.
 
-**Absent:** `/atlas`, full OpenNGC search, Home, Park, tracking
+**Absent:** `/atlas`, full OpenNGC search, Home, Park,
 and arbitrary serial-command endpoints. **No separate atlas time/NTP
 endpoint is needed**; `/api/status` already includes Pi UTC.
 
@@ -272,6 +272,26 @@ physical motor movement and global Stop. No hardware confirmation yet.
 Outdoor star alignment is later.
 
 
+**Tracking stage (2026-10-31):** native operator-only
+`POST /api/mount/tracking` with strict boolean `{"enabled":true|false}`
+queues only `:Te#` (ON) or `:Td#` (OFF) through the one serial owner.
+Status `:GAT#` independently reports `0`/OFF or `1`/ON; malformed
+responses become UNKNOWN, never false OFF. A setter ACK must be followed
+by matching :GAT readback, otherwise the command reports an error.
+Status includes `tracking`, `tracking_phase`, `tracking_target`,
+`tracking_error`, `tracking_status_error`. ON requires verified Pi
+clock/site; OFF is allowed without. Both require connected/idle,
+nonconflicting mount. No implicit tracking toggle on GoTo, Connect,
+startup or target selection. Site/time re-sync requires tracking OFF.
+Global STOP retains the proven :Q# slew/jog semantics; use explicit
+Tracking OFF to stop tracking. CI simulated; actual firmware 1.8.8
+tracking commands and any GoTo auto-tracking behaviour **await Pi test**.
+
+**Real-hardware milestone (2026-10-31):** M40 GoTo produced correct
+Alt/Az and reported completion; emergency STOP interrupted M45 GoTo.
+Those tests establish motor response and reported-position behaviour,
+**not optical celestial alignment**.
+
 **Verification:** `tests/test_atlas.py` checks local assets, all 110
 catalogue entries and motion-free adapter. `tests/test_atlas.cjs`
 checks Pi UTC, search/clicks, projections and offline loading;
@@ -282,7 +302,7 @@ Stop, and unbroken capture/lease continuity on the actual Pi.
 
 **Deferred:** OpenNGC NGC/IC catalogue and filter-independent search,
 read-only mount marker, north/level and two-star alignment,
-optical GoTo accuracy and tracking controls, focus zoom/HFR, plate solving, stacking,
+optical GoTo accuracy, focus zoom/HFR, plate solving, stacking,
 manual time/site override.
 
 ## Testing / open verification

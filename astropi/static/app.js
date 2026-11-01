@@ -49,6 +49,9 @@ let mountSyncPhase = "idle";
 let mountSyncRequestPending = false;
 let mountClockVerified = false;
 let mountGotoPending = false;
+let mountTrackingReported = null;
+let mountTrackingPhase = "idle";
+let mountTrackingRequestPending = false;
 const mountSpeeds = ["slow", "medium", "fast", "slew", "max"];
 let selectedMountSpeed = "slow";
 function showMountSpeed(speed) {
@@ -99,10 +102,20 @@ function updateButtons() {
     mountRequestPending || mountMotionPhase !== "idle" || Boolean(heldMountDirection) ||
     environmentBusy || mountSyncRequestPending ||
     ["checking","syncing"].includes(mountSyncPhase);
-  $("mount-sync-environment").disabled = !owner || mountPhase !== "connected" ||
-    mountRequestPending || mountMotionPhase !== "idle" || Boolean(heldMountDirection) ||
-    environmentBusy || mountSyncRequestPending ||
-    ["checking","syncing"].includes(mountSyncPhase);
+  const trackingBusy = mountTrackingRequestPending ||
+    ["queued","sending","verifying"].includes(mountTrackingPhase);
+  const mountIdle = mountPhase === "connected" &&
+    mountMotionPhase === "idle" && !heldMountDirection &&
+    !mountRequestPending && !mountStopPending;
+  $("mount-sync-environment").disabled = !owner || !mountIdle ||
+    environmentBusy || mountSyncRequestPending || mountTrackingReported === true ||
+    trackingBusy || ["checking","syncing"].includes(mountSyncPhase);
+  const canTrack = owner && mountIdle && !environmentBusy &&
+    !mountSyncRequestPending && !["checking","syncing"].includes(mountSyncPhase) &&
+    !trackingBusy;
+  $("mount-tracking-on").disabled = !canTrack || !mountClockVerified ||
+    !mountSiteVerified || mountTrackingReported === true;
+  $("mount-tracking-off").disabled = !canTrack || mountTrackingReported === false;
   for (const speed of mountSpeeds) {
     $("mount-speed-" + speed).disabled = !owner || mountPhase !== "connected" ||
       mountMotionPhase !== "idle" || mountRequestPending ||
@@ -471,6 +484,27 @@ $("mount-sync-environment").addEventListener("click", async () => {
     updateButtons();
   }
 });
+async function requestMountTracking(enabled) {
+  if (!token || mountPhase !== "connected" || mountMotionPhase !== "idle" ||
+      heldMountDirection || mountTrackingRequestPending ||
+      ["queued","sending","verifying"].includes(mountTrackingPhase)) return;
+  mountTrackingRequestPending = true;
+  mountTrackingPhase = "queued";
+  updateButtons();
+  try {
+    await post("/api/mount/tracking", {enabled});
+    write("mount-tracking-error", "");
+    await refreshMount();
+  } catch(error) {
+    mountTrackingPhase = "error";
+    write("mount-tracking-error", error.message);
+  } finally {
+    mountTrackingRequestPending = false;
+    updateButtons();
+  }
+}
+$("mount-tracking-on").addEventListener("click", () => requestMountTracking(true));
+$("mount-tracking-off").addEventListener("click", () => requestMountTracking(false));
 $("mount-connect").addEventListener("click", () => mountAction("/api/mount/connect"));
 $("mount-disconnect").addEventListener("click", () => mountAction("/api/mount/disconnect"));
 async function mountAction(url) {
@@ -505,6 +539,23 @@ function showMount(data) {
   const sitePhase = data.site_sync_phase || "idle";
   mountSyncPhase = ["checking","syncing"].includes(syncPhase) ? syncPhase : sitePhase;
   mountSiteVerified = sitePhase === "verified";
+  mountTrackingReported = data.tracking === true ? true :
+    data.tracking === false ? false : null;
+  mountTrackingPhase = data.tracking_phase || "idle";
+  const liveTracking = mountPhase === "connected" ? mountTrackingReported : null;
+  write("mount-tracking-status", "Tracking: " +
+    (liveTracking === true ? "ON" : liveTracking === false ? "OFF" : "UNKNOWN"));
+  const trackingMessages = {
+    idle: "Tracking is controlled by the AM3N.",
+    queued: "Tracking command queued…",
+    sending: "Sending tracking command…",
+    verifying: "Waiting for mount tracking readback…",
+    verified: "Tracking command VERIFIED by mount",
+    error: "Tracking command FAILED",
+    aborted: "Tracking command interrupted by STOP"
+  };
+  write("mount-tracking-action", trackingMessages[mountTrackingPhase] || mountTrackingPhase);
+  write("mount-tracking-error", data.tracking_error || data.tracking_status_error || "");
   const syncLabels = {
     idle: "Pi NTP → mount clock: not synchronized",
     checking: "Pi NTP → mount clock: checking NTP synchronization…",
@@ -603,6 +654,8 @@ window.AstroPiGoto = {
   ready: () => Boolean(token) && mountPhase === "connected" &&
     mountClockVerified && mountSiteVerified && mountMotionPhase === "idle" &&
     !mountRequestPending && !mountGotoPending && !heldMountDirection &&
+    !mountTrackingRequestPending &&
+    !["queued","sending","verifying"].includes(mountTrackingPhase) &&
     !["queued","reading"].includes(mountEnvironmentPhase),
   request: async target => {
     if (!window.AstroPiGoto.ready()) throw Error(

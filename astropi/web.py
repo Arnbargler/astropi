@@ -141,6 +141,18 @@ def create_app(settings: Settings | None = None, camera=None, lease=None, mount=
             return jsonify(error=str(exc)), 409
         return jsonify(ok=True, state="queued"), 202
 
+    @app.post("/api/mount/tracking")
+    def set_mount_tracking():
+        require_operator()
+        payload = request.get_json(silent=True) or {}
+        try:
+            enabled = mount_worker.request_tracking(payload.get("enabled"))
+        except ValueError as exc:
+            return jsonify(error=str(exc)), 400
+        except RuntimeError as exc:
+            return jsonify(error=str(exc)), 409
+        return jsonify(ok=True, enabled=enabled, state="queued"), 202
+
     @app.get("/api/mount/status")
     def mount_status():
         return jsonify(mount_worker.status())

@@ -15,13 +15,13 @@ page or restart hardware sessions.
 | Tab | Available now | Not yet available |
 | --- | --- | --- |
 | **Focus** | Shared live preview and SV705C settings | Digital zoom, star-centred ROI, peaking, HFR/focus graph |
-| **Find** | Offline VirtualSky, 110 Messier targets, live Alt/Az/visibility and explicitly commanded catalogue GoTo | Optical alignment, verified sky pointing, tracking controls and full NGC/IC search |
+| **Find** | Offline VirtualSky, 110 Messier targets, live Alt/Az/visibility and explicitly commanded catalogue GoTo | Optical alignment, verified sky pointing and full NGC/IC search |
 | **Fotograph** (default) | Full camera preview/settings, capture formats/counts, USB/host status | Stacking and other deferred imaging tools |
 
 The shared **Mount Controls** button in the sticky status bar slides a
 single **right-side overlay drawer** in/out from *any* tab. The drawer
-contains the existing AM3N Connect, telemetry, manual jog, clock/site and
-speed controls. It does **not resize** the camera preview or atlas, and
+contains the AM3N Connect, telemetry, manual jog, clock/site, native
+tracking ON/OFF and speed controls. It does **not resize** the camera preview or atlas, and
 remains open when changing tabs. No pin/dock mode yet. **STOP MOUNT** and
 global camera/mount/capture status remain visible above the drawer,
 including to viewers. Closing the drawer or changing tabs during a held
@@ -101,8 +101,12 @@ Site** (reinitialize while idle) buttons. Initialization failures
 are shown, not disguised; manual jogging still works. Reported RA/Dec are *not* verified
 optical pointing; **Find now supports explicitly requested Messier GoTo**
 via the serial-owning worker, with asynchronous mount-reported progress,
-verified NTP prerequisite, and global Stop. No optical alignment,
-tracking control, Home or Park has been implemented or field-tested.
+verified NTP prerequisite, and global Stop. Native tracking status/control
+uses :GAT# and explicit :Te# / :Td# with response verification; this
+new feature is **not yet AM3N hardware-tested**. Tracking is not
+automatically enabled by AstroPi after GoTo. The reported-coordinate
+GoTo and its emergency Stop have passed user field tests (M40/M45).
+No optical alignment, Home or Park has been implemented.
 
 ## Offline VirtualSky atlas in Find — implemented in code
 

@@ -261,6 +261,16 @@
           <div><span>RA (reported)</span><strong id="mount-ra">—</strong></div>
           <div><span>Dec (reported)</span><strong id="mount-dec">—</strong></div>
         </div>
+        <div class="mount-tracking-panel">
+          <p id="mount-tracking-status" role="status" aria-live="polite">Tracking: UNKNOWN</p>
+          <div class="button-row">
+            <button type="button" id="mount-tracking-on" disabled>Tracking ON</button>
+            <button type="button" id="mount-tracking-off" disabled>Tracking OFF</button>
+          </div>
+          <p id="mount-tracking-action" role="status">Tracking is controlled by the AM3N.</p>
+          <p id="mount-tracking-error" role="alert" class="mount-error"></p>
+          <p class="mount-small">GoTo does not automatically enable tracking in AstroPi. Use Tracking OFF to end tracking; STOP is for mount slews/jogs.</p>
+        </div>
         <div class="mount-jog-panel">
           <p class="mount-caution">Software Stop is not fail-safe; keep physical Cancel/power accessible.</p>
           <div class="mount-speed" role="group" aria-label="Manual mount jog speed">

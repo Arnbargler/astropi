@@ -24,7 +24,8 @@ function harness() {
     environment_phase:"idle",environment:null,environment_error:null,
     time_sync_phase:"idle",time_sync_error:null,time_sync_verified_utc:null,
     site_sync_phase:"idle",site_sync_error:null,site_sync_verified_utc:null,
-    jog_speed:"slow",
+    jog_speed:"slow",tracking:null,tracking_phase:"idle",tracking_target:null,
+    tracking_error:null,tracking_status_error:null,
     altitude_text:null,azimuth_text:null,ra_text:null,dec_text:null,
     raw_status:null,updated_utc:null,last_error:null};
   let camera = {
@@ -86,6 +87,11 @@ function harness() {
       mount = {...mount,time_sync_phase:"checking",site_sync_phase:"checking"};
       return {ok:true,json:async()=>({ok:true,state:"queued"})};
     }
+    if (url === "/api/mount/tracking") {
+      mount = {...mount,tracking_phase:"queued",tracking_target:payload.enabled,
+        tracking_error:null};
+      return {ok:true,json:async()=>({ok:true,state:"queued",enabled:payload.enabled})};
+    }
     if (url === "/api/mount/environment/read") {
       mount = {...mount,environment_phase:"queued"};
       return {ok:true,json:async()=>({ok:true,state:"queued"})};
@@ -105,12 +111,14 @@ function harness() {
       mount = {...mount,phase:"connected",connected:true,model:"AM3N",
         firmware:"1.8.8",altitude_text:"+01*30:50",azimuth_text:"013*43:10",
         ra_text:"12:34:56",dec_text:"-22*15:30",
-        tracking:false,slewing:false,at_home:true,altaz_mode:true,
+        tracking:false,tracking_phase:"idle",tracking_target:null,
+        slewing:false,at_home:true,altaz_mode:true,
         raw_status:"nNHZM040400990",updated_utc:"2026-10-27T20:00:00+00:00"};
       return {ok:true,json:async()=>({ok:true})};
     }
     if (url === "/api/mount/disconnect") {
       mount = {...mount,phase:"disconnected",connected:false,
+        tracking:null,tracking_phase:"idle",tracking_target:null,
         motion_phase:"idle",motion_armed:false,
         altitude_text:null,azimuth_text:null,ra_text:null,dec_text:null,
         raw_status:null,updated_utc:null};
@@ -567,6 +575,7 @@ test("mount telemetry viewer remains read-only; operator explicitly connects",as
   assert.equal(h.el("mount-ra").textContent,"12:34:56");
   assert.equal(h.el("mount-dec").textContent,"-22*15:30");
   assert.match(h.el("mount-flags").textContent,/not tracking/);
+  assert.equal(h.el("mount-tracking-status").textContent,"Tracking: OFF");
   assert.match(h.el("mount-raw-status").textContent,/nNHZM040400990/);
   assert.equal(h.el("mount-connect").disabled,true);
   assert.equal(h.el("mount-disconnect").disabled,false);
@@ -575,6 +584,48 @@ test("mount telemetry viewer remains read-only; operator explicitly connects",as
   assert.equal(h.el("mount-altitude").textContent,"—");
   assert.equal(h.el("mount-azimuth").textContent,"—");
   assert.equal(h.el("mount-disconnect").disabled,true);
+});
+
+test("tracking ON/OFF requires control and verified time/site; mount readback drives display",async()=>{
+  const h=harness();
+  await h.flush();
+  assert.equal(h.el("mount-tracking-on").disabled,true);
+  assert.match(h.el("mount-tracking-status").textContent,/UNKNOWN/);
+  await h.el("take-control").dispatch("click");
+  await h.el("mount-connect").dispatch("click");
+  assert.equal(h.el("mount-tracking-on").disabled,true);
+  assert.equal(h.el("mount-tracking-off").disabled,false);
+  h.updateMount({time_sync_phase:"verified",site_sync_phase:"verified"});
+  await h.intervals.get(1000)();
+  assert.equal(h.el("mount-tracking-on").disabled,false);
+  await h.el("mount-tracking-on").dispatch("click");
+  assert.equal(h.calls.filter(c=>c.url==="/api/mount/tracking").length,1);
+  assert.equal(h.calls.find(c=>c.url==="/api/mount/tracking").payload.enabled,true);
+  assert.equal(h.el("mount-tracking-on").disabled,true);
+  assert.match(h.el("mount-tracking-action").textContent,/queued/);
+  h.updateMount({tracking:true,tracking_phase:"verified"});
+  await h.intervals.get(1000)();
+  assert.equal(h.el("mount-tracking-status").textContent,"Tracking: ON");
+  assert.equal(h.el("mount-tracking-off").disabled,false);
+  assert.equal(h.el("mount-sync-environment").disabled,true);
+  await h.el("mount-tracking-off").dispatch("click");
+  assert.deepEqual(h.calls.filter(c=>c.url==="/api/mount/tracking").map(c=>c.payload.enabled),[true,false]);
+  h.updateMount({tracking:false,tracking_phase:"verified"});
+  await h.intervals.get(1000)();
+  assert.equal(h.el("mount-tracking-status").textContent,"Tracking: OFF");
+  assert.equal(h.el("mount-sync-environment").disabled,false);
+  h.updateMount({tracking:null,tracking_status_error:"Unexpected :GAT# reply"});
+  await h.intervals.get(1000)();
+  assert.equal(h.el("mount-tracking-status").textContent,"Tracking: UNKNOWN");
+  assert.match(h.el("mount-tracking-error").textContent,/GAT/);
+  h.updateMount({tracking:false,tracking_phase:"error",tracking_error:"AM3N rejected tracking ON"});
+  await h.intervals.get(1000)();
+  assert.match(h.el("mount-tracking-error").textContent,/rejected tracking ON/);
+  h.updateMount({tracking_phase:"idle",tracking_error:null,tracking_status_error:null,
+                 motion_phase:"goto_slewing"});
+  await h.intervals.get(1000)();
+  assert.equal(h.el("mount-tracking-on").disabled,true);
+  assert.equal(h.el("mount-tracking-off").disabled,true);
 });
 
 test("lost mount data is never shown as fresh pointing",async()=>{
@@ -591,11 +642,13 @@ test("lost mount data is never shown as fresh pointing",async()=>{
   assert.equal(h.el("mount-connect").disabled,false);
 });
 
-test("mount UI has immediate manual controls but no Home GoTo Park or tracking",()=>{
+test("mount UI has native tracking controls but no Home or Park",()=>{
   const html=fs.readFileSync(path.join(__dirname,"../astropi/templates/index.html"),"utf8");
   assert.match(html,/id="mount-connect"/);
   assert.match(html,/id="mount-disconnect"/);
-  assert.doesNotMatch(html,/id="mount-(?:home|goto|track|park)"/);
+  assert.doesNotMatch(html,/id="mount-(?:home|goto|park)(?:["-])/);
+  assert.match(html,/id="mount-tracking-on"/);
+  assert.match(html,/id="mount-tracking-off"/);
   assert.match(html,/id="mount-stop"/);
   assert.doesNotMatch(html,/id="mount-arm"/);
   assert.match(html,/id="mount-speed-slew"/);
@@ -1099,7 +1152,9 @@ test("three workspaces retain responsive controls and safety warnings",()=>{
     "capture-fits","capture-raw","capture-jpg","capture-png","capture-1",
     "capture-5","capture-50","capture-100","capture-150","capture-200",
     "cancel-sequence","capture-results","mount-connect",
-    "mount-disconnect","mount-stop","mount-sync-environment","mount-site-sync","mount-speed-slow","mount-speed-max",
+    "mount-disconnect","mount-stop","mount-sync-environment","mount-site-sync",
+    "mount-tracking-on","mount-tracking-off","mount-tracking-status","mount-tracking-error",
+    "mount-speed-slow","mount-speed-max",
     "mount-north","mount-south","mount-west","mount-east",
     "mount-env-time","mount-env-latitude","mount-raw-status",
     "storage-state","storage-free","pi-temp","pi-uptime",
@@ -1124,5 +1179,7 @@ test("three workspaces retain responsive controls and safety warnings",()=>{
   assert.match(html,/vendor\/virtualsky\/virtualsky\.min\.js/);
   assert.match(html,/id="atlas-grid"/);
   assert.match(html,/<button type="button" id="atlas-goto" disabled\b/);
-  assert.doesNotMatch(html,/id="mount-(?:home|goto|track|park)"/);
+  assert.doesNotMatch(html,/id="mount-(?:home|goto|park)(?:["-])/);
+  assert.match(html,/id="mount-tracking-on"/);
+  assert.match(html,/id="mount-tracking-off"/);
 });

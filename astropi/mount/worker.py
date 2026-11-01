@@ -1,10 +1,9 @@
-"""One serial-owning AM3N worker: telemetry, manual jogs and verified UTC sync.
+"""One serial-owning AM3N worker: telemetry, GoTo, jog, tracking and site/UTC sync.
 
-Each explicit serial Connect automatically sets the mount clock from the Pi
-ONLY after systemd reports NTP synchronization, and verifies date/time from
-mount and verified permanent-site readback. No Home, Park, tracking, manual time entry or arbitrary
-serial commands. Catalogue-only GoTo is operator-triggered;
-manual jogging retains its 600ms lost-heartbeat Stop.
+Connect reasserts UTC and the permanent site after Pi NTP verification.
+All writes (including explicit tracking ON/OFF) use one serial owner.
+No Home, Park, arbitrary commands or automatic tracking on GoTo.
+Manual jogging retains its 600 ms lost-heartbeat Stop.
 """
 from datetime import datetime, timezone
 import subprocess
@@ -26,7 +25,7 @@ ENVIRONMENT_QUERIES = {
     "sidereal_time": ":GS#",
 }
 QUERIES = frozenset((
-    ":GVP#", ":GV#", ":GU#", ":GA#", ":GZ#", ":GR#", ":GD#",
+    ":GVP#", ":GV#", ":GU#", ":GAT#", ":GA#", ":GZ#", ":GR#", ":GD#",
     *ENVIRONMENT_QUERIES.values()
 ))
 # Fixed AM3N rate whitelist. Never accept raw serial commands or arbitrary
@@ -49,6 +48,7 @@ OBSERVING_LATITUDE = 45.2933
 OBSERVING_LONGITUDE_EAST = -75.8571
 SITE_VERIFY_TOLERANCE_DEG = 1 / 120 + 1 / 3600 + 0.00001
 GOTO_TIMEOUT_SECONDS = 300
+TRACKING_VERIFY_TIMEOUT_SECONDS = 4
 _CLOCK_DATE = re.compile(r"^(\d{2})/(\d{2})/(\d{2})$")
 _CLOCK_TIME = re.compile(r"^(\d{2}):(\d{2}):(\d{2})$")
 
@@ -210,6 +210,8 @@ class MountWorker:
         self._stop_sent_at = None
         self._stop_attempts = 0
         self._goto_pending = None
+        self._tracking_pending = None
+        self._tracking_started_at = None
         self._goto_coords = None
         self._goto_started_at = None
         self._goto_stable_count = 0
@@ -235,6 +237,8 @@ class MountWorker:
             "site_sync_phase": "idle", "site_sync_error": None,
             "site_sync_verified_utc": None,
             "goto_phase": "idle", "goto_target": None, "goto_error": None,
+            "tracking_phase": "idle", "tracking_target": None,
+            "tracking_error": None, "tracking_status_error": None,
             "goto_requested_utc": None, "goto_position_error_deg": None,
             **_TELEMETRY,
         }
@@ -261,6 +265,8 @@ class MountWorker:
             self._stop_sent_at = None
             self._stop_attempts = 0
             self._goto_pending = None
+            self._tracking_pending = None
+            self._tracking_started_at = None
             self._goto_coords = None
             self._goto_started_at = None
             self._goto_stable_count = 0
@@ -278,6 +284,8 @@ class MountWorker:
                 time_sync_verified_utc=None, site_sync_phase="idle",
                 site_sync_error=None, site_sync_verified_utc=None, goto_phase="idle",
                 goto_target=None, goto_error=None, goto_requested_utc=None,
+                tracking_phase="idle", tracking_target=None,
+                tracking_error=None, tracking_status_error=None,
                 goto_position_error_deg=None, **_TELEMETRY
             )
             self._thread = threading.Thread(
@@ -313,8 +321,10 @@ class MountWorker:
                 raise RuntimeError("Only one direction at a time")
             if (self._stop_pending or self._stop.is_set() or
                     self._environment_pending or self._environment_in_progress or
-                    self._resync_pending or self._resync_in_progress):
-                raise RuntimeError("Stop, disconnect or clock/site read pending")
+                    self._resync_pending or self._resync_in_progress or
+                    self._tracking_pending is not None or
+                    self._state["tracking_phase"] in ("queued", "sending", "verifying")):
+                raise RuntimeError("Stop, disconnect or mount operation pending")
             # Internal motion token: only a valid active jog may renew
             # its heartbeat. No separate browser-side arm action.
             self._armed = True
@@ -343,7 +353,8 @@ class MountWorker:
             if (self._state["motion_phase"] != "idle" or self._stop_pending or
                 self._stop.is_set() or self._environment_pending or
                 self._environment_in_progress or self._resync_pending or
-                self._resync_in_progress):
+                self._resync_in_progress or self._tracking_pending is not None or
+                self._state["tracking_phase"] in ("queued", "sending", "verifying")):
                 raise RuntimeError("Mount must be idle before GoTo")
             self._goto_pending = (target, ra, dec)
             self._goto_coords = (ra, dec)
@@ -353,6 +364,31 @@ class MountWorker:
                 goto_requested_utc=self._utc_clock().isoformat(),
                 motion_phase="goto_queued", stop_stable=False)
             return target
+
+    def request_tracking(self, enabled):
+        """Queue an explicit tracking command on the single serial owner.
+
+        Tracking OFF is permitted before clock/site verification; ON requires
+        verification. No HTTP handler directly writes to the serial device.
+        """
+        if type(enabled) is not bool:
+            raise ValueError("Tracking enabled must be true or false")
+        with self._lock:
+            if not self._state["connected"] or self._state["phase"] != "connected":
+                raise RuntimeError("Connect the mount before changing tracking")
+            if (self._stop.is_set() or self._stop_pending or self._state["motion_phase"] != "idle" or
+                    self._armed or self._environment_pending or self._environment_in_progress or
+                    self._resync_pending or self._resync_in_progress or
+                    self._tracking_pending is not None or
+                    self._state["tracking_phase"] in ("queued", "sending", "verifying")):
+                raise RuntimeError("Mount must be idle before changing tracking")
+            if enabled and (self._state["time_sync_phase"] != "verified" or
+                            self._state["site_sync_phase"] != "verified"):
+                raise RuntimeError("Verified Pi UTC and site required to enable tracking")
+            self._tracking_pending = enabled
+            self._state.update(tracking_phase="queued", tracking_target=enabled,
+                               tracking_error=None)
+            return enabled
 
     def heartbeat(self, direction):
         with self._lock:
@@ -373,6 +409,10 @@ class MountWorker:
         self._motion_deadline = 0.0
         self._stop_pending = True
         self._goto_pending = None
+        self._tracking_pending = None
+        self._tracking_started_at = None
+        if self._state["tracking_phase"] in ("queued", "sending", "verifying"):
+            self._state.update(tracking_phase="aborted", tracking_error="Stop interrupted tracking command")
         if self._state["goto_phase"] in ("queued", "sending", "slewing"):
             self._state["goto_phase"] = "aborted"
         self._state.update(
@@ -387,8 +427,11 @@ class MountWorker:
                 raise RuntimeError("Connect the mount before synchronizing time/site")
             if (self._state["motion_phase"] != "idle" or self._stop_pending or
                     self._environment_pending or self._environment_in_progress or
-                    self._resync_pending or self._resync_in_progress):
-                raise RuntimeError("Mount must be idle before clock/site synchronization")
+                    self._resync_pending or self._resync_in_progress or
+                    self._tracking_pending is not None or
+                    self._state["tracking_phase"] in ("queued", "sending", "verifying") or
+                    self._state["tracking"] is True):
+                raise RuntimeError("Stop tracking before synchronizing clock/site")
             self._resync_pending = True
             self._state.update(
                 time_sync_phase="checking", site_sync_phase="checking",
@@ -404,7 +447,9 @@ class MountWorker:
                 raise RuntimeError("Connect the mount to read its stored clock/site")
             if (self._armed or self._state["motion_phase"] != "idle" or
                     self._environment_pending or self._environment_in_progress or
-                    self._resync_pending or self._resync_in_progress):
+                    self._resync_pending or self._resync_in_progress or
+                    self._tracking_pending is not None or
+                    self._state["tracking_phase"] in ("queued", "sending", "verifying")):
                 raise RuntimeError("Mount must be idle and not already reading clock/site")
             self._environment_pending = True
             self._state.update(environment_phase="queued", environment_error=None)
@@ -457,6 +502,51 @@ class MountWorker:
                 raise RuntimeError("Mount serial port is not connected; use physical Stop")
             self._queue_stop_locked(reason)
             return True
+
+    def _service_tracking(self, port):
+        """Send only native :Te# / :Td#, then verify :GAT# independently."""
+        with self._lock:
+            desired = self._tracking_pending
+            if desired is None or self._stop_pending or self._stop.is_set():
+                return
+            self._tracking_pending = None
+            self._state["tracking_phase"] = "sending"
+            command = ":Te#" if desired else ":Td#"
+            try:
+                port.write(command.encode("ascii"))
+                port.flush()
+                # The AM3N may return bare 1 or 1#; consume any terminator.
+                ack = port.read_until(b"#", size=12)
+                if ack not in (b"1", b"1#"):
+                    raise MountProtocolError(
+                        f"AM3N rejected tracking {'ON' if desired else 'OFF'} "
+                        f"(reply {ack!r})"
+                    )
+                self._tracking_started_at = self._clock()
+                self._state["tracking_phase"] = "verifying"
+            except (MountProtocolError, OSError, serial.SerialException) as exc:
+                self._tracking_started_at = None
+                self._state.update(tracking_phase="error", tracking_error=str(exc))
+
+    def _check_tracking(self, state, error):
+        """Tracking ACK alone is insufficient; confirm with :GAT#."""
+        with self._lock:
+            if self._state["tracking_phase"] != "verifying":
+                return
+            expected = self._state["tracking_target"]
+            if error is None and state is expected:
+                self._state.update(tracking_phase="verified", tracking_error=None)
+                self._tracking_started_at = None
+            elif (self._tracking_started_at is not None and
+                    self._clock() - self._tracking_started_at >= TRACKING_VERIFY_TIMEOUT_SECONDS):
+                self._state.update(
+                    tracking_phase="error",
+                    tracking_error=(
+                        f"Tracking {'ON' if expected else 'OFF'} not confirmed by mount"
+                        + (f": {error}" if error else f" (reported {state!r})")
+                    )
+                )
+                self._tracking_started_at = None
 
     def _write_goto(self, port, command, expected):
         """Only internally generated, whitelisted :Sr/:Sd/:MS protocol."""
@@ -713,8 +803,22 @@ class MountWorker:
             self._service_motion(port)
             replies.append(self._query(port, cmd))
         raw, altitude, azimuth, ra, dec = replies
+        # Dedicated status :GAT#, not inferred from optional :GU# flags.
+        # An invalid response is UNKNOWN, not an assumed OFF.
+        self._service_motion(port)
+        try:
+            tracking_reply = self._query(port, ":GAT#")
+            if tracking_reply not in ("0", "1"):
+                raise MountProtocolError(f"Unexpected :GAT# reply: {tracking_reply!r}")
+            tracking_state = tracking_reply == "1"
+            tracking_error = None
+        except MountProtocolError as exc:
+            tracking_state = None
+            tracking_error = str(exc)
         parsed = {
             "raw_status": raw, **known_flags(raw),
+            "tracking": tracking_state,
+            "tracking_status_error": tracking_error,
             "altitude_text": altitude, "azimuth_text": azimuth,
             "ra_text": ra, "dec_text": dec,
             "altitude_deg": angle_degrees(altitude, signed=True, limit=90),
@@ -728,6 +832,7 @@ class MountWorker:
                 self._state.update(parsed, phase="connected", connected=True)
         self._check_stopped(parsed["altitude_deg"], parsed["azimuth_deg"])
         self._check_goto(parsed)
+        self._check_tracking(tracking_state, tracking_error)
 
     def _run(self):
         port = None
@@ -754,6 +859,7 @@ class MountWorker:
             while not self._stop.is_set():
                 self._service_motion(port)
                 self._service_goto(port)
+                self._service_tracking(port)
                 now = self._clock()
                 with self._lock:
                     phase = self._state["motion_phase"]
@@ -802,6 +908,8 @@ class MountWorker:
                     time_sync_error=None, time_sync_verified_utc=None,
                     site_sync_phase="idle", site_sync_error=None,
                     site_sync_verified_utc=None, goto_phase="idle", goto_target=None, goto_error=None,
+                    tracking_phase="idle", tracking_target=None, tracking_error=None,
+                    tracking_status_error=None,
                     goto_requested_utc=None, goto_position_error_deg=None,
                     **_TELEMETRY,
                 )

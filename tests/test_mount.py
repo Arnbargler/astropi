@@ -1,7 +1,7 @@
 """AM3N serial, motion and UTC-clock tests using simulated hardware.
 
-CI never accesses physical serial ports. Tests cover the approved manual
-motion and UTC clock command whitelist; not Home, Park or GoTo setters.
+CI never accesses physical serial ports. Tests cover native GoTo, tracking,
+manual jog and clock/site initialization. No Home/Park actions.
 """
 import time
 
@@ -26,7 +26,7 @@ def default_no_host_ntp_in_serial_tests(monkeypatch):
 
 RESPONSES = {
     ":GVP#": "AM3N", ":GV#": "1.8.8", ":GU#": "nNHZM040400990",
-    ":GA#": "+01*30:50", ":GZ#": "013*43:10",
+    ":GAT#": "0", ":GA#": "+01*30:50", ":GZ#": "013*43:10",
     ":GR#": "12:34:56", ":GD#": "-22*15:30",
 }
 
@@ -1013,3 +1013,159 @@ def test_site_failure_blocks_goto_but_allows_jog(tmp_path):
     assert ":MS#" not in factory.ports[0].commands
     mount.disconnect()
     mount._thread.join(timeout=3)
+
+
+# --- Native AM3N :GAT# / :Te# / :Td# tracking, with real-status verification ---
+
+class TrackingFakePort(ClockSyncFakePort):
+    def __init__(self, *, reject=None, stale=False, invalid_status=False):
+        super().__init__()
+        self.reject = reject
+        self.stale = stale
+        self.invalid_status = invalid_status
+        self.responses[":GAT#"] = "e7" if invalid_status else "0"
+
+    def write(self, data):
+        cmd = data.decode("ascii")
+        if cmd in (":Q#", ":R5#", ":Me#", ":Mn#", ":Ms#", ":Mw#"):
+            self.commands.append(cmd)
+            self.last = cmd
+            return
+        if cmd in (":Te#", ":Td#"):
+            self.commands.append(cmd)
+            self.last = cmd
+            if not self.stale and cmd != self.reject:
+                self.responses[":GAT#"] = "1" if cmd == ":Te#" else "0"
+            return
+        super().write(data)
+
+    def read_until(self, expected, size):
+        if self.last in (":Te#", ":Td#"):
+            return b"e4#" if self.last == self.reject else b"1#"
+        return super().read_until(expected, size)
+
+
+class TrackingFactory(FakeFactory):
+    def __init__(self, **options):
+        super().__init__()
+        self.options = options
+
+    def __call__(self, **kwargs):
+        port = TrackingFakePort(**self.options)
+        self.ports.append(port)
+        return port
+
+
+def test_tracking_on_off_command_and_verified_readback(tmp_path):
+    from datetime import datetime, timezone
+    alias = tmp_path / "am3"
+    alias.touch()
+    factory = TrackingFactory()
+    worker = MountWorker(alias, serial_factory=factory, poll_interval=0.04,
+        ntp_checker=lambda: True,
+        utc_clock=lambda: datetime(2026, 10, 31, 22, tzinfo=timezone.utc))
+    client = create_app(settings=Settings(tmp_path,"expected",alias,tmp_path/"usb"),
+                        mount=worker).test_client()
+    assert client.post("/api/mount/tracking", json={"enabled":True}).status_code == 403
+    token = client.post("/api/control/take").get_json()["token"]
+    headers = {"X-AstroPi-Control":token}
+    assert client.post("/api/mount/tracking", headers=headers,
+                       json={"enabled":True}).status_code == 409
+    assert client.post("/api/mount/connect", headers=headers).status_code == 202
+    wait_until(lambda: worker.status()["site_sync_phase"] == "verified")
+    wait_until(lambda: worker.status()["tracking"] is False)
+    assert client.post("/api/mount/tracking", headers=headers,
+                       json={"enabled":"true"}).status_code == 400
+    assert client.post("/api/mount/tracking", headers=headers,
+                       json={"enabled":1}).status_code == 400
+    assert client.post("/api/mount/tracking", headers=headers,
+                       json={"enabled":True}).status_code == 202
+    assert client.post("/api/mount/tracking", headers=headers,
+                       json={"enabled":False}).status_code == 409
+    wait_until(lambda: worker.status()["tracking_phase"] == "verified" and
+               worker.status()["tracking"] is True)
+    assert ":Te#" in factory.ports[0].commands
+    assert factory.ports[0].commands.count(":GAT#") >= 2
+    assert client.post("/api/mount/tracking", headers=headers,
+                       json={"enabled":False}).status_code == 202
+    wait_until(lambda: worker.status()["tracking_phase"] == "verified" and
+               worker.status()["tracking"] is False)
+    assert ":Td#" in factory.ports[0].commands
+    assert worker.status()["tracking_error"] is None
+    worker.disconnect()
+    worker._thread.join(timeout=3)
+    assert worker.status()["tracking"] is None
+
+
+@pytest.mark.parametrize("options, expected_error", [
+    ({"reject":":Te#"}, "rejected tracking ON"),
+    ({"invalid_status":True}, "not confirmed"),
+])
+def test_tracking_errors_are_reported_not_assumed_success(tmp_path, options, expected_error):
+    from datetime import datetime, timezone
+    alias = tmp_path / "am3"
+    alias.touch()
+    factory = TrackingFactory(**options)
+    worker = MountWorker(alias, serial_factory=factory, poll_interval=0.04,
+        ntp_checker=lambda: True,
+        utc_clock=lambda: datetime(2026,10,31,22,tzinfo=timezone.utc))
+    worker.connect()
+    wait_until(lambda: worker.status()["site_sync_phase"] == "verified")
+    worker.request_tracking(True)
+    if options.get("invalid_status"):
+        wait_until(lambda: worker.status()["tracking_phase"] == "verifying")
+        # Advance only the verification clock, not the real test's wall time.
+        with worker._lock:
+            worker._tracking_started_at = worker._clock() - 5
+    wait_until(lambda: worker.status()["tracking_phase"] == "error")
+    assert expected_error in worker.status()["tracking_error"]
+    if options.get("invalid_status"):
+        assert worker.status()["tracking"] is None
+        assert "Unexpected :GAT#" in worker.status()["tracking_status_error"]
+    worker.disconnect()
+    worker._thread.join(timeout=3)
+
+
+def test_tracking_pending_cancelled_by_stop_and_slew_blocks_tracking(tmp_path):
+    from datetime import datetime, timezone
+    alias=tmp_path/"am3"
+    alias.touch()
+    factory=TrackingFactory()
+    worker=MountWorker(alias,serial_factory=factory,poll_interval=0.05,
+        ntp_checker=lambda:True,
+        utc_clock=lambda:datetime(2026,10,31,22,tzinfo=timezone.utc))
+    worker.connect()
+    wait_until(lambda:worker.status()["site_sync_phase"]=="verified")
+    wait_until(lambda:worker.status()["motion_phase"]=="idle")
+    worker.jog("east")
+    with pytest.raises(RuntimeError, match="idle"):
+        worker.request_tracking(True)
+    worker.emergency_stop()
+    wait_until(lambda:worker.status()["stop_stable"],timeout=5)
+    worker.request_tracking(True)
+    # Hold the same serial-state lock so the queued command cannot race
+    # ahead of this Stop in our synthetic cancellation test.
+    with worker._lock:
+        worker._queue_stop_locked("Test STOP before queued tracking")
+    wait_until(lambda:worker.status()["stop_stable"],timeout=5)
+    assert worker.status()["tracking_phase"] == "aborted"
+    worker.disconnect()
+    worker._thread.join(timeout=3)
+
+
+def test_unverified_mount_cannot_enable_tracking_but_can_disable(tmp_path):
+    alias=tmp_path/"am3"
+    alias.touch()
+    factory=TrackingFactory()
+    worker=MountWorker(alias,serial_factory=factory,poll_interval=0.04,
+        ntp_checker=lambda:False)
+    worker.connect()
+    wait_until(lambda:worker.status()["connected"] and
+               worker.status()["time_sync_phase"]=="error")
+    with pytest.raises(RuntimeError,match="Verified"):
+        worker.request_tracking(True)
+    assert worker.request_tracking(False) is False
+    wait_until(lambda:worker.status()["tracking_phase"]=="verified")
+    assert ":Td#" in factory.ports[0].commands
+    worker.disconnect()
+    worker._thread.join(timeout=3)

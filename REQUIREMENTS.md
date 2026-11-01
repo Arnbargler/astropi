@@ -26,8 +26,8 @@ not been independently calibrated.
 | IDs | Selected scope | Current state |
 | --- | --- | --- |
 | **#14–17** | Serial Connect, reported coordinates, hold N/S/E/W, five speeds, Stop and deadman | **Implemented**, with field checks |
-| **#18** | GoTo **only after choosing an atlas target and explicitly pressing GoTo**, never manual RA/Dec entry | Implemented in code with NTP/mount-idle checks and Stop; physical AM3N and optical verification pending |
-| **#19** | Tracking control/status; AM3N firmware handles Alt/Az tracking | Deferred (some status flags are read-only) |
+| **#18** | GoTo **only after choosing an atlas target and explicitly pressing GoTo**, never manual RA/Dec entry | Implemented and Pi-tested for native motor motion, reported-position completion and Stop; optical alignment pending |
+| **#19** | Tracking control/status; AM3N firmware handles Alt/Az tracking | Implemented native :GAT# status and :Te#/:Td# manual ON/OFF; pending real-Pi verification |
 | **#20** | Native Home and separate Park, carefully verified | Deferred; earlier standalone Home probe is **not** a UI feature |
 | **#21–22, #26** | Initial north/level, manual two-star and optional extra-star alignment | Deferred |
 

@@ -202,8 +202,26 @@ arm and no fixed time limit. Browser focus loss or missing valid heartbeat for
 New direction cannot start until stop/settling verification completes.
 Do not deliberately unplug USB while motors are moving; serial loss can defeat
 software Stop. Use the physical hand-controller Cancel/power if necessary.
-**Find now includes explicit Messier GoTo; no automatic Home, Park,
-tracking control or automatic mount alignment is implemented.**
+**Find includes explicit Messier GoTo, with reported-coordinate completion
+and an emergency Stop field-tested on M40/M45.** No automatic Home,
+Park, celestial alignment or tracking activation is implemented.
+
+### Native tracking control (needs first AM3N hardware test)
+
+The Mount Controls drawer now shows live **Tracking: ON/OFF/UNKNOWN**,
+queried from firmware `:GAT#`. After taking control, **Tracking ON**
+sends the mount's `:Te#` command when connected, idle and clock/site
+verified; **Tracking OFF** sends `:Td#` and is permitted even when
+clock/site are unverified. Both wait for a matching tracking readback
+before showing `VERIFIED`; raw errors appear in the drawer. Controls
+are disabled while jogging, slewing, synchronizing or awaiting another
+tracking command. The Pi does not implement a tracking motor loop.
+**GoTo does not automatically switch tracking on in AstroPi.**
+The mount may change tracking state itself after GoTo; the live indicator
+will reveal that. **STOP MOUNT** remains the proven `:Q#` for jog and
+slew; use **Tracking OFF** separately to end tracking. Tracking is
+not automatically switched on at Connect or startup. Native firmware
+tracking behaviour has not yet been tested on the user's AM3N.
 
 The on-demand **Refresh Clock / Site** button reads date/time/offset,
 sidereal time and mount-reported site without writing anything.
