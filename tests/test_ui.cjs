@@ -594,8 +594,11 @@ test("tracking ON/OFF requires control and verified time/site; mount readback dr
   await h.el("take-control").dispatch("click");
   await h.el("mount-connect").dispatch("click");
   assert.equal(h.el("mount-tracking-on").disabled,true);
+  assert.equal(h.el("mount-tracking-off").disabled,true); // already OFF
+  h.updateMount({tracking:true}); // Even unverified UTC, OFF must be available
+  await h.intervals.get(1000)();
   assert.equal(h.el("mount-tracking-off").disabled,false);
-  h.updateMount({time_sync_phase:"verified",site_sync_phase:"verified"});
+  h.updateMount({tracking:false,time_sync_phase:"verified",site_sync_phase:"verified"});
   await h.intervals.get(1000)();
   assert.equal(h.el("mount-tracking-on").disabled,false);
   await h.el("mount-tracking-on").dispatch("click");
